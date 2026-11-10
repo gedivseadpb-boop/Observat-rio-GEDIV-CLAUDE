@@ -28,7 +28,13 @@ class ErroRede(Exception):
 
     @property
     def transitorio(self) -> bool:
-        return self.categoria in {"TEMPO_ESGOTADO", "CONEXAO", "HTTP_429"} or self.categoria.startswith("HTTP_5")
+        # HTTP 429 NÃO é repetido: é um pedido da fonte para parar. Quem decide o que fazer é o lote, que se encerra.
+        return self.categoria in {"TEMPO_ESGOTADO", "CONEXAO"} or self.categoria.startswith("HTTP_5")
+
+    @property
+    def recusa(self) -> bool:
+        """A fonte recusou o acesso (403/429): não insistir nem tentar endereços alternativos."""
+        return self.categoria in {"HTTP_403", "HTTP_429"}
 
 
 @dataclass(frozen=True)
@@ -136,7 +142,8 @@ def texto(resposta: Resposta) -> str:
 def consultar_robots(url_base: str, politica: Politica) -> tuple[str, urllib.robotparser.RobotFileParser | None]:
     """Lê o robots.txt do servidor. Devolve (situação, regras).
 
-    Situações: LIDO, AUSENTE (4xx: sem restrições declaradas), NAO_E_ROBOTS
+    Situações: LIDO, AUSENTE (404/410: sem restrições declaradas), RECUSADO (403/429 ou outro 4xx:
+    a fonte negou a consulta, o que não autoriza presumir ausência de restrições), NAO_E_ROBOTS
     (o servidor devolveu uma página HTML no lugar do arquivo) ou INACESSIVEL.
     """
     p = urllib.parse.urlsplit(url_base)
@@ -144,8 +151,10 @@ def consultar_robots(url_base: str, politica: Politica) -> tuple[str, urllib.rob
     try:
         resposta = obter(endereco, politica)
     except ErroRede as e:
-        if e.categoria.startswith("HTTP_4"):
+        if e.categoria in ("HTTP_404", "HTTP_410"):
             return "AUSENTE", None
+        if e.categoria.startswith("HTTP_4"):
+            return "RECUSADO", None
         return "INACESSIVEL", None
     conteudo = texto(resposta)
     if conteudo.lstrip().startswith("<"):

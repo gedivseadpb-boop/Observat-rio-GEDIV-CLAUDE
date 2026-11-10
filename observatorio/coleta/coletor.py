@@ -51,6 +51,7 @@ def descobrir_mes(fonte, banco: B.Banco, politica: rede.Politica, ano: int, mes:
     except rede.ErroRede as e:
         banco.registrar_varredura(fonte.sigla, ano, mes, None, str(e))
         return {"fonte": fonte.sigla, "ano": ano, "mes": mes, "erro": str(e)}
+    parcial = bool([p for p in fila if p not in vistas])
     novas = sem_data = 0
     for item in itens.values():
         if item.data is None:
@@ -59,6 +60,12 @@ def descobrir_mes(fonte, banco: B.Banco, politica: rede.Politica, ano: int, mes:
             continue
         novas += banco.registrar_descoberta(item.fonte, item.url, item.data.isoformat() if item.data else None,
                                             item.tipo, item.ordem, item.rotulo)
+    if parcial:
+        # Restaram páginas da listagem além do limite: o mês NÃO é dado como varrido e será relido.
+        erro = f"LISTAGEM_PARCIAL: limite de {MAX_PAGINAS} páginas atingido com páginas ainda por ler"
+        banco.registrar_varredura(fonte.sigla, ano, mes, len(itens), erro)
+        return {"fonte": fonte.sigla, "ano": ano, "mes": mes, "listadas": len(itens), "novas": novas, "sem_data": sem_data,
+                "erro": erro}
     banco.registrar_varredura(fonte.sigla, ano, mes, len(itens), None)
     return {"fonte": fonte.sigla, "ano": ano, "mes": mes, "listadas": len(itens), "novas": novas, "sem_data": sem_data}
 
@@ -103,13 +110,18 @@ def baixar_publicacao(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Poli
         except rede.ErroRede as e:
             if estado != B.INVALIDA:  # uma resposta inválida já recebida é a evidência mais informativa
                 erro = str(e)
+            if e.recusa:
+                # 403/429: parar na primeira recusa. Nenhum endereço alternativo é tentado, e o motivo
+                # registrado é o da recusa, para que o lote se encerre e a fonte fique suspensa.
+                erro, estado = str(e), B.FALHA_DOWNLOAD
+                break
             continue
         finally:
             time.sleep(politica.pausa)
         laudo = pdf.examinar(resposta.corpo)
         if not laudo.valido:
             erro, estado = f"{laudo.motivo} em {endereco} ({laudo.tamanho} bytes)", B.INVALIDA
-            continue
+            continue        # o endereço "/view" devolve HTML legitimamente; o de download é tentado em seguida
         sha, gravou = acervo.guardar(resposta.corpo)
         resultado = banco.registrar_arquivo(linha["id"], sha, laudo.tamanho, acervo.caminho_relativo(sha))
         if resultado == "NOVO" and not gravou:

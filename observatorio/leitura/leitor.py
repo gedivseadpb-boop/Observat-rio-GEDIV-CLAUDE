@@ -113,10 +113,11 @@ def conferir_com_a_origem(resultado: dict, origens) -> list[str]:
     return achados
 
 
-def processar(banco: Banco, acervo: Acervo, limite: int | None = None) -> dict:
-    """Lê os arquivos do acervo ainda não lidos por esta versão do leitor (de qualquer origem)."""
+def processar(banco: Banco, acervo: Acervo, limite: int | None = None, refazer_pendentes: bool = False) -> dict:
+    """Lê os arquivos do acervo ainda não lidos por esta versão do leitor (de qualquer origem).
+    Com `refazer_pendentes`, tenta de novo os que terminaram em erro ou com páginas pendentes."""
     contagem = {"LIDA": 0, "LIDA_COM_PENDENCIAS": 0, "ERRO": 0, "na_fila": 0}
-    fila = banco.arquivos_sem_leitura(VERSAO)
+    fila = banco.arquivos_sem_leitura(VERSAO, refazer_pendentes)
     for indice, arquivo in enumerate(fila):
         if limite is not None and indice >= limite:
             contagem["na_fila"] = len(fila) - indice

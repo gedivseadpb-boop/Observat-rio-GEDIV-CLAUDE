@@ -1,6 +1,6 @@
 [project]
 name = "observatorio-doe-pb"
-version = "0.2.0"
+version = "0.3.0"
 description = "Painel de Publicações DOE-PB GEDIV — observatório do Diário Oficial da Paraíba"
 requires-python = ">=3.10"
 dependencies = []  # coleta e sonda usam somente a biblioteca padrão do Python

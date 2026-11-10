@@ -29,6 +29,7 @@ def main(argv=None) -> int:
     ap.add_argument("argumentos", nargs="*")
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--limite", type=int)
+    ap.add_argument("--refazer", action="store_true", help="processar: tenta de novo leituras com erro ou páginas pendentes")
     ap.add_argument("--referencias", default=str(REFERENCIAS))
     ap.add_argument("--saida")
     a = ap.parse_args(argv)
@@ -36,7 +37,7 @@ def main(argv=None) -> int:
     banco, acervo = Banco(pasta / "observatorio.sqlite3"), Acervo(pasta / "acervo")
     try:
         if a.comando == "processar":
-            contagem = leitor.processar(banco, acervo, a.limite)
+            contagem = leitor.processar(banco, acervo, a.limite, a.refazer)
             print(json.dumps(contagem, ensure_ascii=False, indent=2))
             return 3 if contagem["ERRO"] or contagem["na_fila"] or contagem["LIDA_COM_PENDENCIAS"] else 0
         if a.comando == "validar":

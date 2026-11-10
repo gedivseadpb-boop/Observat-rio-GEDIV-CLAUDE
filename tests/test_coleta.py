@@ -221,7 +221,7 @@ class TesteLinhaDeComando(unittest.TestCase):
                 self.assertEqual(main(["importar", str(origem), "--data", "2026-01-07", "--dados", dados]), 0)
                 self.assertEqual(main(["conferir", "--dados", dados]), 0)
                 self.assertEqual(main(["inventario", "--inicio", "2026-01-07", "--fim", "2026-01-07", "--dados", dados]), 0)
-            self.assertIn('"COMPLETO": 1', saida.getvalue())
+            self.assertIn('"BAIXADO_SEM_VARREDURA_COMPLETA": 1', saida.getvalue())   # PDF manual não torna o dia completo
             next((Path(dados) / "acervo").rglob("*.pdf")).write_bytes(b"x")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["conferir", "--dados", dados]), 3)
