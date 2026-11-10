@@ -1,16 +1,15 @@
-Painel de Publicações DOE-PB GEDIV — execução dos testes automatizados
-Data: 2026-11-10 | Ambiente: sessão de desenvolvimento em nuvem, Linux, Python 3.13.18
+Painel de Publicações DOE-PB GEDIV — execução dos testes automatizados (rodada de fechamento)
+Data: 2026-11-10 | Ambiente: sessão de desenvolvimento em nuvem, Linux, Python 3.13.18, Tesseract 5.3.4 com português
 Comando: python -m unittest discover -s tests -t . -v
-Observação: o teste de OCR é pulado neste ambiente (Tesseract não instalado); ele roda no GitHub Actions/Linux.
 Todos os dados de teste são sintéticos.
 
 tests.test_coleta: {'ok': 19, 'pulados': 0, 'falhas': 0}
-tests.test_gediv: {'ok': 33, 'pulados': 0, 'falhas': 0}
-tests.test_leitura: {'ok': 19, 'pulados': 1, 'falhas': 0}
+tests.test_gediv: {'ok': 37, 'pulados': 0, 'falhas': 0}
+tests.test_leitura: {'ok': 23, 'pulados': 0, 'falhas': 0}
 tests.test_lotes: {'ok': 18, 'pulados': 0, 'falhas': 0}
 tests.test_nucleo: {'ok': 14, 'pulados': 0, 'falhas': 0}
 tests.test_painel: {'ok': 26, 'pulados': 0, 'falhas': 0}
-tests.test_ponta_a_ponta: {'ok': 12, 'pulados': 0, 'falhas': 0}
+tests.test_ponta_a_ponta: {'ok': 18, 'pulados': 0, 'falhas': 0}
 
 test_coleta_completa_com_paginacao (tests.test_coleta.TesteColeta.test_coleta_completa_com_paginacao) ... ok
 test_conteudo_trocado_no_mesmo_endereco_preserva_original (tests.test_coleta.TesteColeta.test_conteudo_trocado_no_mesmo_endereco_preserva_original) ... ok
@@ -31,6 +30,10 @@ test_auniao_unifica_variantes_do_mesmo_documento (tests.test_coleta.TesteLeitura
 test_cge_codifica_espacos_e_ignora_outros_pdfs (tests.test_coleta.TesteLeituraDasListagens.test_cge_codifica_espacos_e_ignora_outros_pdfs) ... ok
 test_links_e_nomes (tests.test_coleta.TesteLeituraDasListagens.test_links_e_nomes) ... ok
 test_importar_inventario_e_conferir (tests.test_coleta.TesteLinhaDeComando.test_importar_inventario_e_conferir) ... ok
+test_ato_sem_processos_nao_toma_emprestado_o_tema_do_ato_seguinte (tests.test_gediv.TesteAchadosDoPdfOficial.test_ato_sem_processos_nao_toma_emprestado_o_tema_do_ato_seguinte) ... ok
+test_cabecalho_com_expediente_e_resenha_em_linhas_separadas (tests.test_gediv.TesteAchadosDoPdfOficial.test_cabecalho_com_expediente_e_resenha_em_linhas_separadas) ... ok
+test_linha_justificada_letra_a_letra_e_nome_que_desce_com_o_cargo (tests.test_gediv.TesteAchadosDoPdfOficial.test_linha_justificada_letra_a_letra_e_nome_que_desce_com_o_cargo) ... ok
+test_resenha_gediv_de_licenca_medica_fica_fora_dos_dois_eixos (tests.test_gediv.TesteAchadosDoPdfOficial.test_resenha_gediv_de_licenca_medica_fica_fora_dos_dois_eixos) ... ok
 test_as_sete_subcategorias_sao_reconhecidas_sem_confundir_casos_parecidos (tests.test_gediv.TesteCatalogo.test_as_sete_subcategorias_sao_reconhecidas_sem_confundir_casos_parecidos) ... ok
 test_condicao_e_normalizacao_da_ligadura (tests.test_gediv.TesteCatalogo.test_condicao_e_normalizacao_da_ligadura) ... ok
 test_exatamente_dois_eixos_duas_modalidades_e_sete_subcategorias (tests.test_gediv.TesteCatalogo.test_exatamente_dois_eixos_duas_modalidades_e_sete_subcategorias) ... ok
@@ -64,6 +67,9 @@ test_classes_lidas_coladas_ficam_registradas_como_lidas (tests.test_gediv.TesteF
 test_dias_com_separador_de_milhar_e_linha_seguida_de_nota_de_publicacao (tests.test_gediv.TesteFormatosVistosEmTextoReal.test_dias_com_separador_de_milhar_e_linha_seguida_de_nota_de_publicacao) ... ok
 test_sobrenome_que_desceu_de_linha_apos_conectivo (tests.test_gediv.TesteFormatosVistosEmTextoReal.test_sobrenome_que_desceu_de_linha_apos_conectivo) ... ok
 test_variante_stf_auditor_fiscal_tributario_guarda_a_expressao_literal (tests.test_gediv.TesteFormatosVistosEmTextoReal.test_variante_stf_auditor_fiscal_tributario_guarda_a_expressao_literal) ... ok
+test_blocos_de_fonte_ilegivel_sao_fundidos_e_trechos_pequenos_ignorados (tests.test_leitura.TesteAchadosDoPdfOficialNaLeitura.test_blocos_de_fonte_ilegivel_sao_fundidos_e_trechos_pequenos_ignorados) ... ok
+test_trecho_em_fonte_sem_mapeamento_e_recuperado_por_ocr_so_naquele_trecho (tests.test_leitura.TesteAchadosDoPdfOficialNaLeitura.test_trecho_em_fonte_sem_mapeamento_e_recuperado_por_ocr_so_naquele_trecho) ... ok
+test_vaos_de_tabela_nao_viram_colunas_quando_ha_corredor_central (tests.test_leitura.TesteAchadosDoPdfOficialNaLeitura.test_vaos_de_tabela_nao_viram_colunas_quando_ha_corredor_central) ... ok
 test_pdf_importado_percorre_integridade_leitura_e_validacao (tests.test_leitura.TesteFluxoManualCompleto.test_pdf_importado_percorre_integridade_leitura_e_validacao) ... ok
 test_arquivo_adulterado_no_acervo_nao_e_lido (tests.test_leitura.TesteLeitorComPdf.test_arquivo_adulterado_no_acervo_nao_e_lido) ... ok
 test_arquivo_ilegivel_vira_erro_e_nao_para_a_fila (tests.test_leitura.TesteLeitorComPdf.test_arquivo_ilegivel_vira_erro_e_nao_para_a_fila) ... ok
@@ -76,7 +82,7 @@ test_relatorio_de_validacao_nao_contem_texto_das_publicacoes (tests.test_leitura
 test_retomada_nao_rele_o_que_ja_foi_lido (tests.test_leitura.TesteLeitorComPdf.test_retomada_nao_rele_o_que_ja_foi_lido) ... ok
 test_sem_tesseract_a_pagina_fica_marcada_e_nao_e_dada_como_lida (tests.test_leitura.TesteLeitorComPdf.test_sem_tesseract_a_pagina_fica_marcada_e_nao_e_dada_como_lida) ... ok
 test_nome_oficial_exato (tests.test_leitura.TesteNomeDoSistema.test_nome_oficial_exato) ... ok
-test_pagina_digitalizada_e_lida_por_ocr_respeitando_as_colunas (tests.test_leitura.TesteOcr.test_pagina_digitalizada_e_lida_por_ocr_respeitando_as_colunas) ... skipped 'requer o programa Tesseract com o idioma português'
+test_pagina_digitalizada_e_lida_por_ocr_respeitando_as_colunas (tests.test_leitura.TesteOcr.test_pagina_digitalizada_e_lida_por_ocr_respeitando_as_colunas) ... ok
 test_agrupa_palavras_em_linhas (tests.test_leitura.TestePaginaPura.test_agrupa_palavras_em_linhas) ... ok
 test_cabecalho_da_edicao (tests.test_leitura.TestePaginaPura.test_cabecalho_da_edicao) ... ok
 test_coluna_com_linhas_so_de_um_lado (tests.test_leitura.TestePaginaPura.test_coluna_com_linhas_so_de_um_lado) ... ok
@@ -142,6 +148,12 @@ test_conferir_exige_responsavel_justificativa_e_declaracao_da_fonte (tests.test_
 test_reclassificar_preserva_o_que_ja_foi_revisado_e_nao_duplica (tests.test_painel.TesteRevisao.test_reclassificar_preserva_o_que_ja_foi_revisado_e_nao_duplica) ... ok
 test_rejeitado_nao_conta_e_correcao_de_campo_fica_auditada (tests.test_painel.TesteRevisao.test_rejeitado_nao_conta_e_correcao_de_campo_fica_auditada) ... ok
 test_trilha_registra_autor_estado_anterior_e_posterior_e_permite_reabrir (tests.test_painel.TesteRevisao.test_trilha_registra_autor_estado_anterior_e_posterior_e_permite_reabrir) ... ok
+test_limite014_pdf_corrompido_com_marcadores_validos_nunca_e_dado_como_lido (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_limite014_pdf_corrompido_com_marcadores_validos_nunca_e_dado_como_lido) ... ok
+test_relatorio_de_validacao_real_nao_contem_dados_pessoais_e_nada_e_conferido (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_relatorio_de_validacao_real_nao_contem_dados_pessoais_e_nada_e_conferido) ... ok
+test_risco013_imagem_pequena_nao_torna_a_pagina_mista (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_risco013_imagem_pequena_nao_torna_a_pagina_mista) ... ok
+test_risco013_pagina_mista_com_ocr_recupera_o_corpo_digitalizado (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_risco013_pagina_mista_com_ocr_recupera_o_corpo_digitalizado) ... ok
+test_risco013_pagina_mista_pendente_volta_a_fila_com_refazer (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_risco013_pagina_mista_pendente_volta_a_fila_com_refazer) ... ok
+test_risco013_pagina_mista_sem_ocr_fica_pendente_e_nao_e_dada_como_lida (tests.test_ponta_a_ponta.TesteFechamentoDaAuditoria.test_risco013_pagina_mista_sem_ocr_fica_pendente_e_nao_e_dada_como_lida) ... ok
 test_1_pdfs_sao_lidos_por_colunas_e_classificados (tests.test_ponta_a_ponta.TesteFluxoCompleto.test_1_pdfs_sao_lidos_por_colunas_e_classificados) ... ok
 test_2_cada_resenha_tem_a_quantidade_esperada_de_decisoes (tests.test_ponta_a_ponta.TesteFluxoCompleto.test_2_cada_resenha_tem_a_quantidade_esperada_de_decisoes) ... ok
 test_3_repetir_o_fluxo_nao_duplica (tests.test_ponta_a_ponta.TesteFluxoCompleto.test_3_repetir_o_fluxo_nao_duplica) ... ok
@@ -156,6 +168,6 @@ test_bug016_leitura_com_erro_ou_pendencia_volta_a_fila_quando_pedido (tests.test
 test_bug017_pdf_manual_nao_torna_o_dia_completo (tests.test_ponta_a_ponta.TesteRegressoesDaAuditoria.test_bug017_pdf_manual_nao_torna_o_dia_completo) ... ok
 
 ----------------------------------------------------------------------
-Ran 142 tests in 33.072s
+Ran 155 tests in 44.482s
 
-OK (skipped=1)
+OK

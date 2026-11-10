@@ -24,7 +24,7 @@ from . import catalogo as C
 PAT_PROCESSO = re.compile(r"\b([A-Z]{2,6})\s*-\s*(PSE|PRC|OFI)\s*-\s*(\d{4})\s*/\s*(\d{3,9})\b")
 PAT_RESENHA = re.compile(r"\bRESENHA\s*(?:N[O°.]*)?\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})((?:\s*[-/]\s*[A-Z]{2,10})*)")
 PAT_PORTARIA = re.compile(r"^PORTARIA\s+N[O°.]*\s*(\d{1,5})\s*/\s*(20\d{2})")
-PAT_EXPEDIENTE = re.compile(r"EXPEDIENTE\s+DO\s+DIA\s*:?\s*(\d{2})[-/.](\d{2})[-/.](20\d{2})")
+PAT_EXPEDIENTE = re.compile(r"EXPEDIENTE(?:\s+DO\s+DIA)?\s*:?\s*(\d{2})[-/.](\d{2})[-/.](20\d{2})")
 PAT_GEDIV = re.compile(r"GER(?:ENCIA|\.)\s+EXEC(?:UTIVA|\.)\s+(?:D[EA]\s+)?CONC(?:ESSAO|\.)?\s*(?:D[EA]\s+)?"
                        r"DIREITOS\s+E\s+VANTAGENS|\bGEDIV\b")
 PAT_OUTRA_GERENCIA = re.compile(r"GER(?:ENCIA|\.)\s+(?:EXECUTIVA|EXEC\.|OPERACIONAL|OPER\.)\s+(?!.{0,40}DIREITOS\s+E\s+VANTAGENS)")
@@ -223,6 +223,19 @@ def _processo(achado) -> str:
 
 
 _CONECTIVOS = {"DE", "DA", "DO", "DOS", "DAS", "E"}
+# Palavras que só aparecem na continuação do CARGO quando a célula quebra em duas linhas
+# ("TECNICO" / "ADMINISTRATIVO"). O que vier antes delas, na linha de baixo, é continuação do NOME.
+_CONTINUACAO_DE_CARGO = {"ADMINISTRATIVO", "ADMINISTRATIVA", "PENAL", "AGROPECUARIO", "AGROPECUARIA", "ESTADUAL", "EST", "FISCAL",
+                         "TRIBUTARIO", "TRIBUTARIA", "ENFERMAGEM", "EDUCACAO", "BAS", "BASICA", "SUPERIOR", "MEDIO", "NIVEL",
+                         "SAUDE", "LABORATORIO", "ESPECIALIZADO", "ESPECIALIZADA", "JUDICIARIO", "CIVIL", "DE", "EM", "I", "II", "III"}
+# Começa numa letra isolada, segue com pedaços de 1–2 letras e termina no resto da palavra:
+# "T E C N IC O", "A D M IN IS TRATIVO". Um conectivo de nome ("DE", "DO") nunca inicia a sequência.
+PAT_LETRAS_ESPACADAS = re.compile(r"(?<![A-Z])[A-Z] (?:[A-Z]{1,2} ){2,}[A-Z]+\b")
+
+
+def _juntar_letras_espacadas(texto: str) -> str:
+    """ "T E C N IC O" (texto justificado letra a letra no PDF) volta a ser "TECNICO"."""
+    return PAT_LETRAS_ESPACADAS.sub(lambda m: m.group(0).replace(" ", ""), texto)
 PAT_MOBILIARIO_COLADO = re.compile(r"\s*DIARIO\s+OFICIAL\s+JOAO\s+PESSOA\b.*$|\s*\d*\s*JOAO\s+PESSOA\s*-\s*[\w-]+\s*,.*$")
 
 
@@ -282,6 +295,7 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         if m and m.start() < 12:
             matricula, resto = m.group(1), resto[m.end():].strip()
         resto, detalhe = _evolucao(resto, ato.eixo, ato.modalidade, ato.subcategoria)
+        resto = _juntar_letras_espacadas(resto)
         nome = PAT_NOME.match(resto)
         if nome:
             servidor = nome.group(1).strip(" .-")
@@ -294,8 +308,17 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         if continuacao and not usou_continuacao:
             if not detalhe:                               # classe, nível ou dias podem ter ficado na linha seguinte
                 _, detalhe = _evolucao(" ".join([resto] + continuacao), ato.eixo, ato.modalidade, ato.subcategoria)
-            if servidor and servidor.split()[-1] in _CONECTIVOS:
-                servidor = f"{servidor} {continuacao[0].split()[0]}"       # "... DOS" + sobrenome que desceu de linha
+            abaixo = _juntar_letras_espacadas(continuacao[0]).split()
+            corte = len(abaixo)
+            while corte and abaixo[corte - 1] in _CONTINUACAO_DE_CARGO:
+                corte -= 1
+            if servidor and cargo and 0 < corte < len(abaixo) and all(re.fullmatch(r"[A-Z'.-]+", p) for p in abaixo[:corte]):
+                # "NOME ... DOS | TECNICO | A E" na linha do processo e "SANTOS ADMINISTRATIVO" na de baixo
+                servidor, cargo = f"{servidor} {' '.join(abaixo[:corte])}", f"{cargo} {' '.join(abaixo[corte:])}"
+            elif servidor and cargo and corte == 0:
+                cargo = f"{cargo} {' '.join(abaixo)}"
+            elif servidor and servidor.split()[-1] in _CONECTIVOS and abaixo:
+                servidor = f"{servidor} {abaixo[0]}"       # "... DOS" + sobrenome que desceu de linha
             if ato.eixo == C.PROGRESSAO:
                 detalhe = {**detalhe, "linha_quebrada": "nome e cargo podem continuar na linha seguinte; conferir no PDF"}
         processo = _processo(achado)

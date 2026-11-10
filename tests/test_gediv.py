@@ -223,5 +223,48 @@ class TesteFormatosVistosEmTextoReal(unittest.TestCase):
                                                             {"classe_anterior": "A", "classe_posterior": "E"}))
 
 
+class TesteAchadosDoPdfOficial(unittest.TestCase):
+    """Formas reveladas pela leitura dos PDFs oficiais de 02 e 03/10/2026 (docs/08). Dados fictícios; a FORMA é a real."""
+
+    def test_linha_justificada_letra_a_letra_e_nome_que_desce_com_o_cargo(self):
+        texto = TesteFormatosVistosEmTextoReal.VERTICAL.format(grupo="TEC. ADM.", linhas=(
+            "SAD-PSE-2026/90030 900030-1 PESSOA FICTICIA DO EXEMPLO T E C N IC O A E\nA D M IN IS TRATIVO\n"
+            "SAD-PSE-2026/90031 900031-2 PESSOA FICTICIA TRINTA E UM TECNICO D E\nSOBRENOME FINAL ADMINISTRATIVO\n"
+            "SAD-PSE-2026/90032 900032-3 PESSOA FICTICIA DE SA TECNICO A D\nADMINISTRATIVO"))
+        d = um(texto).decisoes
+        self.assertEqual([(x.servidor, x.cargo, x.detalhe["classe_anterior"], x.detalhe["classe_posterior"]) for x in d], [
+            ("PESSOA FICTICIA DO EXEMPLO", "TECNICO ADMINISTRATIVO", "A", "E"),
+            ("PESSOA FICTICIA TRINTA E UM SOBRENOME FINAL", "TECNICO ADMINISTRATIVO", "D", "E"),
+            ("PESSOA FICTICIA DE SA", "TECNICO ADMINISTRATIVO", "A", "D")])
+        self.assertTrue(all("linha_quebrada" in x.detalhe for x in d))     # continua sinalizado para o revisor
+
+    def test_cabecalho_com_expediente_e_resenha_em_linhas_separadas(self):
+        texto = ("SECRETARIA DE ESTADO DA ADMINISTRAÇÃO Expediente : 01-10-2026\nDIRETORIA EXECUTIVA DE RECURSOS HUMANOS Resenha nº : 915/2026\n"
+                 "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\nO Diretor Executivo de Recursos Humanos DEFERIU o(s) seguinte(s) "
+                 "processo(s) de DESISTÊNCIA DE LICENÇA PARA\nTRATAR DE INTERESSES PARTICULARES:\nPROCESSO MATRICULA NOME LOTAÇÃO\n"
+                 "SAD-PSE-2026/90033 9000033 PESSOA FICTICIA TRINTA E TRES SEC.EST.SAUDE\nPUBLIQUE-SE")
+        r = um(texto)
+        self.assertEqual((r.atos[0].numero, r.atos[0].subcategoria, r.atos[0].data_expediente, r.decisoes[0].lotacao),
+                         ("915/2026", "TS-04", "2026-10-01", "SEC.EST.SAUDE"))
+
+    def test_resenha_gediv_de_licenca_medica_fica_fora_dos_dois_eixos(self):
+        texto = ("GOVERNO DO ESTADO DA PARAÍBA Nº da Resenha: 916/2026\nSECRETARIA DE ESTADO DA ADMINISTRAÇÃO. 01/10/2026\n"
+                 "DIRETORIA EXECUTIVA DE RECURSOS HUMANOS / GERÊNCIA\nEXECUTIVA CONC. DE DIREITOS E VANTAGENS\n"
+                 "O Diretor Executivo de Recursos Humanos, de acordo com Laudo da Perícia Médica Oficial, DEFERIU os seguintes pedidos:\n"
+                 "Órgão/Secretaria Nome Matrícula Reg. Previd. Dias Data de Início Data Fim\nTIPO DE LICENÇA => DOENÇA NÃO RELACIONADA AO TRABALHO\n"
+                 "SEE - REGIONAL 01 PESSOA FICTICIA 9000034 RPPS 90 18/09/2026 16/12/2026\n" + T.ANOTACAO)
+        r = um(texto)
+        self.assertEqual([o.tipo for o in r.outras], ["TEMA_FORA_DOS_EIXOS"])
+        self.assertEqual([a.numero for a in r.atos], ["901/2026"])            # a resenha seguinte abre outro ato e não herda nada
+        self.assertEqual(len(r.decisoes), 2)
+
+    def test_ato_sem_processos_nao_toma_emprestado_o_tema_do_ato_seguinte(self):
+        medica = ("GOVERNO DO ESTADO DA PARAÍBA Nº da Resenha: 917/2026\nDIRETORIA EXECUTIVA DE RECURSOS HUMANOS / GERÊNCIA\n"
+                  "EXECUTIVA CONC. DE DIREITOS E VANTAGENS\nDEFERIU os seguintes pedidos de licença médica:\nSEE PESSOA FICTICIA 9000035 RPPS 30")
+        r = classificar([(4, medica), (5, T.LICENCA_ESPECIAL)], "x")
+        self.assertEqual([(a.numero, a.pagina, a.subcategoria) for a in r.atos], [("905/2026", 5, "TS-05")])
+        self.assertEqual(r.outras[0].titulo, "Resenha nº 917/2026")
+
+
 if __name__ == "__main__":
     unittest.main()

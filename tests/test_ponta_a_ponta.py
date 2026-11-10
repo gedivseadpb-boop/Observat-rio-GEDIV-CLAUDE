@@ -84,6 +84,125 @@ class TesteFluxoCompleto(unittest.TestCase):
             self.assertEqual(r.read(5), b"%PDF-")
 
 
+@unittest.skipUnless(TEM_BIBLIOTECAS, "requer pdfplumber e reportlab")
+class TesteFechamentoDaAuditoria(unittest.TestCase):
+    """RISCO-013 (página mista texto + imagem), LIMITE-014 (PDF corrompido com marcadores válidos)
+    e o relatório de validação com PDF oficial, que não pode conter dados pessoais."""
+
+    def setUp(self):
+        pasta = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(pasta.cleanup)
+        self.pasta = Path(pasta.name)
+
+    def pdf_misto(self, fracao_da_altura: float) -> bytes:
+        """Cabeçalho em texto nativo e, abaixo, o corpo como IMAGEM (texto que o PDF não traz como texto)."""
+        import io
+        import pypdfium2
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+        from observatorio.operacao import sintetico as S
+        corpo = S.diario(date(2026, 10, 2), 18685, [S.resenha_tempo(801, "30-09-2026", "LICENÇA ESPECIAL", 1, 12)])
+        documento = pypdfium2.PdfDocument(corpo)
+        imagem = documento[0].render(scale=200 / 72).to_pil()
+        documento.close()
+        memoria = io.BytesIO()
+        c = canvas.Canvas(memoria, pagesize=A4)
+        c.setFont("Helvetica", 10)
+        c.drawString(40, A4[1] - 40, "DIÁRIO OFICIAL Nº 18.685 João Pessoa - Sexta-feira, 02 de Outubro de 2026 página de teste mista")
+        c.drawImage(ImageReader(imagem), 0, 0, width=A4[0] * fracao_da_altura, height=A4[1] * fracao_da_altura)
+        c.showPage()
+        c.save()
+        return memoria.getvalue()
+
+    def ler(self, dados: bytes) -> dict:
+        from observatorio.leitura import leitor
+        caminho = self.pasta / "x.pdf"
+        caminho.write_bytes(dados)
+        return leitor.ler_arquivo(caminho)
+
+    def test_risco013_pagina_mista_sem_ocr_fica_pendente_e_nao_e_dada_como_lida(self):
+        from unittest import mock
+        from observatorio.leitura import leitor
+        with mock.patch.object(leitor, "ocr_disponivel", return_value=(False, "simulado")):
+            pagina = self.ler(self.pdf_misto(0.9))["paginas"][0]
+        self.assertEqual((pagina["metodo"], pagina["qualidade"]), ("TEXTO", "TEXTO_PARCIAL"))
+        self.assertIn("DIÁRIO OFICIAL", pagina["texto"])              # o texto nativo não é descartado
+
+    def test_risco013_imagem_pequena_nao_torna_a_pagina_mista(self):
+        from unittest import mock
+        from observatorio.leitura import leitor
+        with mock.patch.object(leitor, "ocr_disponivel", return_value=(False, "simulado")):
+            pagina = self.ler(self.pdf_misto(0.3))["paginas"][0]         # 9% da página: um brasão, por exemplo
+        self.assertEqual(pagina["qualidade"], "OK")
+
+    def test_risco013_pagina_mista_com_ocr_recupera_o_corpo_digitalizado(self):
+        from observatorio.leitura import leitor
+        if not leitor.ocr_disponivel()[0]:
+            self.skipTest("Tesseract com português não instalado")
+        pagina = self.ler(self.pdf_misto(0.9))["paginas"][0]
+        self.assertEqual(pagina["metodo"], "OCR")
+        self.assertGreater(pagina["palavras"], 60)
+        self.assertIn("LICEN", pagina["texto"].upper())
+
+    def test_risco013_pagina_mista_pendente_volta_a_fila_com_refazer(self):
+        from unittest import mock
+        from observatorio.leitura import leitor
+        banco, acervo = B.Banco(self.pasta / "b.sqlite3"), Acervo(self.pasta / "acervo")
+        self.addCleanup(banco.fechar)
+        coletor.importar_manual(banco, acervo, self.pdf_misto(0.9), date(2026, 10, 2), "manual:misto", "misto.pdf")
+        with mock.patch.object(leitor, "ocr_disponivel", return_value=(False, "simulado")):
+            self.assertEqual(leitor.processar(banco, acervo)["LIDA_COM_PENDENCIAS"], 1)
+            self.assertEqual(leitor.processar(banco, acervo), {"LIDA": 0, "LIDA_COM_PENDENCIAS": 0, "ERRO": 0, "na_fila": 0})
+            self.assertEqual(leitor.processar(banco, acervo, refazer_pendentes=True)["LIDA_COM_PENDENCIAS"], 1)
+
+    def test_limite014_pdf_corrompido_com_marcadores_validos_nunca_e_dado_como_lido(self):
+        from observatorio.gerencias.gediv import processo
+        from observatorio.leitura import leitor
+        from observatorio.nucleo import pdf
+        from observatorio.operacao import sintetico as S
+        bom = S.diario(date(2026, 10, 2), 18685, [S.resenha_tempo(801, "30-09-2026", "LICENÇA ESPECIAL", 1, 3)])
+        meio = len(bom) // 2
+        corrompido = bom[:200] + bytes(reversed(bom[200:meio])) + b"\x00" * 400 + bom[-60:]     # assinatura e %%EOF presentes
+        self.assertTrue(pdf.examinar(corrompido).valido)                # os marcadores sozinhos não detectam o defeito
+        banco, acervo = B.Banco(self.pasta / "b.sqlite3"), Acervo(self.pasta / "acervo")
+        self.addCleanup(banco.fechar)
+        coletor.importar_manual(banco, acervo, corrompido, date(2026, 10, 2), "manual:corrompido", "c.pdf")
+        contagem = leitor.processar(banco, acervo)
+        self.assertEqual((contagem["LIDA"], contagem["LIDA_COM_PENDENCIAS"], contagem["ERRO"]), (0, 0, 1))
+        leitura = banco.leituras()[0]
+        self.assertEqual(leitura["situacao"], "ERRO")
+        self.assertTrue(leitura["erro"])
+        self.assertEqual(processo.classificar_pendentes(banco)["arquivos"], 0)       # nada é classificado a partir dele
+        from observatorio.painel import indicadores
+        cobertura = indicadores.cobertura(banco)
+        self.assertEqual((cobertura["edicoes_no_acervo"], cobertura["edicoes_lidas"], cobertura["edicoes_com_pendencia_de_leitura"]), (1, 0, 1))
+
+    def test_relatorio_de_validacao_real_nao_contem_dados_pessoais_e_nada_e_conferido(self):
+        from observatorio.operacao import sintetico as S
+        from observatorio.operacao import validacao_real
+        pdf_ = self.pasta / "diario-oficial-02-10-2026-portal.pdf"
+        pdf_.write_bytes(S.diario(date(2026, 10, 2), 18685, [
+            S.resenha_progressao(802, "30-09-2026", "HORIZONTAL", "Ocupacional de Apoio Judiciário GAJ-1700:", 10, 4, cargo="POLICIAL PENAL"),
+            S.resenha_tempo(801, "30-09-2026", "ANOTAÇÃO DE TEMPO DE SERVIÇO / CONTRIBUIÇÃO", 1, 3)],
+            (S.outros_atos(1), S.resenha_progressao(805, "01-10-2026", "VERTICAL", "TEC. ADM.", 40, 2, gediv=False))))
+        amostra = self.pasta / "amostra.txt"
+        r = validacao_real.executar(pdf_, date(2026, 10, 2), "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-02-10-2026-portal.pdf",
+                                    self.pasta / "dados", amostra)
+        texto = json.dumps(r, ensure_ascii=False)
+        for proibido in ("PESSOA FICTICIA", "SAD-PSE", "900010", "9000001"):
+            self.assertNotIn(proibido, texto)
+        self.assertEqual((r["resultado"], r["leitura"]["paginas"], r["leitura"]["por_metodo"]), ("FLUXO_EXECUTADO", 2, {"TEXTO": 2}))
+        self.assertEqual([(a["numero"], a["decisoes"], a["vinculo_gediv"]) for a in r["gediv"]["atos"]],
+                         [("802/2026", 4, "EXPRESSO"), ("801/2026", 3, "EXPRESSO"), ("805/2026", 2, "NAO_EXPRESSO")])
+        self.assertEqual(r["gediv"]["por_validacao"], {"PENDENTE": 9})
+        self.assertEqual(r["painel"]["indicadores_conferidos"]["decisoes"], 0)
+        self.assertEqual(r["painel"]["indicadores_em_conferencia_preliminares"]["decisoes"], 9)
+        self.assertEqual(r["comparacao_com_referencia"]["sha256_igual"], False)       # sintético: não é o arquivo oficial
+        self.assertIn("PESSOA FICTICIA", amostra.read_text(encoding="utf-8"))          # a amostra privada serve à conferência
+        self.assertEqual(r["gediv"]["atos_de_outras_unidades_descartados"], 1)
+
+
 class TesteRegressoesDaAuditoria(unittest.TestCase):
     def setUp(self):
         self.s = Servidor()

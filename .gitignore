@@ -28,3 +28,8 @@ sonda.json
 dados-*/
 *.xlsx
 *.csv
+
+# Amostras privadas de conferência (contêm dados pessoais)
+amostra*.txt
+validacao-real*.json
+!docs/evidencias/**/validacao-real*.json

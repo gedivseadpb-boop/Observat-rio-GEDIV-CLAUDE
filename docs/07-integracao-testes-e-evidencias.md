@@ -1,5 +1,10 @@
 # Integração, testes e evidências — entrega de 10/11/2026
 
+> **Atualização (10/11/2026, fechamento):** depois deste documento o fluxo foi executado sobre quatro PDFs
+> oficiais. As seções 3 e 5 abaixo descrevem a situação **anterior** a esse teste; o estado atual, os
+> defeitos reais corrigidos e o fechamento de RISCO-013 e LIMITE-014 estão em
+> [`08-validacao-com-pdf-oficial.md`](08-validacao-com-pdf-oficial.md). A suíte passou a ter 155 testes.
+
 Versão 0.3.0. Este documento separa o que foi **executado e comprovado** do que continua **pendente**.
 
 ## 1. Fluxo implementado
