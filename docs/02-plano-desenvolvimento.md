@@ -42,7 +42,7 @@ pacote e reutiliza o restante.
 | `observatorio/nucleo/` | Verificação de PDF, acervo, banco, rede | **Etapa 1 — implementado** |
 | `observatorio/coleta/` | Fontes, coletor, inventário, importação manual | **Etapa 1 — implementado** |
 | `observatorio/sonda/` | Diagnóstico de acesso às fontes | **Etapa 1 — implementado** |
-| `observatorio/leitura/` | Texto por página e coluna, OCR sob demanda | **Etapa 2 — iniciado** (colunas e cabeçalho; OCR pendente) |
+| `observatorio/leitura/` | Texto por página e coluna, OCR sob demanda | **Etapa 2 — implementado e testado por simulação**; validação com DOE real pendente |
 | `observatorio/atos/` | Segmentação da edição em atos (órgão, resenha, portaria) | Etapa 3 |
 | `observatorio/gerencias/gediv/` | Identificação, eixos, campos, regras da GEDIV | Etapa 4 |
 | `observatorio/conferencia/` | Segunda leitura independente e comparação | Etapa 4 |
@@ -61,7 +61,7 @@ pacote e reutiliza o restante.
 | Coleta | Somente biblioteca padrão | Roda em qualquer máquina com Python, sem instalar nada. |
 | Banco | SQLite agora; PostgreSQL quando houver hospedagem | Arquivo único, sem servidor, sem custo. O SQL usado é compatível com a migração. |
 | Leitura de PDF | pdfplumber (licença MIT), a confirmar por medição em edições reais | Entrega a posição de cada palavra, necessária para separar colunas. PyMuPDF (AGPL) fica como alternativa se a qualidade ou a velocidade não bastarem. |
-| OCR | Tesseract com idioma português, só quando a página não tiver texto | Gratuito. |
+| OCR | Tesseract com idioma português, só quando a página não tiver texto | Gratuito. Implementado. |
 | Web | A decidir na Etapa 5 | Depende da hospedagem escolhida. |
 
 ## 3. Etapas

@@ -1,5 +1,8 @@
 # Coleta em lotes e início da leitura de PDFs
 
+> **Atualização (10/11/2026):** a trava descrita na seção 4 passou a ser **por fonte** e a leitura ganhou OCR e
+> controle de qualidade. O estado atual está em `05-leitura-validacao-e-fontes-independentes.md`.
+
 Data: 10/11/2026.
 
 ## 1. Avaliação da estratégia em lotes

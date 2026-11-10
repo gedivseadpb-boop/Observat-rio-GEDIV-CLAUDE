@@ -52,3 +52,25 @@ def totais(linhas: list[dict]) -> dict:
     resultado["dias"] = len(linhas)
     resultado["divergencias_entre_fontes"] = sum(linha["so_em_uma_fonte"] for linha in linhas)
     return resultado
+
+
+def parecer(linhas: list[dict], fontes: dict[str, dict]) -> dict:
+    """Parecer sobre a cobertura. Nunca declara o acervo completo: no máximo, sem lacunas conhecidas."""
+    t = totais(linhas)
+    lacunas = {k: t.get(k, 0) for k in ("NAO_VERIFICADO", "PENDENTE", "PARCIAL")}
+    nao_validadas = sorted(s for s, f in fontes.items() if f["situacao"] != "VALIDADA")
+    if not any(f["situacao"] == "VALIDADA" for f in fontes.values()) and not t.get("COMPLETO"):
+        situacao = "SEM_COBERTURA_AUTOMATICA"
+    elif nao_validadas or any(lacunas.values()):
+        situacao = "PARCIAL"
+    else:
+        situacao = "SEM_LACUNAS_CONHECIDAS"
+    return {
+        "situacao": situacao,
+        "fontes_validadas": sorted(s for s, f in fontes.items() if f["situacao"] == "VALIDADA"),
+        "fontes_nao_validadas": {s: fontes[s]["situacao"] for s in nao_validadas},
+        "dias_com_lacuna": lacunas,
+        "dias_so_em_uma_fonte": t["divergencias_entre_fontes"],
+        "observacao": "A conferência entre fontes só é possível nos dias cobertos por mais de uma fonte validada."
+        if nao_validadas else None,
+    }

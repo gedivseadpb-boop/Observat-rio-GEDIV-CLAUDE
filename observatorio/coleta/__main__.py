@@ -1,4 +1,4 @@
-"""Linha de comando da coleta.
+"""Painel de Publicações DOE-PB GEDIV — coleta dos Diários Oficiais.
 
 Sequência normal de uso (cada passo pode ser repetido e retomado):
 
@@ -12,10 +12,12 @@ Sequência normal de uso (cada passo pode ser repetido e retomado):
 Outros comandos:
 
     python -m observatorio.coleta inventario --inicio 2026-01-01     # cobertura dia a dia
-    python -m observatorio.coleta importar ARQUIVO.pdf --data AAAA-MM-DD [--url URL_OFICIAL]
+    python -m observatorio.coleta importar ARQUIVO.pdf [--data AAAA-MM-DD] [--url URL_OFICIAL]
+    python -m observatorio.coleta importar PASTA                     # todos os PDFs da pasta
     python -m observatorio.coleta conferir                           # reconfere o SHA-256 do acervo
 
-A carga histórica (comando "lote") só é liberada depois de um piloto aprovado em cada fonte oficial.
+Cada fonte é validada separadamente: o comando "lote" de uma fonte só é liberado depois de um
+piloto aprovado nessa mesma fonte. Uma fonte validada pode ser processada sem depender da outra.
 Códigos de saída: 0 = concluído; 3 = concluído com pendências; 2 = recusado ou erro de uso.
 """
 from __future__ import annotations
@@ -26,10 +28,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from .. import NOME
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
 from . import coletor, inventario, lotes
-from .fontes import FONTES
+from .fontes import FONTES, data_do_nome
 
 COMANDOS = ["descobrir", "piloto", "lote", "progresso", "inventario", "importar", "conferir"]
 
@@ -83,7 +86,7 @@ def main(argv=None) -> int:
                 resumos = [lotes.executar_lote(fonte, banco, acervo, lotes.PILOTO, parametros)]
             else:
                 resumos = lotes.executar_sequencia(fonte, banco, acervo, a.lotes, a.pausa_entre_lotes,
-                                                   parametros=parametros, mes=a.mes, fontes_exigidas=sorted(FONTES))
+                                                   parametros=parametros, mes=a.mes)
             _mostrar(resumos)
             ultimo = resumos[-1]
             if not ultimo["executado"]:
@@ -92,9 +95,12 @@ def main(argv=None) -> int:
             return 0 if limpo and ultimo["aprovado"] is not False else 3
 
         if a.comando == "progresso":
+            fontes = lotes.situacao_das_fontes(banco, sorted(FONTES))
+            linhas = inventario.cobertura(banco, a.inicio, a.fim, sorted(FONTES))
             _mostrar({
-                "piloto_aprovado": {s: banco.piloto_aprovado(s) for s in sorted(FONTES)},
-                "carga_historica_liberada": not lotes.fontes_sem_piloto(banco, sorted(FONTES)),
+                "sistema": NOME,
+                "fontes": fontes,
+                "cobertura": inventario.parecer(linhas, fontes),
                 "por_mes": [dict(linha) for linha in banco.progresso()],
                 "varreduras_com_erro": [dict(v) for v in banco.varreduras() if v["erro"]],
                 "lotes": [{k: l[k] for k in ("id", "fonte", "tipo", "estado", "aprovado", "iniciado_em", "concluido_em",
@@ -104,17 +110,29 @@ def main(argv=None) -> int:
 
         if a.comando == "inventario":
             linhas = inventario.cobertura(banco, a.inicio, a.fim, siglas)
-            _mostrar({"totais": inventario.totais(linhas), "dias": linhas})
+            fontes = lotes.situacao_das_fontes(banco, siglas)
+            _mostrar({"sistema": NOME, "cobertura": inventario.parecer(linhas, fontes),
+                      "totais": inventario.totais(linhas), "dias": linhas})
             return 0
 
         if a.comando == "importar":
-            if not a.arquivo or not a.data:
-                ap.error("importar exige ARQUIVO e --data")
+            if not a.arquivo:
+                ap.error("importar exige ARQUIVO ou PASTA")
             origem = Path(a.arquivo)
-            resultado = coletor.importar_manual(banco, acervo, origem.read_bytes(), a.data,
-                                                a.url or f"manual:{origem.name}", origem.name)
-            _mostrar(resultado)
-            return 0 if resultado["aceito"] else 2
+            arquivos = sorted(origem.glob("*.pdf")) if origem.is_dir() else [origem]
+            if origem.is_dir() and (a.data or a.url):
+                ap.error("--data e --url só valem para um arquivo; na pasta, a data vem do nome de cada arquivo")
+            resultados = []
+            for arquivo in arquivos:
+                data = a.data or data_do_nome(arquivo.name)
+                if data is None:
+                    resultados.append({"arquivo": arquivo.name, "aceito": False, "motivo": "DATA_NAO_INFORMADA_NEM_NO_NOME"})
+                    continue
+                resultado = coletor.importar_manual(banco, acervo, arquivo.read_bytes(), data,
+                                                    a.url or f"manual:{arquivo.name}", arquivo.name)
+                resultados.append({"arquivo": arquivo.name, "data": data.isoformat(), **resultado})
+            _mostrar(resultados)
+            return 0 if resultados and all(r["aceito"] for r in resultados) else 2
 
         corrompidos = [x["sha256"] for x in banco.arquivos() if not acervo.conferir(x["sha256"])]
         _mostrar({"arquivos": len(banco.arquivos()), "corrompidos_ou_ausentes": corrompidos})

@@ -85,15 +85,51 @@ class TestePiloto(Base):
 class TesteTravaDaCargaHistorica(Base):
     def test_sem_piloto_o_lote_historico_e_recusado_sem_tocar_na_fonte(self):
         acessos = dict(self.s.acessos)
-        resumo = self.lote(lotes.HISTORICO, fontes_exigidas=["auniao", "cge"])
-        self.assertEqual(resumo, {"executado": False, "motivo": "PILOTO_NAO_APROVADO", "fontes_sem_piloto": ["auniao", "cge"]})
+        resumo = self.lote(lotes.HISTORICO)
+        self.assertEqual(resumo, {"executado": False, "motivo": "PILOTO_NAO_APROVADO", "fonte": "auniao"})
         self.assertEqual(self.s.acessos, acessos)
         self.assertEqual(self.banco.lotes(), [])
 
-    def test_piloto_em_uma_so_fonte_nao_basta(self):
+    def test_fonte_validada_segue_sozinha_e_a_outra_continua_travada(self):
+        from observatorio.coleta import inventario
+        self.lote(lotes.PILOTO)                                   # piloto só na A União
+        self.assertEqual(self.lote(lotes.HISTORICO)["estado"], "CONCLUIDO")
+        self.assertEqual(self.lote(lotes.HISTORICO, self.cge), {"executado": False, "motivo": "PILOTO_NAO_APROVADO", "fonte": "cge"})
+        fontes = lotes.situacao_das_fontes(self.banco, ["auniao", "cge"])
+        self.assertEqual((fontes["auniao"]["situacao"], fontes["auniao"]["carga_historica_liberada"]), ("VALIDADA", True))
+        self.assertEqual((fontes["cge"]["situacao"], fontes["cge"]["carga_historica_liberada"]), ("ACESSIVEL", False))
+        lotes.executar_sequencia(self.auniao, self.banco, self.acervo, 10, 0, politica=self.s.politica(), dormir=self.pausas.append)
+        linhas = inventario.cobertura(self.banco, date(2026, 1, 1), date(2026, 2, 28), ["auniao", "cge"])
+        parecer = inventario.parecer(linhas, fontes)
+        self.assertEqual(parecer["situacao"], "PARCIAL")           # uma fonte inteira baixada não é acervo completo
+        self.assertEqual(parecer["fontes_nao_validadas"], {"cge": "ACESSIVEL"})
+        self.assertGreater(parecer["dias_com_lacuna"]["PARCIAL"], 0)
+
+    def test_situacoes_operacionais_de_cada_fonte(self):
+        vazio = B.Banco(":memory:")
+        self.addCleanup(vazio.fechar)
+        self.assertEqual(lotes.situacao_das_fontes(vazio, ["auniao"])["auniao"]["situacao"], "NAO_TESTADA")
+        vazio.registrar_varredura("auniao", 2026, 1, None, "TEMPO_ESGOTADO")
+        self.assertEqual(lotes.situacao_das_fontes(vazio, ["auniao"])["auniao"]["situacao"], "INACESSIVEL")
+        self.assertEqual(lotes.situacao_das_fontes(self.banco, ["cge"])["cge"]["situacao"], "ACESSIVEL")
+        self.s.rotas[rota_pdf(1, 2)] = (404, "text/plain", b"")
+        self.s.rotas[rota_pdf(1, 2) + "/@@download/file"] = (404, "text/plain", b"")
         self.lote(lotes.PILOTO)
-        resumo = self.lote(lotes.HISTORICO, fontes_exigidas=["auniao", "cge"])
-        self.assertEqual(resumo["fontes_sem_piloto"], ["cge"])
+        self.assertEqual(lotes.situacao_das_fontes(self.banco, ["auniao"])["auniao"]["situacao"], "PILOTO_REPROVADO")
+
+    def test_recusa_da_fonte_suspende_a_carga_ate_novo_piloto(self):
+        self.lote(lotes.PILOTO)
+        pendente = self.banco.pendentes("auniao", 5)[0]
+        rota = pendente["url"].replace(self.s.base, "")
+        original = self.s.rotas[rota]
+        self.s.rotas[rota] = (403, "text/plain", b"")
+        self.s.rotas[rota + "/@@download/file"] = (403, "text/plain", b"")
+        self.assertEqual(self.lote(lotes.HISTORICO)["estado"], "INTERROMPIDO_RECUSA_DA_FONTE")
+        self.assertEqual(self.lote(lotes.HISTORICO), {"executado": False, "motivo": "FONTE_SUSPENSA_APOS_RECUSA", "fonte": "auniao"})
+        self.assertFalse(lotes.situacao_das_fontes(self.banco, ["auniao"])["auniao"]["carga_historica_liberada"])
+        self.s.rotas[rota] = original
+        self.assertTrue(self.lote(lotes.PILOTO)["aprovado"])        # novo piloto aprovado reabre
+        self.assertEqual(self.lote(lotes.HISTORICO)["estado"], "CONCLUIDO")
 
 
 class TesteLotesHistoricos(Base):
@@ -149,15 +185,13 @@ class TesteLotesHistoricos(Base):
         self.assertEqual(len(self.banco.publicacoes("auniao", (B.BAIXADA,))), 24)
 
     def test_recusa_da_fonte_encerra_na_primeira_ocorrencia(self):
-        for codigo, esperado in ((403, "INTERROMPIDO_RECUSA_DA_FONTE"), (429, "INTERROMPIDO_RECUSA_DA_FONTE")):
-            pendente = self.banco.pendentes("auniao", 5)[0]
+        for codigo, fonte in ((403, self.auniao), (429, self.cge)):
+            pendente = self.banco.pendentes(fonte.sigla, 5)[0]
             rota = pendente["url"].replace(self.s.base, "")
-            original = self.s.rotas[rota]
             self.s.rotas[rota] = (codigo, "text/plain", b"")
             self.s.rotas[rota + "/@@download/file"] = (codigo, "text/plain", b"")
-            resumo = self.lote(lotes.HISTORICO)
-            self.assertEqual((resumo["estado"], resumo["tentados"]), (esperado, 1))
-            self.s.rotas[rota] = original
+            resumo = self.lote(lotes.HISTORICO, fonte)
+            self.assertEqual((resumo["estado"], resumo["tentados"]), ("INTERROMPIDO_RECUSA_DA_FONTE", 1))
 
     def test_pagina_de_verificacao_no_lugar_do_pdf_encerra_sem_insistir(self):
         pendente = self.banco.pendentes("auniao", 5)[0]

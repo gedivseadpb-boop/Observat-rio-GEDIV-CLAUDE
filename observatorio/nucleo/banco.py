@@ -17,12 +17,13 @@ O SQL usado é compatível com uma futura migração para PostgreSQL.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 2
+VERSAO_ESQUEMA = 3
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -124,6 +125,16 @@ CREATE TABLE pagina (
 );
 """
 
+# Versão 3: qualidade e rastreabilidade da leitura.
+_ESQUEMA_V3 = """
+ALTER TABLE pagina ADD COLUMN qualidade TEXT NOT NULL DEFAULT 'OK';
+ALTER TABLE pagina ADD COLUMN confianca REAL;
+ALTER TABLE pagina ADD COLUMN palavras INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE pagina ADD COLUMN texto_sha256 TEXT;
+ALTER TABLE leitura ADD COLUMN paginas_com_pendencia INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE leitura ADD COLUMN inconsistencias TEXT;
+"""
+
 PENDENTES = (DESCOBERTA, FALHA_DOWNLOAD, INVALIDA)
 
 
@@ -141,7 +152,7 @@ class Banco:
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
         if versao > VERSAO_ESQUEMA:
             raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
-        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2)):
+        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3)):
             if versao < numero:
                 with self.con:
                     self.con.executescript(script)
@@ -322,24 +333,41 @@ class Banco:
             "WHERE l.sha256 IS NULL ORDER BY a.guardado_em, a.sha256", (versao_leitor,)
         ).fetchall()
 
-    def registrar_leitura(self, sha256, situacao, versao_leitor, paginas, numero_edicao, data_edicao, erro) -> None:
+    def registrar_leitura(self, sha256, situacao, versao_leitor, paginas, numero_edicao, data_edicao, erro,
+                          inconsistencias=()) -> None:
         """Grava páginas e resumo na mesma transação: ou o arquivo fica lido por inteiro, ou não fica."""
         with self.con:
             self.con.execute("DELETE FROM pagina WHERE sha256 = ?", (sha256,))
             self.con.executemany(
-                "INSERT INTO pagina (sha256, numero, metodo, colunas, texto) VALUES (?,?,?,?,?)",
-                [(sha256, p["numero"], p["metodo"], p["colunas"], p["texto"]) for p in paginas],
+                "INSERT INTO pagina (sha256, numero, metodo, colunas, texto, qualidade, confianca, palavras, texto_sha256) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                [(sha256, p["numero"], p["metodo"], p["colunas"], p["texto"], p["qualidade"], p.get("confianca"),
+                  p["palavras"], hashlib.sha256(p["texto"].encode("utf-8")).hexdigest()) for p in paginas],
             )
             self.con.execute(
                 "INSERT INTO leitura (sha256, situacao, versao_leitor, paginas, paginas_sem_texto, numero_edicao, "
-                "data_edicao, erro, concluida_em) VALUES (?,?,?,?,?,?,?,?,?) "
+                "data_edicao, erro, concluida_em, paginas_com_pendencia, inconsistencias) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT (sha256) DO UPDATE SET situacao = excluded.situacao, versao_leitor = excluded.versao_leitor, "
                 "paginas = excluded.paginas, paginas_sem_texto = excluded.paginas_sem_texto, "
                 "numero_edicao = excluded.numero_edicao, data_edicao = excluded.data_edicao, erro = excluded.erro, "
-                "concluida_em = excluded.concluida_em",
-                (sha256, situacao, versao_leitor, len(paginas), sum(p["metodo"] == "SEM_TEXTO" for p in paginas),
-                 numero_edicao, data_edicao, erro, agora()),
+                "concluida_em = excluded.concluida_em, paginas_com_pendencia = excluded.paginas_com_pendencia, "
+                "inconsistencias = excluded.inconsistencias",
+                (sha256, situacao, versao_leitor, len(paginas), sum(p["metodo"] != "TEXTO" for p in paginas),
+                 numero_edicao, data_edicao, erro, agora(),
+                 sum(p["qualidade"] not in ("OK", "VAZIA") for p in paginas),
+                 json.dumps(list(inconsistencias), ensure_ascii=False)),
             )
+
+    def origens(self, sha256: str):
+        """De onde veio o arquivo: todas as publicações (fonte, endereço, data) que o ofereceram."""
+        return self.con.execute(
+            "SELECT DISTINCT p.fonte, p.url, p.data_publicacao, p.tipo, p.ordem FROM publicacao p "
+            "LEFT JOIN versao v ON v.publicacao_id = p.id WHERE p.sha256 = ? OR v.sha256 = ? ORDER BY p.fonte, p.url",
+            (sha256, sha256),
+        ).fetchall()
+
+    def arquivo(self, sha256: str):
+        return self.con.execute("SELECT * FROM arquivo WHERE sha256 = ?", (sha256,)).fetchone()
 
     def leituras(self):
         return self.con.execute("SELECT * FROM leitura ORDER BY sha256").fetchall()
