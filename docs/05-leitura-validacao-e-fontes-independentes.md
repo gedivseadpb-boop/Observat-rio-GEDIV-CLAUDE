@@ -162,3 +162,13 @@ O item 4 mede perda de texto, não a ordem das colunas. A ordem só é confirmad
 3. **Decisão institucional**, se a sonda mostrar recusa ou proteção: solicitar liberação
    de acesso à A União/CODATA e à CGE.
 4. **Visibilidade do repositório** (hoje público), antes da etapa de classificação.
+
+## 7. Resultados dos testes por ambiente (10/11/2026)
+
+| Ambiente | Python | Resultado |
+|---|---|---|
+| Ambiente de desenvolvimento (Linux, Tesseract 5.3.4 com português) | 3.13 | 71 aprovados, nenhum pulado |
+| GitHub Actions, Ubuntu 24.04 (Tesseract instalado) | 3.11 e 3.13 | 71 aprovados, nenhum pulado |
+| GitHub Actions, Windows (sem Tesseract) | 3.11 e 3.13 | 70 aprovados, 1 pulado (OCR) |
+
+Execução de referência: <https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/actions/runs/42878939696>
