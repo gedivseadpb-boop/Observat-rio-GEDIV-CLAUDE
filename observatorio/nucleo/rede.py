@@ -136,7 +136,8 @@ def texto(resposta: Resposta) -> str:
 def consultar_robots(url_base: str, politica: Politica) -> tuple[str, urllib.robotparser.RobotFileParser | None]:
     """Lê o robots.txt do servidor. Devolve (situação, regras).
 
-    Situações: LIDO, AUSENTE (4xx: sem restrições declaradas) ou INACESSIVEL.
+    Situações: LIDO, AUSENTE (4xx: sem restrições declaradas), NAO_E_ROBOTS
+    (o servidor devolveu uma página HTML no lugar do arquivo) ou INACESSIVEL.
     """
     p = urllib.parse.urlsplit(url_base)
     endereco = f"{p.scheme}://{p.netloc}/robots.txt"
@@ -146,6 +147,9 @@ def consultar_robots(url_base: str, politica: Politica) -> tuple[str, urllib.rob
         if e.categoria.startswith("HTTP_4"):
             return "AUSENTE", None
         return "INACESSIVEL", None
+    conteudo = texto(resposta)
+    if conteudo.lstrip().startswith("<"):
+        return "NAO_E_ROBOTS", None
     regras = urllib.robotparser.RobotFileParser()
-    regras.parse(texto(resposta).splitlines())
+    regras.parse(conteudo.splitlines())
     return "LIDO", regras

@@ -89,7 +89,7 @@ def http_get(servidor, caminho, agente, faixa=None, seguro=True):
         conexao.request("GET", caminho, headers=cabecalhos)
         r = conexao.getresponse()
         corpo = r.read(4096)
-        return {"status": r.status, "tipo": r.getheader("Content-Type"), "servidor_web": r.getheader("Server"),
+        return {"status": r.status, "desafio_javascript": desafio(corpo), "tipo": r.getheader("Content-Type"), "servidor_web": r.getheader("Server"),
                 "destino": r.getheader("Location"), "tamanho_declarado": r.getheader("Content-Length"),
                 "bytes_lidos": len(corpo), "assinatura_pdf": corpo[:5] == b"%PDF-",
                 "parece_html": corpo[:200].lstrip().lower().startswith((b"<!doctype", b"<html"))}
@@ -97,14 +97,22 @@ def http_get(servidor, caminho, agente, faixa=None, seguro=True):
         conexao.close()
 
 
+def desafio(corpo: bytes) -> bool:
+    """Indica página de verificação anti-robô (exige navegador com JavaScript) no lugar do conteúdo."""
+    return any(marca in corpo for marca in (b"/TSPD/", b"enable JavaScript", b"cf-challenge", b"captcha"))
+
+
 def robots(servidor):
     conexao = http.client.HTTPSConnection(servidor, timeout=TEMPO)
     try:
         conexao.request("GET", "/robots.txt", headers={"User-Agent": ROBO})
         r = conexao.getresponse()
-        texto = r.read(20000).decode("utf-8", "replace")
+        bruto = r.read(20000)
+        texto = bruto.decode("utf-8", "replace")
+        if texto.lstrip().startswith("<"):
+            return {"status": r.status, "formato": "HTML (não é um robots.txt)", "desafio_javascript": desafio(bruto), "regras": []}
         linhas = [l.strip() for l in texto.splitlines() if l.strip() and not l.strip().startswith("#")]
-        return {"status": r.status, "regras": linhas[:60] if r.status == 200 else []}
+        return {"status": r.status, "formato": "texto", "regras": linhas[:40] if r.status == 200 else []}
     finally:
         conexao.close()
 

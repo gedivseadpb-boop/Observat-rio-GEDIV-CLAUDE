@@ -52,12 +52,14 @@ class TesteAcervo(unittest.TestCase):
 class TesteBanco(unittest.TestCase):
     def test_descoberta_nao_duplica(self):
         banco = Banco(":memory:")
+        self.addCleanup(banco.fechar)
         self.assertTrue(banco.registrar_descoberta("auniao", "u1", "2026-01-07", "normal", 0, "x"))
         self.assertFalse(banco.registrar_descoberta("auniao", "u1", "2026-01-07", "normal", 0, "x"))
         self.assertEqual(len(banco.publicacoes()), 1)
 
     def test_conteudo_alterado_preserva_versao_anterior(self):
         banco = Banco(":memory:")
+        self.addCleanup(banco.fechar)
         banco.registrar_descoberta("auniao", "u1", "2026-01-07", "normal", 0, "x")
         pid = banco.publicacao("auniao", "u1")["id"]
         self.assertEqual(banco.registrar_arquivo(pid, "a" * 64, 10, "aa/a.pdf"), "NOVO")
@@ -72,7 +74,9 @@ class TesteBanco(unittest.TestCase):
             banco = Banco(caminho)
             banco.registrar_descoberta("cge", "u", None, "normal", 0, "x")
             banco.fechar()
-            self.assertEqual(len(Banco(caminho).publicacoes()), 1)
+            reaberto = Banco(caminho)
+            self.assertEqual(len(reaberto.publicacoes()), 1)
+            reaberto.fechar()  # no Windows, um arquivo aberto não pode ser apagado
 
 
 class TesteRede(unittest.TestCase):
@@ -132,6 +136,8 @@ class TesteRede(unittest.TestCase):
         self.assertEqual(situacao, "LIDO")
         self.assertTrue(regras.can_fetch(rede.AGENTE, self.s.base + "/servicos/doe/2026"))
         self.assertFalse(regras.can_fetch(rede.AGENTE, self.s.base + "/privado/x"))
+        self.s.rotas["/robots.txt"] = (200, "text/html", b"<!DOCTYPE html><html>verificacao</html>")
+        self.assertEqual(rede.consultar_robots(self.s.base + "/x", self.s.politica()), ("NAO_E_ROBOTS", None))
 
 
 if __name__ == "__main__":

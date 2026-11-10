@@ -71,6 +71,7 @@ class TesteColeta(unittest.TestCase):
         self.addCleanup(pasta.cleanup)
         self.pasta = Path(pasta.name)
         self.banco, self.acervo = B.Banco(":memory:"), Acervo(self.pasta / "acervo")
+        self.addCleanup(self.banco.fechar)
         self.auniao, self.cge = FonteLocal(AUniao(), self.s), FonteLocal(CGE(), self.s)
         j = "/servicos/doe/2026/janeiro"
         self.s.rotas.update({
