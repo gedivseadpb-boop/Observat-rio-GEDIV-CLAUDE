@@ -161,6 +161,8 @@ def sondar(definicao):
         alvo["camada_da_falha"] = "HTTP (sem resposta)"
     elif not any(r and r["status"] < 400 for r in respostas):
         alvo["camada_da_falha"] = "HTTP (respondeu com erro)"
+    elif any(r and r.get("desafio_javascript") for r in respostas):
+        alvo["camada_da_falha"] = "HTTP (respondeu com página de verificação anti-robô)"
     else:
         alvo["camada_da_falha"] = None
     return alvo

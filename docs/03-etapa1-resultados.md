@@ -12,6 +12,9 @@ Comando: `python -m unittest discover -s tests -t .`
 | GitHub Actions, Ubuntu 24.04 | 3.11 e 3.13 | 33 aprovados |
 | GitHub Actions, Windows | 3.11 e 3.13 | 33 aprovados |
 
+Estes números são da primeira entrega da etapa. Os testes de lotes e de leitura,
+acrescentados depois, estão em `04-coleta-em-lotes-e-leitura.md`.
+
 Execução de referência: <https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/actions/runs/42870696476>
 
 A primeira execução no Windows falhou em um teste (um arquivo de banco ficava aberto ao
@@ -23,14 +26,16 @@ seguinte passou nos quatro ambientes.
 As listagens sintéticas reproduzem os formatos de endereço confirmados, não a estrutura
 HTML verdadeira dos portais, que ainda não pôde ser lida diretamente.
 
-## 2. Sonda de acesso — executada duas vezes em executores do GitHub
+## 2. Sonda de acesso — executada três vezes em executores do GitHub
 
 Relatórios completos em `docs/evidencias/`.
 
-| | Execução 1 | Execução 2 |
-|---|---|---|
-| Horário (UTC) | 10/11/2026 17:57 | 10/11/2026 18:00 |
-| Saída para a internet | Microsoft Azure, EUA (Illinois) | Microsoft Azure, EUA (Washington) |
+| | Execução 1 | Execução 2 | Execução 3 |
+|---|---|---|---|
+| Horário (UTC) | 10/11/2026 17:57 | 10/11/2026 18:00 | 10/11/2026 18:15 |
+| Saída para a internet | Microsoft Azure, EUA (Illinois) | Microsoft Azure, EUA (Washington) | Microsoft Azure, EUA (Washington) |
+
+As três execuções tiveram o mesmo resultado.
 
 | Servidor | Endereço | DNS | Conexão (80 e 443) | Resultado |
 |---|---|---|---|---|

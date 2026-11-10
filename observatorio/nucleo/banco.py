@@ -5,7 +5,11 @@ Tabelas desta etapa:
 - publicacao  um endereço em que uma fonte oferece um documento;
 - versao      histórico dos conteúdos já observados em cada endereço;
 - varredura   resultado da leitura da listagem mensal de cada fonte;
-- execucao    registro de cada rodada do robô.
+- execucao    registro de cada rodada do robô;
+- lote        cada lote de downloads (piloto ou histórico) e seu desfecho;
+- lote_item   resultado de cada publicação tratada em um lote;
+- leitura     situação da leitura de cada arquivo do acervo;
+- pagina      texto de cada página lida (fica somente no banco local).
 
 O mesmo arquivo oferecido por duas fontes gera duas linhas em `publicacao`
 e uma única linha em `arquivo`: não é contado como dois documentos.
@@ -18,7 +22,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 1
+VERSAO_ESQUEMA = 2
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -74,6 +78,54 @@ CREATE TABLE execucao (
 );
 """
 
+# Acrescentado na versão 2 do esquema. Bancos da versão 1 são atualizados sem perda de dados.
+_ESQUEMA_V2 = """
+CREATE TABLE lote (
+    id           INTEGER PRIMARY KEY,
+    fonte        TEXT NOT NULL,
+    tipo         TEXT NOT NULL,
+    estado       TEXT NOT NULL,
+    aprovado     INTEGER,
+    parametros   TEXT NOT NULL,
+    iniciado_em  TEXT NOT NULL,
+    concluido_em TEXT,
+    observacao   TEXT
+);
+CREATE TABLE lote_item (
+    id            INTEGER PRIMARY KEY,
+    lote_id       INTEGER NOT NULL REFERENCES lote(id),
+    publicacao_id INTEGER NOT NULL REFERENCES publicacao(id),
+    resultado     TEXT NOT NULL,
+    sha256        TEXT,
+    tamanho       INTEGER,
+    segundos      REAL,
+    erro          TEXT,
+    registrado_em TEXT NOT NULL
+);
+CREATE INDEX lote_item_lote ON lote_item (lote_id);
+CREATE TABLE leitura (
+    sha256        TEXT PRIMARY KEY REFERENCES arquivo(sha256),
+    situacao      TEXT NOT NULL,
+    versao_leitor TEXT NOT NULL,
+    paginas       INTEGER,
+    paginas_sem_texto INTEGER,
+    numero_edicao TEXT,
+    data_edicao   TEXT,
+    erro          TEXT,
+    concluida_em  TEXT NOT NULL
+);
+CREATE TABLE pagina (
+    sha256  TEXT NOT NULL REFERENCES arquivo(sha256),
+    numero  INTEGER NOT NULL,
+    metodo  TEXT NOT NULL,
+    colunas INTEGER NOT NULL,
+    texto   TEXT NOT NULL,
+    PRIMARY KEY (sha256, numero)
+);
+"""
+
+PENDENTES = (DESCOBERTA, FALHA_DOWNLOAD, INVALIDA)
+
 
 def agora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -87,12 +139,13 @@ class Banco:
         self.con.row_factory = sqlite3.Row
         self.con.execute("PRAGMA foreign_keys = ON")
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
-        if versao == 0:
-            with self.con:
-                self.con.executescript(_ESQUEMA)
-                self.con.execute(f"PRAGMA user_version = {VERSAO_ESQUEMA}")
-        elif versao != VERSAO_ESQUEMA:
-            raise RuntimeError(f"esquema {versao} não suportado (esperado {VERSAO_ESQUEMA})")
+        if versao > VERSAO_ESQUEMA:
+            raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
+        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2)):
+            if versao < numero:
+                with self.con:
+                    self.con.executescript(script)
+                    self.con.execute(f"PRAGMA user_version = {numero}")
 
     def fechar(self) -> None:
         self.con.close()
@@ -189,3 +242,107 @@ class Banco:
 
     def arquivos(self):
         return self.con.execute("SELECT * FROM arquivo ORDER BY sha256").fetchall()
+
+    # --- lotes -----------------------------------------------------------
+    def pendentes(self, fonte: str, max_tentativas: int, mes: str | None = None):
+        sql = (f"SELECT * FROM publicacao WHERE fonte = ? AND estado IN ({','.join('?' * len(PENDENTES))}) "
+               "AND tentativas < ? AND data_publicacao IS NOT NULL")
+        parametros = [fonte, *PENDENTES, max_tentativas]
+        if mes:
+            sql += " AND substr(data_publicacao, 1, 7) = ?"
+            parametros.append(mes)
+        return self.con.execute(sql + " ORDER BY data_publicacao, ordem, id", parametros).fetchall()
+
+    def encerrar_lotes_abandonados(self) -> int:
+        """Lotes que ficaram abertos por queda do programa passam a INTERROMPIDO_EXECUCAO."""
+        with self.con:
+            return self.con.execute(
+                "UPDATE lote SET estado = 'INTERROMPIDO_EXECUCAO', concluido_em = ? WHERE concluido_em IS NULL", (agora(),)
+            ).rowcount
+
+    def abrir_lote(self, fonte: str, tipo: str, parametros: dict) -> int:
+        with self.con:
+            return self.con.execute(
+                "INSERT INTO lote (fonte, tipo, estado, parametros, iniciado_em) VALUES (?,?,?,?,?)",
+                (fonte, tipo, "ABERTO", json.dumps(parametros, ensure_ascii=False), agora()),
+            ).lastrowid
+
+    def registrar_item_lote(self, lote_id, publicacao_id, resultado, sha256, tamanho, segundos, erro) -> None:
+        with self.con:
+            self.con.execute(
+                "INSERT INTO lote_item (lote_id, publicacao_id, resultado, sha256, tamanho, segundos, erro, registrado_em) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (lote_id, publicacao_id, resultado, sha256, tamanho, segundos, erro, agora()),
+            )
+
+    def concluir_lote(self, lote_id: int, estado: str, aprovado: bool | None, observacao: str | None) -> None:
+        with self.con:
+            self.con.execute(
+                "UPDATE lote SET estado = ?, aprovado = ?, observacao = ?, concluido_em = ? WHERE id = ?",
+                (estado, None if aprovado is None else int(aprovado), observacao, agora(), lote_id),
+            )
+
+    def lote(self, lote_id: int):
+        return self.con.execute("SELECT * FROM lote WHERE id = ?", (lote_id,)).fetchone()
+
+    def lotes(self, fonte: str | None = None):
+        if fonte:
+            return self.con.execute("SELECT * FROM lote WHERE fonte = ? ORDER BY id", (fonte,)).fetchall()
+        return self.con.execute("SELECT * FROM lote ORDER BY id").fetchall()
+
+    def itens_do_lote(self, lote_id: int):
+        return self.con.execute("SELECT * FROM lote_item WHERE lote_id = ? ORDER BY id", (lote_id,)).fetchall()
+
+    def piloto_aprovado(self, fonte: str) -> bool:
+        return self.con.execute(
+            "SELECT 1 FROM lote WHERE fonte = ? AND tipo = 'piloto' AND aprovado = 1 LIMIT 1", (fonte,)
+        ).fetchone() is not None
+
+    def progresso(self):
+        """Situação por mês e por fonte. `duplicadas` = verificadas cujo conteúdo já pertence a outra publicação."""
+        return self.con.execute(
+            """
+            SELECT substr(p.data_publicacao, 1, 7) AS mes, p.fonte,
+                   COUNT(*) AS listadas,
+                   SUM(p.estado = 'BAIXADA') AS verificadas,
+                   SUM(p.estado = 'BAIXADA' AND EXISTS (
+                       SELECT 1 FROM publicacao o WHERE o.sha256 = p.sha256 AND o.id < p.id)) AS duplicadas,
+                   SUM(p.estado = 'DESCOBERTA') AS pendentes,
+                   SUM(p.estado = 'FALHA_DOWNLOAD') AS falhas,
+                   SUM(p.estado = 'INVALIDA') AS invalidas,
+                   SUM(p.tipo <> 'normal' OR p.ordem > 0) AS suplementos_ou_adicionais
+            FROM publicacao p GROUP BY mes, p.fonte ORDER BY mes, p.fonte
+            """
+        ).fetchall()
+
+    # --- leitura ---------------------------------------------------------
+    def arquivos_sem_leitura(self, versao_leitor: str):
+        return self.con.execute(
+            "SELECT a.* FROM arquivo a LEFT JOIN leitura l ON l.sha256 = a.sha256 AND l.versao_leitor = ? "
+            "WHERE l.sha256 IS NULL ORDER BY a.guardado_em, a.sha256", (versao_leitor,)
+        ).fetchall()
+
+    def registrar_leitura(self, sha256, situacao, versao_leitor, paginas, numero_edicao, data_edicao, erro) -> None:
+        """Grava páginas e resumo na mesma transação: ou o arquivo fica lido por inteiro, ou não fica."""
+        with self.con:
+            self.con.execute("DELETE FROM pagina WHERE sha256 = ?", (sha256,))
+            self.con.executemany(
+                "INSERT INTO pagina (sha256, numero, metodo, colunas, texto) VALUES (?,?,?,?,?)",
+                [(sha256, p["numero"], p["metodo"], p["colunas"], p["texto"]) for p in paginas],
+            )
+            self.con.execute(
+                "INSERT INTO leitura (sha256, situacao, versao_leitor, paginas, paginas_sem_texto, numero_edicao, "
+                "data_edicao, erro, concluida_em) VALUES (?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT (sha256) DO UPDATE SET situacao = excluded.situacao, versao_leitor = excluded.versao_leitor, "
+                "paginas = excluded.paginas, paginas_sem_texto = excluded.paginas_sem_texto, "
+                "numero_edicao = excluded.numero_edicao, data_edicao = excluded.data_edicao, erro = excluded.erro, "
+                "concluida_em = excluded.concluida_em",
+                (sha256, situacao, versao_leitor, len(paginas), sum(p["metodo"] == "SEM_TEXTO" for p in paginas),
+                 numero_edicao, data_edicao, erro, agora()),
+            )
+
+    def leituras(self):
+        return self.con.execute("SELECT * FROM leitura ORDER BY sha256").fetchall()
+
+    def paginas(self, sha256: str):
+        return self.con.execute("SELECT * FROM pagina WHERE sha256 = ? ORDER BY numero", (sha256,)).fetchall()

@@ -10,7 +10,7 @@ Princípios:
 from __future__ import annotations
 
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date
 
 from ..nucleo import banco as B
@@ -63,8 +63,39 @@ def descobrir_mes(fonte, banco: B.Banco, politica: rede.Politica, ano: int, mes:
     return {"fonte": fonte.sigla, "ano": ano, "mes": mes, "listadas": len(itens), "novas": novas, "sem_data": sem_data}
 
 
-def baixar_publicacao(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Politica, linha) -> str:
-    """Tenta os endereços de download da publicação. Devolve o resultado registrado."""
+@dataclass(frozen=True)
+class Desfecho:
+    """Resultado de uma tentativa de obter uma publicação.
+
+    resultado: NOVO, DUPLICADO (conteúdo já existente no acervo por outra publicação),
+    IGUAL, ALTERADO, FALHA_DOWNLOAD ou INVALIDA.
+    """
+    resultado: str
+    sha256: str | None = None
+    tamanho: int | None = None
+    erro: str | None = None
+
+    @property
+    def verificado(self) -> bool:
+        return self.sha256 is not None
+
+
+def descobrir(fonte, banco: B.Banco, politica: rede.Politica, inicio: date, fim: date, refazer: bool = False) -> list[dict]:
+    """Varre mês a mês. Meses já lidos com sucesso são pulados, exceto os dois últimos do
+    período, que podem ter recebido novas edições. Meses com falha são sempre refeitos."""
+    lidos = {(v["ano"], v["mes"]) for v in banco.varreduras() if v["fonte"] == fonte.sigla and v["erro"] is None}
+    periodo = list(meses(inicio, fim))
+    resultados = []
+    for ano, mes in periodo:
+        if not refazer and (ano, mes) in lidos and (ano, mes) not in periodo[-2:]:
+            resultados.append({"fonte": fonte.sigla, "ano": ano, "mes": mes, "pulado": "já varrido"})
+            continue
+        resultados.append(descobrir_mes(fonte, banco, politica, ano, mes, inicio, fim))
+    return resultados
+
+
+def baixar_publicacao(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Politica, linha) -> Desfecho:
+    """Tenta os endereços de download da publicação e registra o desfecho."""
     erro, estado = "sem endereço de download", B.FALHA_DOWNLOAD
     for endereco in fonte.enderecos_download(linha["url"]):
         try:
@@ -79,10 +110,13 @@ def baixar_publicacao(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Poli
         if not laudo.valido:
             erro, estado = f"{laudo.motivo} em {endereco} ({laudo.tamanho} bytes)", B.INVALIDA
             continue
-        sha, _ = acervo.guardar(resposta.corpo)
-        return banco.registrar_arquivo(linha["id"], sha, laudo.tamanho, acervo.caminho_relativo(sha))
+        sha, gravou = acervo.guardar(resposta.corpo)
+        resultado = banco.registrar_arquivo(linha["id"], sha, laudo.tamanho, acervo.caminho_relativo(sha))
+        if resultado == "NOVO" and not gravou:
+            resultado = "DUPLICADO"
+        return Desfecho(resultado, sha, laudo.tamanho)
     banco.registrar_falha(linha["id"], estado, erro)
-    return estado
+    return Desfecho(estado, erro=erro)
 
 
 def baixar_pendentes(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Politica, limite: int | None = None,
@@ -97,7 +131,7 @@ def baixar_pendentes(fonte, banco: B.Banco, acervo: Acervo, politica: rede.Polit
         if limite is not None and feitas >= limite:
             contagem["ADIADA"] = contagem.get("ADIADA", 0) + 1
             continue
-        resultado = baixar_publicacao(fonte, banco, acervo, politica, linha)
+        resultado = baixar_publicacao(fonte, banco, acervo, politica, linha).resultado
         contagem[resultado] = contagem.get(resultado, 0) + 1
         feitas += 1
     return contagem
