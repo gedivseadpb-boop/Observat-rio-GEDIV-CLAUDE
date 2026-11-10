@@ -1,0 +1,20 @@
+# Documentos e dados que nunca devem ser versionados
+*.pdf
+entrada-pdfs/
+storage/
+output/
+private/
+*.fernet
+estado*.json
+liberacoes*.json
+
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Python / Node
+__pycache__/
+*.pyc
+.venv/
+node_modules/
