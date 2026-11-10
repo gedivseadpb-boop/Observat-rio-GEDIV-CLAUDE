@@ -1,4 +1,4 @@
-# Plano de desenvolvimento — novo Observatório GEDIV
+# Plano de desenvolvimento — Painel de Publicações DOE-PB GEDIV
 
 Versão de 10/11/2026. Substitui a estratégia de migração descrita no documento 01:
 **o sistema é escrito do zero**; os repositórios anteriores servem apenas como referência.
