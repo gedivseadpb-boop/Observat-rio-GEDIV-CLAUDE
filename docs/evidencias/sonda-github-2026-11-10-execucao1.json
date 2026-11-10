@@ -1,0 +1,429 @@
+{
+ "gerado_em": "2026-11-10T17:57:49+00:00",
+ "executor": {
+  "sistema": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+  "python": "3.13.18",
+  "saida_internet": {
+   "country": "US",
+   "region": "Illinois",
+   "org": "AS8075 Microsoft Corporation"
+  }
+ },
+ "alvos": [
+  {
+   "servidor": "auniao.pb.gov.br",
+   "papel": "fonte principal",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "138.185.34.81"
+     ],
+     "ipv6": []
+    },
+    "erro": null,
+    "segundos": 0.16
+   },
+   "tcp": {
+    "138.185.34.81:443": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.01
+    },
+    "138.185.34.81:80": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.01
+    }
+   },
+   "tls": {},
+   "camada_da_falha": "TCP (porta 443 não aceitou conexão)"
+  },
+  {
+   "servidor": "www.auniao.pb.gov.br",
+   "papel": "fonte principal (www)",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "138.185.34.81"
+     ],
+     "ipv6": []
+    },
+    "erro": null,
+    "segundos": 0.16
+   },
+   "tcp": {
+    "138.185.34.81:443": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.0
+    },
+    "138.185.34.81:80": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.01
+    }
+   },
+   "tls": {},
+   "camada_da_falha": "TCP (porta 443 não aceitou conexão)"
+  },
+  {
+   "servidor": "cge.pb.gov.br",
+   "papel": "fonte complementar",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "138.185.34.68"
+     ],
+     "ipv6": []
+    },
+    "erro": null,
+    "segundos": 0.29
+   },
+   "tcp": {
+    "138.185.34.68:443": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.01
+    },
+    "138.185.34.68:80": {
+     "resultado": null,
+     "erro": "TimeoutError: timed out",
+     "segundos": 12.01
+    }
+   },
+   "tls": {},
+   "camada_da_falha": "TCP (porta 443 não aceitou conexão)"
+  },
+  {
+   "servidor": "paraiba.pb.gov.br",
+   "papel": "controle: mesmo governo",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "138.185.34.41"
+     ],
+     "ipv6": []
+    },
+    "erro": null,
+    "segundos": 0.14
+   },
+   "tcp": {
+    "138.185.34.41:443": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.15
+    },
+    "138.185.34.41:80": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.14
+    }
+   },
+   "tls": {
+    "138.185.34.41": {
+     "resultado": {
+      "protocolo": "TLSv1.2",
+      "valido_ate": "Feb  8 15:54:27 2027 GMT",
+      "emissor": "Let's Encrypt"
+     },
+     "erro": null,
+     "segundos": 0.45
+    }
+   },
+   "http": {
+    "/ [navegador]": {
+     "resultado": {
+      "status": 200,
+      "tipo": "text/html",
+      "servidor_web": null,
+      "destino": null,
+      "tamanho_declarado": "49226",
+      "bytes_lidos": 4096,
+      "assinatura_pdf": false,
+      "parece_html": true
+     },
+     "erro": null,
+     "segundos": 0.86
+    },
+    "/ [robo_identificado]": {
+     "resultado": {
+      "status": 200,
+      "tipo": "text/html",
+      "servidor_web": null,
+      "destino": null,
+      "tamanho_declarado": "48250",
+      "bytes_lidos": 4096,
+      "assinatura_pdf": false,
+      "parece_html": true
+     },
+     "erro": null,
+     "segundos": 0.87
+    }
+   },
+   "robots": {
+    "resultado": {
+     "status": 200,
+     "regras": [],
+     "formato": "HTML (não é um robots.txt)"
+    },
+    "erro": null,
+    "segundos": 0.88
+   },
+   "camada_da_falha": null
+  },
+  {
+   "servidor": "www.gov.br",
+   "papel": "controle: governo federal",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "161.148.164.31"
+     ],
+     "ipv6": [
+      "2804:151:3:2:161:148:164:31"
+     ]
+    },
+    "erro": null,
+    "segundos": 0.0
+   },
+   "tcp": {
+    "161.148.164.31:443": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.15
+    },
+    "161.148.164.31:80": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.14
+    },
+    "2804:151:3:2:161:148:164:31:443": {
+     "resultado": null,
+     "erro": "OSError: [Errno 101] Network is unreachable",
+     "segundos": 0.0
+    },
+    "2804:151:3:2:161:148:164:31:80": {
+     "resultado": null,
+     "erro": "OSError: [Errno 101] Network is unreachable",
+     "segundos": 0.0
+    }
+   },
+   "tls": {
+    "161.148.164.31": {
+     "resultado": {
+      "protocolo": "TLSv1.3",
+      "valido_ate": "Jan 17 13:46:23 2027 GMT",
+      "emissor": "GlobalSign nv-sa"
+     },
+     "erro": null,
+     "segundos": 0.32
+    }
+   },
+   "http": {
+    "/ [navegador]": {
+     "resultado": {
+      "status": 301,
+      "tipo": null,
+      "servidor_web": "Zope/(2.13.28, python 2.7.16, linux2) ZServer/1.1",
+      "destino": "https://www.gov.br/pt-br",
+      "tamanho_declarado": "0",
+      "bytes_lidos": 0,
+      "assinatura_pdf": false,
+      "parece_html": false
+     },
+     "erro": null,
+     "segundos": 0.46
+    },
+    "/ [robo_identificado]": {
+     "resultado": {
+      "status": 301,
+      "tipo": null,
+      "servidor_web": "Zope/(2.13.28, python 2.7.16, linux2) ZServer/1.1",
+      "destino": "https://www.gov.br/pt-br",
+      "tamanho_declarado": "0",
+      "bytes_lidos": 0,
+      "assinatura_pdf": false,
+      "parece_html": false
+     },
+     "erro": null,
+     "segundos": 0.47
+    }
+   },
+   "robots": {
+    "resultado": {
+     "status": 200,
+     "regras": [
+      "Sitemap: https://www.gov.br/sitemap.xml.gz",
+      "User-agent: Yandex",
+      "Disallow: /ebserh",
+      "Disallow: /mre",
+      "User-Agent: *",
+      "Disallow: /economia/pt-br/internet/*",
+      "Disallow: /*sendto_form$",
+      "Disallow: /*folder_factories$",
+      "Disallow: /ebserh/*?",
+      "Disallow: /ebserh/*atct_album_view$",
+      "Disallow: /ebserh/*folder_summary_view$",
+      "Disallow: /ebserh/*login_form$",
+      "Disallow: /ebserh/*mail_password_form$",
+      "Disallow: /ebserh/@@search",
+      "Disallow: /ebserh/*search_rss$",
+      "Disallow: /ebserh/*summary_view$",
+      "Disallow: /ebserh/*thumbnail_view$",
+      "Disallow: /ebserh/*view$",
+      "Disallow: /ebserh/*@@download/file$",
+      "Disallow: /ebserh/*portal_javascripts*",
+      "Disallow: /ebserh/*portal_css*",
+      "Disallow: /ebserh/*++theme++*",
+      "Disallow: /ebserh/*++resource++*",
+      "Disallow: /ebserh/*@@configuracoes_view*",
+      "Disallow: /ebserh/*.css$",
+      "Disallow: /ebserh/*.gif$",
+      "Disallow: /ebserh/*.jpeg$",
+      "Disallow: /ebserh/*.jpg$",
+      "Disallow: /ebserh/*.JPG$",
+      "Disallow: /ebserh/*.js$",
+      "Disallow: /ebserh/*.pdf$",
+      "Disallow: /ebserh/*.png$",
+      "Disallow: /ebserh/*.zip$",
+      "Disallow: /mre/*?",
+      "Disallow: /mre/*atct_album_view$",
+      "Disallow: /mre/*folder_summary_view$",
+      "Disallow: /mre/*login_form$",
+      "Disallow: /mre/*mail_password_form$",
+      "Disallow: /mre/@@search",
+      "Disallow: /mre/*search_rss$"
+     ]
+    },
+    "erro": null,
+    "segundos": 0.47
+   },
+   "camada_da_falha": null
+  },
+  {
+   "servidor": "github.com",
+   "papel": "controle: externo",
+   "dns": {
+    "resultado": {
+     "ipv4": [
+      "140.82.113.4"
+     ],
+     "ipv6": []
+    },
+    "erro": null,
+    "segundos": 0.01
+   },
+   "tcp": {
+    "140.82.113.4:443": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.02
+    },
+    "140.82.113.4:80": {
+     "resultado": "CONECTOU",
+     "erro": null,
+     "segundos": 0.02
+    }
+   },
+   "tls": {
+    "140.82.113.4": {
+     "resultado": {
+      "protocolo": "TLSv1.3",
+      "valido_ate": "Jan 27 23:59:59 2027 GMT",
+      "emissor": "Sectigo Limited"
+     },
+     "erro": null,
+     "segundos": 0.05
+    }
+   },
+   "http": {
+    "/ [navegador]": {
+     "resultado": {
+      "status": 200,
+      "tipo": "text/html; charset=utf-8",
+      "servidor_web": "github.com",
+      "destino": null,
+      "tamanho_declarado": null,
+      "bytes_lidos": 4096,
+      "assinatura_pdf": false,
+      "parece_html": true
+     },
+     "erro": null,
+     "segundos": 0.11
+    },
+    "/ [robo_identificado]": {
+     "resultado": {
+      "status": 200,
+      "tipo": "text/html; charset=utf-8",
+      "servidor_web": "github.com",
+      "destino": null,
+      "tamanho_declarado": null,
+      "bytes_lidos": 4096,
+      "assinatura_pdf": false,
+      "parece_html": true
+     },
+     "erro": null,
+     "segundos": 0.1
+    }
+   },
+   "robots": {
+    "resultado": {
+     "status": 200,
+     "regras": [
+      "Sitemap: https://github.com/sitemap_marketing.xml",
+      "User-agent: GPTBot",
+      "User-agent: OAI-SearchBot",
+      "User-agent: ChatGPT-User",
+      "User-agent: ClaudeBot",
+      "User-agent: Claude-SearchBot",
+      "User-agent: Claude-User",
+      "User-agent: PerplexityBot",
+      "User-agent: Perplexity-User",
+      "Crawl-delay: 1",
+      "Allow: /*?tab=achievements&achievement=*",
+      "Allow: /marketplace/*?tab=readme$",
+      "Allow: /marketplace/*?tab=transparency$",
+      "Allow: /enterprise/contact?*",
+      "Allow: /enterprise/contact/data-residency?*",
+      "Allow: /features/codespaces?*",
+      "Allow: /features/copilot/plans?*",
+      "Allow: /security/advanced-security/demo?*",
+      "Allow: /security/contact-sales?*",
+      "Allow: /security/plans?*",
+      "Allow: /topics/*?q=*",
+      "Allow: /topics/*?*&q=*",
+      "Allow: /orgs/*/repositories?q=*",
+      "Allow: /orgs/*/repositories?*&q=*",
+      "Disallow: /account-login",
+      "Disallow: /copilot/",
+      "Disallow: /copilot/c/",
+      "Disallow: /ekansa/Open-Context-Data",
+      "Disallow: /ekansa/opencontext-*",
+      "Disallow: /Explodingstuff/",
+      "Disallow: /gist/",
+      "Disallow: /search/advanced",
+      "Disallow: /search$",
+      "Disallow: /*/*/pulse_committer_data.json$",
+      "Disallow: /*/*/pulse_committer_data.json?*",
+      "Disallow: /*/archive/",
+      "Disallow: /*/blame/",
+      "Disallow: /*/cache/",
+      "Disallow: /*/raw/",
+      "Disallow: /*/tree/"
+     ]
+    },
+    "erro": null,
+    "segundos": 0.11
+   },
+   "camada_da_falha": null
+  }
+ ],
+ "resumo": {
+  "auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+  "www.auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+  "cge.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+  "paraiba.pb.gov.br": "ACESSO OK",
+  "www.gov.br": "ACESSO OK",
+  "github.com": "ACESSO OK"
+ }
+}

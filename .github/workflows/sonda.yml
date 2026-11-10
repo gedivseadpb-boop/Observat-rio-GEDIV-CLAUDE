@@ -1,0 +1,36 @@
+name: Sonda de acesso às fontes
+
+# Diagnóstico: mede em que camada (DNS, TCP, TLS, HTTP) o acesso às fontes
+# oficiais falha a partir dos executores do GitHub. Não baixa nem guarda PDFs.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "observatorio/sonda/**"
+      - ".github/workflows/sonda.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonda
+  cancel-in-progress: true
+
+jobs:
+  sonda:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Executar sonda
+        run: python -m observatorio.sonda --saida sonda.json || echo "A sonda apontou falha de acesso (ver relatório)."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-sonda
+          path: sonda.json
+          retention-days: 14

@@ -1,5 +1,7 @@
 # Fase 1 — Recuperação e diagnóstico do projeto existente
 
+> **Mudança de estratégia (10/11/2026):** a responsável decidiu **não migrar** o código anterior. O sistema é escrito do zero; este levantamento permanece como referência. As seções 6 e 9 foram substituídas pelo plano em `02-plano-desenvolvimento.md`.
+
 Data do levantamento: 10/11/2026.
 Escopo: os quatro repositórios da conta `gedivseadpb-boop` e as duas fontes oficiais do DOE/PB.
 Este documento não contém dados pessoais, PDFs, estados de coleta nem credenciais.
@@ -80,16 +82,14 @@ Conteúdo (52 arquivos), todos em Python + HTML/JS estático:
 
 ## 5. Fontes oficiais — situação verificada em 10/11/2026
 
-- **Comprovado:** a partir do ambiente desta sessão, as duas fontes não respondem a requisições diretas (mesmo sintoma dos runners).
+- **Correção (10/11/2026, mesma data):** a primeira versão deste documento afirmava que as fontes "não respondem" a partir do ambiente de desenvolvimento. A afirmação não tinha valor de prova: aquele ambiente não tem saída direta para a internet (nem `github.com` resolve), portanto nada informa sobre as fontes. As medições válidas estão em `03-etapa1-resultados.md`.
 - **Comprovado por índice de busca:** existem edições de 2026 publicadas no padrão
   `https://auniao.pb.gov.br/servicos/doe/2026/<mês>/diario-oficial-DD-MM-2026-portal.pdf`
   (confirmadas edições de abril a outubro; ex.: nº 18.561 em 01/04 e nº 18.693 em 15/10).
 - **Comprovado por índice:** existem arquivos com sufixo `-portal-1.pdf` (ex.: 17/09/2026), o que indica segunda versão ou suplemento no mesmo dia. O coletor precisa tratar esse caso.
 - **Comprovado por índice:** há edições aos sábados (ex.: 25/07 e 01/08/2026). Não se pode presumir publicação apenas em dias úteis.
 - **Documentado:** padrão CGE `https://cge.pb.gov.br/gati/Uploads/doe/2026/01-Janeiro/07-Diario Oficial 07-01-2026 TOTAL.pdf`.
-- **Hipótese:** os portais do governo bloqueiam ou não roteiam conexões vindas de datacenters no exterior. Compatível com todos os sintomas (DNS ok, TCP expira; navegador no Brasil abre normalmente), mas ainda não isolada.
-
-**Consequência:** o gargalo do projeto não é o parser nem o painel — é **onde o robô roda**. Ele precisa executar em uma máquina com saída de internet aceita pelos portais (rede brasileira).
+- A causa da falha de acesso **não é presumida**. A investigação e os resultados medidos estão em `02-plano-desenvolvimento.md` (seção 5) e `03-etapa1-resultados.md`.
 
 ## 6. Componentes reaproveitáveis
 
