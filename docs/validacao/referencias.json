@@ -1,0 +1,21 @@
+{
+  "observacao": "Valores esperados para conferência. Foram REGISTRADOS nos projetos anteriores (relatório de 09/11/2026) e ainda NÃO foram verificados neste projeto. Servem para comparar, não para comprovar.",
+  "documentos": [
+    {
+      "data": "2026-10-02",
+      "sha256": "0f437acc186a7e808ae09f348968d99b7086ccdbcb21e87d29b7c529d8562757",
+      "bytes": 2369879,
+      "paginas": 40,
+      "numero_edicao": null,
+      "fonte_da_referencia": "registro dos projetos anteriores, não verificado"
+    },
+    {
+      "data": "2026-11-04",
+      "sha256": "02cbb8ae5d47ae8a22bc0ef374dac66b31d61a095b44a2893feaea126493c577",
+      "bytes": 2202466,
+      "paginas": 60,
+      "numero_edicao": null,
+      "fonte_da_referencia": "registro dos projetos anteriores, não verificado"
+    }
+  ]
+}
