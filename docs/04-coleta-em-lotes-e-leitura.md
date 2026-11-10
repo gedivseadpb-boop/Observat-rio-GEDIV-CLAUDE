@@ -149,3 +149,13 @@ anexos em paisagem e colunas de larguras desiguais.
    edições certas?), comparar o mesmo dia nas duas fontes e só então liberar lotes de 10.
 4. Em paralelo: importar manualmente algumas edições reais para validar a leitura por
    colunas e ajustar seus parâmetros.
+
+## 8. Resultados dos testes por ambiente (10/11/2026)
+
+| Ambiente | Python | Resultado |
+|---|---|---|
+| Ambiente de desenvolvimento (Linux) | 3.13 | 61 aprovados, nenhum pulado |
+| GitHub Actions, Ubuntu 24.04 | 3.11 e 3.13 | 61 aprovados |
+| GitHub Actions, Windows | 3.11 e 3.13 | 61 aprovados |
+
+Execução de referência: <https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/actions/runs/42874536018>
