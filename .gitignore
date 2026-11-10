@@ -18,3 +18,8 @@ __pycache__/
 *.pyc
 .venv/
 node_modules/
+
+# Dados locais do observatório
+dados/
+*.sqlite3
+sonda.json
