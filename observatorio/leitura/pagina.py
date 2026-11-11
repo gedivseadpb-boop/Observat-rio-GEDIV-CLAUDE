@@ -74,6 +74,13 @@ def encontrar_divisores(linhas: list[list[Palavra]], largura: float, fracao_cruz
         direita = sum(any(p.x0 >= d.x for p in linha) for linha in linhas)
         if min(esquerda, direita) >= MIN_LINHAS_PARA_COLUNAS / 2:
             validos.append(d)
+    if len(validos) > 1:
+        # Vários corredores: os que ficam fora do centro costumam ser os vãos entre colunas de uma TABELA.
+        # Havendo um corredor central (a divisão do jornal em duas colunas), só ele vale; assim as linhas
+        # da tabela permanecem inteiras dentro da sua coluna (visto no DOE de 02/10/2026, p. 4).
+        centrais = [d for d in validos if 0.4 * largura <= d.x <= 0.6 * largura]
+        if centrais:
+            validos = [min(centrais, key=lambda d: abs(d.x - largura / 2))]
     return validos
 
 
@@ -120,7 +127,10 @@ def ler_pagina(palavras: list[Palavra], largura: float) -> tuple[str, int]:
 
 _MESES = {"janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
           "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
-_NUMERO = re.compile(r"DI[ÁA]RIO\s+OFI\s?CIAL\s+N[ºo°.]\s*(\d{1,3}(?:\.\d{3})?)", re.I)
+# Duas formas vistas: "DIÁRIO OFICIAL Nº 18.546" e, na capa real de 02/10/2026,
+# "DIÁRIO OFICIAL / ESTADO DA PARAÍBA / Nº 18.684 João Pessoa - Sexta-feira, …".
+_NUMERO = re.compile(r"DI[ÁA]RIO\s+OFI\s?CIAL\s+N[ºo°.]\s*(\d{1,3}(?:\.\d{3})?)"
+                     r"|N[ºo°.]\s*(\d{1,3}\.\d{3})\s+Jo[ãa]o\s+Pessoa", re.I)
 _DATA = re.compile(r"Jo[ãa]o\s+Pessoa\s*[-–—]?\s*[\w-]+,\s*(\d{1,2})\s+de\s+(\w+)\s+de\s+(20\d{2})", re.I)
 
 
@@ -134,4 +144,4 @@ def identificar_edicao(texto_primeira_pagina: str) -> tuple[str | None, str | No
             data = date(int(achado.group(3)), _MESES[achado.group(2).lower()], int(achado.group(1))).isoformat()
         except ValueError:
             data = None
-    return (numero.group(1).replace(".", "") if numero else None), data
+    return ((numero.group(1) or numero.group(2)).replace(".", "") if numero else None), data

@@ -1,0 +1,181 @@
+{
+ "erros_de_pagina": [],
+ "passos": [
+  {
+   "passo": "consulta pública sobre a base real",
+   "cartoes": {
+    "Total de processos": "0",
+    "Total de resenhas": "0",
+    "Total de decisões individuais": "0",
+    "Deferidos": "0",
+    "Indeferidos": "0",
+    "Refeitos": "0",
+    "Tornados sem efeito": "0"
+   },
+   "aviso": "Nenhuma decisão conferida até agora — há 49 candidata(s) aguardando revisão humana. Os indicadores só contam registros conferidos.",
+   "itens_na_tabela": 0
+  },
+  {
+   "passo": "gerência, decisões conferidas",
+   "cartoes": {
+    "Total de processos": "0",
+    "Total de resenhas": "0",
+    "Total de decisões individuais": "0",
+    "Deferidos": "0",
+    "Indeferidos": "0",
+    "Refeitos": "0",
+    "Tornados sem efeito": "0"
+   }
+  },
+  {
+   "passo": "gerência, em conferência (preliminar)",
+   "cartoes": {
+    "Total de processos": "49",
+    "Total de resenhas": "7",
+    "Total de decisões individuais": "49",
+    "Deferidos": "47",
+    "Indeferidos": "2",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   },
+   "aviso": "Dados PRELIMINARES, em conferência: ainda não foram homologados pela GEDIV e não devem ser divulgados como resultado oficial.",
+   "resenhas_na_tabela": [
+    "Resenha 512/2026",
+    "Resenha 524/2026",
+    "Resenha 527/2026",
+    "Resenha 488/2026",
+    "Resenha 504/2026",
+    "Resenha 473/2026",
+    "Resenha 470/2026"
+   ],
+   "apoio": [
+    "Eventos de alteração validados—",
+    "Eventos sem vínculo validado0",
+    "Decisões aguardando revisão49",
+    "Pendentes sem GEDIV expressa41",
+    "Conferidas0",
+    "Rejeitadas0"
+   ]
+  },
+  {
+   "passo": "filtro eixo = Progressão",
+   "cartoes": {
+    "Total de processos": "42",
+    "Total de resenhas": "3",
+    "Total de decisões individuais": "42",
+    "Deferidos": "41",
+    "Indeferidos": "1",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   },
+   "grupos": [
+    "SAUDE · Saúde",
+    "TEC-ADM · Técnicos Administrativos (Tec. Adm)"
+   ]
+  },
+  {
+   "passo": "+ modalidade = Vertical",
+   "cartoes": {
+    "Total de processos": "41",
+    "Total de resenhas": "2",
+    "Total de decisões individuais": "41",
+    "Deferidos": "41",
+    "Indeferidos": "0",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   }
+  },
+  {
+   "passo": "+ vínculo não expresso",
+   "cartoes": {
+    "Total de processos": "41",
+    "Total de resenhas": "2",
+    "Total de decisões individuais": "41",
+    "Deferidos": "41",
+    "Indeferidos": "0",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   }
+  },
+  {
+   "passo": "filtro eixo = Tempo de Serviço",
+   "cartoes": {
+    "Total de processos": "7",
+    "Total de resenhas": "4",
+    "Total de decisões individuais": "7",
+    "Deferidos": "6",
+    "Indeferidos": "1",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   },
+   "subcategorias": [
+    "TS-01: 4 · 57%",
+    "TS-02: cobertura pendente",
+    "TS-03: cobertura pendente",
+    "TS-04: 1 · 14%",
+    "TS-05: 2 · 29%",
+    "TS-06: cobertura pendente",
+    "TS-07: cobertura pendente"
+   ]
+  },
+  {
+   "passo": "período = 02/10/2026",
+   "cartoes": {
+    "Total de processos": "7",
+    "Total de resenhas": "4",
+    "Total de decisões individuais": "7",
+    "Deferidos": "6",
+    "Indeferidos": "1",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   }
+  },
+  {
+   "passo": "clique no cartão Indeferidos (02/10)",
+   "tabela": "1 resenha(s) · 1 decisão(ões)",
+   "resenhas": [
+    "Resenha 488/2026"
+   ]
+  },
+  {
+   "passo": "detalhe de uma resenha real",
+   "linhas_de_decisao": 1,
+   "link_oficial": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-02-10-2026-portal.pdf#page=5",
+   "validacoes": [
+    "PENDENTE"
+   ],
+   "tem_texto_do_ato": true
+  },
+  {
+   "passo": "PDF do acervo servido pela API",
+   "status": 200,
+   "bytes": 2369879,
+   "sha256": "0f437acc186a7e808ae09f348968d99b7086ccdbcb21e87d29b7c529d8562757"
+  },
+  {
+   "passo": "tabela por processo (02/10)",
+   "itens": 7
+  },
+  {
+   "passo": "exportação xlsx (em conferência)",
+   "arquivo_sugerido": "painel-gediv-pendente-2026-11-10.xlsx",
+   "bytes": 13883
+  },
+  {
+   "passo": "exportação csv (em conferência)",
+   "arquivo_sugerido": "painel-gediv-pendente-2026-11-10.csv",
+   "bytes": 31359
+  },
+  {
+   "passo": "outras publicações",
+   "itens": [
+    "Resenha nº 509/2026",
+    "Resenha nº 507/2026",
+    "Resenha nº 505/2026",
+    "Lei Complementar nº 58, de 30 de dezembro de 2003, e suas alterações (alterada pela Lei Complementar",
+    "Resenha nº 506/2026",
+    "Resenha nº 505/2026"
+   ]
+  }
+ ]
+}

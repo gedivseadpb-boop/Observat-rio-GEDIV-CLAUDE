@@ -47,6 +47,8 @@ def selecionar_piloto(banco: B.Banco, fonte: str, parametros: Parametros) -> lis
     datas = sorted(por_data)
     if len(datas) <= parametros.tamanho:
         return [por_data[d] for d in datas]
+    if parametros.tamanho <= 1:
+        return [por_data[datas[0]]][: max(parametros.tamanho, 0)]
     passo = (len(datas) - 1) / (parametros.tamanho - 1)
     return [por_data[datas[round(i * passo)]] for i in range(parametros.tamanho)]
 
@@ -131,6 +133,9 @@ def executar_lote(fonte, banco: B.Banco, acervo: Acervo, tipo: str, parametros: 
         situacao, regras = rede.consultar_robots(endereco, p)
         if regras is not None and not regras.can_fetch(p.agente, endereco):
             return {"executado": False, "motivo": "ROBOTS_RESTRINGE_A_COLETA"}
+        if situacao == "RECUSADO":
+            # A própria consulta ao robots.txt foi negada (403/429): não se presume permissão.
+            return {"executado": False, "motivo": "ROBOTS_RECUSADO_PELA_FONTE"}
     itens = (selecionar_piloto(banco, fonte.sigla, parametros) if tipo == PILOTO
              else selecionar_historico(banco, fonte.sigla, parametros, mes))
     if not itens:

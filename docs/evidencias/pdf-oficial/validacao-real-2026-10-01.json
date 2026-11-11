@@ -1,0 +1,550 @@
+{
+  "sistema": "Painel de Publicações DOE-PB GEDIV",
+  "versao": "0.3.0",
+  "versao_leitor": "0.3",
+  "versao_regras": "gediv-2026.11.10-1",
+  "executado_em_utc": "2026-11-10T23:44:32+00:00",
+  "arquivo": {
+    "nome": "diario-oficial-01-10-2026-portal.pdf",
+    "sha256": "bb5b8b65a07243193f7f318ef05a9ed7b1a959d7e22e5bb24da851136330a18d",
+    "bytes": 3665577,
+    "data_informada": "2026-10-01",
+    "url_oficial_informada": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-01-10-2026-portal.pdf",
+    "verificacao_estrutural": "OK"
+  },
+  "ocr": {
+    "disponivel": true,
+    "detalhe": "Tesseract 5.3.4"
+  },
+  "leitura": {
+    "situacao": "LIDA",
+    "erro": null,
+    "numero_da_edicao_lido": "18683",
+    "data_da_edicao_lida": "2026-10-01",
+    "inconsistencias": [],
+    "paginas": 56,
+    "por_metodo": {
+      "OCR": 3,
+      "TEXTO": 52,
+      "TEXTO+OCR": 1
+    },
+    "por_qualidade": {
+      "OK": 56
+    },
+    "por_colunas": {
+      "1": 3,
+      "2": 53
+    },
+    "pagina_a_pagina": [
+      {
+        "pagina": 1,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 900,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 2,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1020,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 3,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1277,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 4,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1361,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 5,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1440,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 6,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1340,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 7,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1076,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 8,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1203,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 9,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1452,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 10,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1336,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 11,
+        "metodo": "OCR",
+        "colunas": 1,
+        "palavras": 67,
+        "qualidade": "OK",
+        "confianca_ocr": 91.5
+      },
+      {
+        "pagina": 12,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1684,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 13,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1858,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 14,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1787,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 15,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1629,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 16,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1521,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 17,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1563,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 18,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1721,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 19,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 761,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 20,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1019,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 21,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1152,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 22,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1214,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 23,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1040,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 24,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 951,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 25,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1266,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 26,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1197,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 27,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1247,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 28,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1282,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 29,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1341,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 30,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1448,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 31,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1057,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 32,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 968,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 33,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 952,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 34,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1037,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 35,
+        "metodo": "OCR",
+        "colunas": 1,
+        "palavras": 275,
+        "qualidade": "OK",
+        "confianca_ocr": 92.2
+      },
+      {
+        "pagina": 36,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 603,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 37,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 822,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 38,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 818,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 39,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 850,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 40,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 639,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 41,
+        "metodo": "TEXTO+OCR",
+        "colunas": 2,
+        "palavras": 1105,
+        "qualidade": "OK",
+        "confianca_ocr": 83.9
+      },
+      {
+        "pagina": 42,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 23487,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 43,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 23784,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 44,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 7841,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 45,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1541,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 46,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1257,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 47,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1424,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 48,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1240,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 49,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1266,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 50,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1508,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 51,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1304,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 52,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1268,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 53,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1223,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 54,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1456,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 55,
+        "metodo": "TEXTO",
+        "colunas": 2,
+        "palavras": 1346,
+        "qualidade": "OK",
+        "confianca_ocr": null
+      },
+      {
+        "pagina": 56,
+        "metodo": "OCR",
+        "colunas": 1,
+        "palavras": 77,
+        "qualidade": "OK",
+        "confianca_ocr": 91.8
+      }
+    ]
+  },
+  "cobertura_frente_a_leitura_independente": {
+    "paginas_comparadas": 52,
+    "cobertura_media": 0.9397,
+    "cobertura_minima": 0.2845,
+    "paginas_abaixo_de_95": [
+      3,
+      21,
+      23,
+      24,
+      39,
+      42,
+      43,
+      44
+    ]
+  },
+  "gediv": {
+    "atos_encontrados": 0,
+    "decisoes_extraidas": 0,
+    "atos_de_outras_unidades_descartados": 0,
+    "pendencias_do_arquivo": [
+      "há páginas lidas por OCR; conferir página e colunas no PDF"
+    ],
+    "atos": [],
+    "campos_preenchidos": {
+      "processo": 0,
+      "servidor": 0,
+      "matricula": 0,
+      "lotacao": 0,
+      "cargo": 0,
+      "classe_nivel_ou_dias": 0,
+      "linha_quebrada_sinalizada": 0
+    },
+    "processos_repetidos_no_mesmo_arquivo": 0,
+    "eventos_de_alteracao": [],
+    "outras_publicacoes": [],
+    "por_validacao": {}
+  },
+  "painel": {
+    "indicadores_em_conferencia_preliminares": {
+      "processos": 0,
+      "resenhas": 0,
+      "decisoes": 0,
+      "deferidos": 0,
+      "indeferidos": 0,
+      "refeitos": null,
+      "sem_efeito": null
+    },
+    "indicadores_conferidos": {
+      "processos": 0,
+      "resenhas": 0,
+      "decisoes": 0,
+      "deferidos": 0,
+      "indeferidos": 0,
+      "refeitos": 0,
+      "sem_efeito": 0
+    },
+    "observacao": "Nenhum registro foi conferido automaticamente; os indicadores oficiais só mudam após revisão humana."
+  },
+  "resultado": "FLUXO_EXECUTADO",
+  "conferencia_humana": "PENDENTE — comparar a amostra privada com o PDF e registrar o resultado",
+  "procedencia": "PDF obtido em 10/11/2026 da pasta do projeto no Google Drive (colocado ali pela responsável). NÃO foi baixado por este sistema do servidor oficial: auniao.pb.gov.br não respondeu a partir do ambiente de execução. A URL oficial é a informada, não verificada por download."
+}

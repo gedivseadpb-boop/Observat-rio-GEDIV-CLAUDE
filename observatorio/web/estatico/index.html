@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel de Publicações DOE-PB · GEDIV</title>
+<link rel="stylesheet" href="/estatico/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <div class="marca"><img src="/estatico/logo.png" alt="Governo da Paraíba"><div><b>SEAD · GEDIV</b><small>Gerência Executiva de Concessão de Direitos e Vantagens</small></div></div>
+  <div class="titulo"><h1>Observatório do Diário Oficial</h1><p>Progressão Funcional e Tempo de Serviço/Contribuição</p></div>
+  <div class="topo-direita">
+    <div class="situacao" id="situacaoBase"><b id="situacaoTitulo">Carregando…</b><small id="situacaoDetalhe"></small></div>
+    <button id="btnAcesso" class="botao claro" type="button">Acesso da gerência</button>
+  </div>
+</header>
+
+<div class="casca" id="casca">
+  <aside class="filtros" id="filtros" aria-label="Filtros">
+    <div class="filtros-topo"><strong>Filtros</strong><button id="btnRecolher" class="icone" type="button" title="Recolher filtros" aria-label="Recolher filtros">«</button></div>
+    <button id="btnLimpar" class="link" type="button">Limpar filtros</button>
+    <fieldset><legend>Período de publicação</legend>
+      <div class="datas"><input type="date" id="fInicio" aria-label="Data inicial"><input type="date" id="fFim" aria-label="Data final"></div>
+      <small>Refeitos e Tornados sem efeito usam a data do evento modificador.</small></fieldset>
+    <fieldset><legend>Eixo</legend>
+      <select id="fEixo"><option value="">Os dois eixos</option><option value="PROGRESSAO">Progressão Funcional</option><option value="TEMPO_SERVICO">Tempo de Serviço/Contribuição</option></select></fieldset>
+    <fieldset id="blocoProgressao"><legend>Progressão Funcional</legend>
+      <label for="fModalidade">Modalidade</label>
+      <select id="fModalidade"><option value="">Horizontal e Vertical</option><option value="HORIZONTAL">Horizontal</option><option value="VERTICAL">Vertical</option></select>
+      <label for="fCondicao">Condição</label>
+      <select id="fCondicao"><option value="">Todas</option><option value="PLENA">Plena</option><option value="CONDICIONAL">Condicional</option><option value="NAO_INFORMADA">Não informada</option></select>
+      <label>Grupo do PCCR</label><div class="marcas" id="fGrupos"></div></fieldset>
+    <fieldset id="blocoTempo"><legend>Tempo de Serviço · subcategorias</legend><div class="marcas" id="fSubs"></div></fieldset>
+    <fieldset><legend>Resultado</legend>
+      <select id="fResultado"><option value="">Todos</option><option value="DEFERIDO">Deferido</option><option value="INDEFERIDO">Indeferido</option><option value="NAO_INFORMADO">Não informado</option></select></fieldset>
+    <fieldset class="so-gerencia"><legend>Vínculo com a GEDIV</legend>
+      <select id="fVinculo"><option value="">Todos</option><option value="EXPRESSO">Expresso no ato</option><option value="NAO_EXPRESSO">Não expresso (só DEREH)</option></select></fieldset>
+    <fieldset class="so-gerencia"><legend>Buscar</legend><input id="fBusca" type="search" placeholder="Servidor, matrícula, processo ou resenha" autocomplete="off"></fieldset>
+  </aside>
+  <button class="trilho" id="btnExpandir" type="button" aria-label="Expandir filtros">» <span>FILTROS</span></button>
+
+  <main id="conteudo">
+    <div class="barra">
+      <nav class="abas" id="abas" aria-label="Visões">
+        <button data-visao="geral" class="ativa" type="button">Visão geral</button>
+        <button data-visao="progressao" type="button">Progressão</button>
+        <button data-visao="tempo" type="button">Tempo de Serviço</button>
+        <button data-visao="dia" type="button">Publicações do dia</button>
+        <button data-visao="historico" type="button">Histórico</button>
+        <button data-visao="alteracoes" type="button">Alterações / Refeitos</button>
+        <button data-visao="outras" type="button">Outras publicações</button>
+      </nav>
+      <div class="acoes">
+        <label class="so-gerencia escopo">Situação
+          <select id="fEscopo"><option value="conferido">Decisões conferidas</option><option value="pendente">Em conferência (preliminar)</option></select></label>
+        <button id="btnAtualizar" class="botao" type="button">↻ Atualizar</button>
+        <button id="btnXlsx" class="botao so-gerencia" type="button">↓ Excel</button>
+        <button id="btnCsv" class="botao so-gerencia" type="button">↓ CSV</button>
+        <button id="btnPdf" class="botao" type="button">↓ PDF / imprimir</button>
+      </div>
+    </div>
+
+    <div class="aviso" id="aviso" role="status"></div>
+    <div class="ativos" id="ativos" aria-label="Filtros ativos"></div>
+
+    <section id="visaoPainel">
+      <section class="cartoes" id="cartoes" aria-label="Indicadores gerenciais"></section>
+      <section class="apoio" id="apoio" aria-label="Indicadores de apoio"></section>
+      <div class="grade">
+        <div class="graficos">
+          <section class="cartao"><header><h3>Evolução das publicações</h3><p>Decisões por data de publicação e assunto</p></header>
+            <div id="gEvolucao" class="grafico"></div>
+            <div class="legenda"><span><i class="c-vertical"></i>Progressão Vertical</span><span><i class="c-horizontal"></i>Progressão Horizontal</span><span><i class="c-tempo"></i>Tempo de Serviço</span></div></section>
+          <section class="cartao"><header><h3>Decisões por assunto</h3><p>Dois eixos; Horizontal e Vertical são modalidades da Progressão · clique para filtrar</p></header><div id="gAssunto"></div></section>
+          <section class="cartao" id="cartaoGrupos"><header><h3>Progressão por grupo do PCCR</h3><p>Horizontal e Vertical · deferidos e indeferidos · catálogo em complementação</p></header>
+            <div id="gGrupos"></div>
+            <div class="legenda"><span><i class="c-deferido"></i>✓ Deferido</span><span><i class="c-indeferido"></i>✕ Indeferido</span><span><i class="c-neutro"></i>Não informado</span></div></section>
+          <section class="cartao" id="cartaoSubs"><header><h3>Tempo de Serviço por subcategoria</h3><p>As sete subcategorias permanecem sempre visíveis · clique para filtrar</p></header>
+            <div id="gSubs"></div>
+            <div class="legenda"><span><i class="c-deferido"></i>✓ Deferido</span><span><i class="c-indeferido"></i>✕ Indeferido</span><span><i class="c-neutro"></i>Não informado</span></div></section>
+          <section class="cartao"><header><h3>Cobertura de leitura do DOE</h3><p>Situação geral da base, sem filtro</p></header><div id="gCobertura" class="cobertura"></div></section>
+        </div>
+        <aside class="lateral" id="lateral">
+          <section class="cartao explorador">
+            <header><div><h3 id="tituloTabela">Publicações e processos</h3><p id="contagemTabela">—</p></div>
+              <button id="btnTelaCheia" class="icone" type="button" title="Tela cheia" aria-label="Tela cheia">⛶</button></header>
+            <div class="alternador" role="group" aria-label="Forma de visualização"><button id="modoResenha" class="ativa" type="button">Por resenha</button><button id="modoProcesso" type="button">Por processo</button></div>
+            <div id="tabela" class="tabela"></div>
+            <div class="paginacao"><button id="pgAnt" type="button" aria-label="Página anterior">‹</button><span id="pgTexto">—</span><button id="pgProx" type="button" aria-label="Próxima página">›</button></div>
+          </section>
+          <section class="cartao"><header><h3>Detalhes da publicação</h3><p>Evidência, vínculo e fonte oficial</p></header><div id="detalhes" class="detalhes"><p class="vazio">Selecione uma resenha ou um processo.</p></div></section>
+        </aside>
+      </div>
+    </section>
+
+    <section id="visaoOutras" hidden>
+      <section class="cartao"><header><h3>Outras publicações relacionadas à GEDIV e à DEREH</h3>
+        <p>Republicado por incorreção · Portaria · Ato Normativo · Alterações na Lei · temas fora dos dois eixos. Resultado de triagem automática: a relação com a GEDIV precisa de conferência.</p></header>
+        <div class="alternador" id="tiposOutras"></div><div id="listaOutras" class="tabela larga"></div></section>
+    </section>
+
+    <footer>Fonte: Diário Oficial do Estado da Paraíba · <span id="rodape"></span></footer>
+  </main>
+</div>
+
+<dialog id="dlgAcesso"><form method="dialog" class="dialogo">
+  <h2>Acesso da gerência</h2>
+  <p>Dados individualizados (servidor, matrícula, processo), pendências, revisão e exportações exigem a credencial da gerência. Ela fica guardada apenas nesta aba do navegador.</p>
+  <label for="campoToken">Credencial</label><input id="campoToken" type="password" autocomplete="off">
+  <p class="erro" id="erroAcesso"></p>
+  <div class="dialogo-acoes"><button value="cancelar" class="botao" type="submit">Cancelar</button><button id="btnSair" class="botao" type="button">Sair</button><button id="btnEntrar" class="botao primario" type="button">Entrar</button></div>
+</form></dialog>
+
+<dialog id="dlgRevisao"><form method="dialog" class="dialogo">
+  <h2 id="revTitulo">Revisão</h2>
+  <p id="revResumo"></p>
+  <label for="revResponsavel">Responsável pela revisão</label><input id="revResponsavel" type="text" maxlength="120" autocomplete="name">
+  <label for="revJustificativa">Justificativa</label><textarea id="revJustificativa" rows="3" maxlength="1000" placeholder="Ex.: conferido no PDF oficial, página 3"></textarea>
+  <label class="marca-linha" id="revFonteLinha"><input type="checkbox" id="revFonte"> Declaro que consultei o PDF oficial e a página indicada.</label>
+  <label class="marca-linha" id="revVinculoLinha"><input type="checkbox" id="revVinculo"> Confirmo que este ato é da GEDIV, embora o texto não a mencione expressamente.</label>
+  <label id="revAtoLinha" for="revAto">Ato original a que o evento se refere (ID)</label><input id="revAto" type="text" maxlength="20">
+  <p class="erro" id="erroRevisao"></p>
+  <div class="dialogo-acoes"><button value="cancelar" class="botao" type="submit">Cancelar</button><button id="btnConfirmarRevisao" class="botao primario" type="button">Confirmar</button></div>
+</form></dialog>
+
+<div id="dica" class="dica" hidden></div>
+<script src="/estatico/app.js"></script>
+</body>
+</html>

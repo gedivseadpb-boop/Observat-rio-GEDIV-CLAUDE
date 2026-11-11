@@ -1,13 +1,37 @@
 {
-  "observacao": "Valores esperados para conferência. Foram REGISTRADOS nos projetos anteriores (relatório de 09/11/2026) e ainda NÃO foram verificados neste projeto. Servem para comparar, não para comprovar.",
+  "observacao": "Identidade dos PDFs usados na validação de 10/11/2026. Os arquivos vieram da pasta do projeto no Google Drive; NÃO foram baixados por este sistema do servidor oficial. O hash de 02/10/2026 coincide com o registrado pelos projetos anteriores para o arquivo oficial.",
   "documentos": [
+    {
+      "data": "2026-10-01",
+      "sha256": "bb5b8b65a07243193f7f318ef05a9ed7b1a959d7e22e5bb24da851136330a18d",
+      "bytes": 3665577,
+      "paginas": 56,
+      "numero_edicao": "18683",
+      "fonte_da_referencia": "arquivo lido por este sistema em 10/11/2026 (origem: pasta do projeto no Drive)"
+    },
     {
       "data": "2026-10-02",
       "sha256": "0f437acc186a7e808ae09f348968d99b7086ccdbcb21e87d29b7c529d8562757",
       "bytes": 2369879,
       "paginas": 40,
-      "numero_edicao": null,
-      "fonte_da_referencia": "registro dos projetos anteriores, não verificado"
+      "numero_edicao": "18684",
+      "fonte_da_referencia": "arquivo lido por este sistema em 10/11/2026 (origem: pasta do projeto no Drive); hash igual ao registro dos projetos anteriores"
+    },
+    {
+      "data": "2026-10-03",
+      "sha256": "6f436c7f204a50b4a70e727d8e1106765177d3210d123e52b9b8ac9a8d803c13",
+      "bytes": 2366914,
+      "paginas": 48,
+      "numero_edicao": "18685",
+      "fonte_da_referencia": "arquivo lido por este sistema em 10/11/2026 (origem: pasta do projeto no Drive)"
+    },
+    {
+      "data": "2026-10-06",
+      "sha256": "915cb793a24056d65f2cd09698d9550b5a1598b2bbfd907fe390951d9579b504",
+      "bytes": 2506423,
+      "paginas": 28,
+      "numero_edicao": "18686",
+      "fonte_da_referencia": "arquivo lido por este sistema em 10/11/2026 (origem: pasta do projeto no Drive)"
     },
     {
       "data": "2026-11-04",

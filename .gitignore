@@ -23,3 +23,13 @@ node_modules/
 dados/
 *.sqlite3
 sonda.json
+
+# Bases de demonstração e exportações locais
+dados-*/
+*.xlsx
+*.csv
+
+# Amostras privadas de conferência (contêm dados pessoais)
+amostra*.txt
+validacao-real*.json
+!docs/evidencias/**/validacao-real*.json

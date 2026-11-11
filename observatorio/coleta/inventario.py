@@ -25,7 +25,9 @@ def cobertura(banco: B.Banco, inicio: date, fim: date, fontes: list[str]) -> lis
         if not pubs:
             situacao = "SEM_PUBLICACAO_LISTADA" if verificado else "NAO_VERIFICADO"
         elif len(baixadas) == len(pubs):
-            situacao = "COMPLETO"
+            # Só é COMPLETO o dia cujas listagens foram lidas em todas as fontes consultadas. Um PDF baixado
+            # ou importado manualmente, sem essa varredura, não prova que não haja outro arquivo no mesmo dia.
+            situacao = "COMPLETO" if verificado else "BAIXADO_SEM_VARREDURA_COMPLETA"
         elif baixadas:
             situacao = "PARCIAL"
         else:
@@ -57,9 +59,9 @@ def totais(linhas: list[dict]) -> dict:
 def parecer(linhas: list[dict], fontes: dict[str, dict]) -> dict:
     """Parecer sobre a cobertura. Nunca declara o acervo completo: no máximo, sem lacunas conhecidas."""
     t = totais(linhas)
-    lacunas = {k: t.get(k, 0) for k in ("NAO_VERIFICADO", "PENDENTE", "PARCIAL")}
+    lacunas = {k: t.get(k, 0) for k in ("NAO_VERIFICADO", "PENDENTE", "PARCIAL", "BAIXADO_SEM_VARREDURA_COMPLETA")}
     nao_validadas = sorted(s for s, f in fontes.items() if f["situacao"] != "VALIDADA")
-    if not any(f["situacao"] == "VALIDADA" for f in fontes.values()) and not t.get("COMPLETO"):
+    if not any(f["situacao"] == "VALIDADA" for f in fontes.values()) and not (t.get("COMPLETO") or t.get("BAIXADO_SEM_VARREDURA_COMPLETA")):
         situacao = "SEM_COBERTURA_AUTOMATICA"
     elif nao_validadas or any(lacunas.values()):
         situacao = "PARCIAL"
