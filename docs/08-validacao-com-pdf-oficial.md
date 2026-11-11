@@ -142,3 +142,24 @@ versionada nem publicada** (o `.gitignore` já a exclui).
 - **Recomendação ao responsável autorizado:** a pasta do Drive está acessível a qualquer pessoa com o
   link e contém planilha com dados pessoais. Convém restringi-la a pessoas autorizadas. Nenhuma
   permissão do Drive foi alterada nesta entrega.
+
+## 9. Onde o acesso ao servidor oficial foi tentado (atualização de 11/11/2026)
+
+| Ambiente | Tentou acessar `auniao.pb.gov.br` / `cge.pb.gov.br`? | Resultado |
+|---|---|---|
+| Contêiner remoto de desenvolvimento (Linux em nuvem, saída por proxy) | Sim, 10/11 | conexão encerrada sem resposta após ~11 s |
+| GitHub Actions Linux (Microsoft, EUA — Illinois, Washington, Iowa) | Sim, 4 execuções da sonda | DNS resolve; a porta 443 não aceita conexão |
+| GitHub Actions Windows (Microsoft, EUA — Virgínia) | Sim, 1 execução da sonda em 11/11 | idem |
+| GitHub Actions macOS (Microsoft, EUA — Califórnia) | Sim, 1 execução da sonda em 11/11 | idem |
+| Computador da responsável | **Não** | sem medição |
+| Rede da SEAD | **Não** | sem medição |
+
+Nos mesmos executores, `www.gov.br` e `github.com` respondem, e `paraiba.pb.gov.br` (mesma faixa de
+endereços das fontes) aceita a conexão e devolve uma página de verificação anti-robô. Evidência:
+`evidencias/sonda-github-2026-11-11-tres-executores.json`.
+
+**O que isso sustenta:** a partir de datacenters nos EUA, as duas fontes não aceitam conexão; a falha
+ocorre antes de qualquer requisição do coletor, portanto não é um defeito do código medido ali.
+**O que não sustenta:** nada sobre redes brasileiras. O coletor nunca recebeu uma página real das
+fontes, então a leitura das listagens reais continua sem teste. Os testes automatizados em Windows
+usam servidor simulado e não representam nenhum computador real. O coletor não foi alterado.
