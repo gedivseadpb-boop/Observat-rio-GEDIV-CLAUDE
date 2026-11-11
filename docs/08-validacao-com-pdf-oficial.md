@@ -16,8 +16,10 @@ URL oficial registrada para 02/10: `https://auniao.pb.gov.br/servicos/doe/2026/o
 
 **Procedência (limite importante):** os quatro PDFs foram obtidos da pasta do projeto no Google Drive.
 **Não foram baixados por este sistema do servidor oficial** — em 10/11/2026 `auniao.pb.gov.br` e
-`cge.pb.gov.br` continuaram sem responder a partir do ambiente de execução (a conexão é encerrada
-após ~10 s, por HTTPS direto, pelo espelho da CGE e pelo leitor de páginas). O arquivo de 02/10 tem
+`cge.pb.gov.br` continuaram sem responder a partir do **ambiente remoto de desenvolvimento** (contêiner
+Linux em nuvem, com saída por proxy; a conexão é encerrada após ~10 s, por HTTPS direto, pelo espelho
+da CGE e pelo leitor de páginas). Nenhuma tentativa foi feita a partir do computador da responsável
+nem da rede da SEAD: esse resultado não diz nada sobre essas redes. O arquivo de 02/10 tem
 exatamente o hash, o tamanho e o número de páginas que os projetos anteriores haviam registrado para
 o arquivo oficial. Os originais ficam preservados no acervo privado (por SHA-256), fora do Git.
 
