@@ -412,7 +412,7 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
                     excluir(EX.OUTRA_GERENCIA, expressao, NAO_EXPRESSO)
                 continue
             if not tema["eixo"]:
-                exclusao = EX.motivo_de_exclusao(norm)
+                exclusao = EX.motivo_de_exclusao(preambulo)
                 if exclusao:                              # licença-saúde ou vacância sob a DEREH
                     excluir(*exclusao, NAO_EXPRESSO)
                     continue
@@ -424,7 +424,7 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
         trecho = " ".join(l.texto for l in corpo)
 
         if not tema["eixo"]:
-            exclusao = EX.motivo_de_exclusao(norm)
+            exclusao = EX.motivo_de_exclusao(preambulo)
             if exclusao:                                  # licença-saúde ou vacância, mesmo com a GEDIV no cabeçalho
                 excluir(*exclusao, vinculo)
                 continue

@@ -127,6 +127,15 @@ class TesteExclusoes(unittest.TestCase):
         self.assertEqual(r.fora_escopo, [])
         self.assertEqual([(a.numero, a.subcategoria) for a in r.atos], [("938/2026", "TS-05")])
 
+    def test_motivo_vem_do_preambulo_e_nao_do_corpo_do_ato(self):
+        # Caso real (DOE 01/10/2026, resenha 531): ato da DEREH sobre flexibilização de horário, sem tema dos eixos.
+        # A palavra "vacância" no CORPO (coluna de parecer) não pode transformá-lo em ato de vacância.
+        texto = (CABECALHO_DEREH.format(n=939) + "O SECRETÁRIO DE ESTADO DA ADMINISTRAÇÃO DESPACHOU O PROCESSO DE FLEXIBILIZAÇÃO "
+                 "DE HORÁRIO ABAIXO RELACIONADO:\nSAD-PSE-2026/90058 9000058 PESSOA FICTICIA SEE CONSIDERAR A VACÂNCIA DO CARGO\n"
+                 "PUBLIQUE-SE")
+        r = um(texto)
+        self.assertEqual((r.atos, r.fora_escopo, r.outras), ([], [], []))
+
     def test_temas_dos_eixos_nunca_sao_excluidos(self):
         for texto in ("LICENCA ESPECIAL", "LICENCA PARA TRATAR DE INTERESSES PARTICULARES", "CONVERSAO DE LICENCA ESPECIAL",
                       "DESISTENCIA DA LICENCA", "PROGRESSAO FUNCIONAL VERTICAL"):
