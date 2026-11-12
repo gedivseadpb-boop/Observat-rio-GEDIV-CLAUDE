@@ -2,6 +2,15 @@
 
 Data: 10/11/2026. Versão do dicionário: `gediv-2026.11.10-1` (`observatorio/gerencias/gediv/catalogo.py`).
 
+> **Atualização (12/11/2026, dicionário `gediv-2026.11.12-1`)** — regras definitivas da Etapa 02, que prevalecem
+> sobre a tabela da seção 2.1:
+> - códigos dos 16 grupos: MAG, SSA, GAJ, FAP, AST, ANS, ESP, DPS, SFT, OSPB, GPC, SEI, SAT, ACI, PPGG e INT
+>   (`SAUDE` passou a `SSA`, `ESPECIAL` a `ESP`; `INT` incluído como provisório, com expressões a confirmar);
+> - "TEC. ADM" e "STF" não têm grupo homologado: o ato fica sem grupo, com a expressão guardada e pendência para
+>   a GEDIV (nenhuma equivalência com AST ou SFT é presumida);
+> - licença-saúde, vacância e atos de outra gerência ficam FORA DO ESCOPO: registrados na tabela privada
+>   `fora_escopo`, nunca em "Outras publicações" nem nos indicadores. A sigla DEREH nunca exclui ato dos dois eixos.
+
 ## 1. Fontes e precedência
 
 | # | Fonte | Como foi lida | Uso |
