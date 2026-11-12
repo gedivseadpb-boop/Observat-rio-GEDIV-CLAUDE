@@ -15,6 +15,7 @@ Nada é marcado como conferido: todos os registros continuam PENDENTES de revis�
 from __future__ import annotations
 
 import json
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -51,7 +52,9 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
         relatorio["resultado"] = "ARQUIVO_RECUSADO"
         return relatorio
 
+    inicio = time.monotonic()
     relatorio["fluxo"] = fluxo.executar(pasta_dados, arquivo, data, url)
+    relatorio["desempenho"] = {"segundos_fluxo": round(time.monotonic() - inicio, 1), "pico_memoria_mb": _pico_memoria_mb()}
     banco = Banco(Path(pasta_dados) / "observatorio.sqlite3")
     try:
         sha = laudo.sha256
@@ -117,6 +120,17 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
     finally:
         banco.fechar()
     return relatorio
+
+
+def _pico_memoria_mb() -> int | None:
+    """Pico de memória residente DESTE processo (Linux/macOS). None onde o módulo `resource` não existe (Windows)."""
+    try:
+        import resource
+        import sys
+        pico = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return round(pico / (1024 * 1024 if sys.platform == "darwin" else 1024))
+    except (ImportError, OSError):
+        return None
 
 
 def _contar(valores) -> dict:

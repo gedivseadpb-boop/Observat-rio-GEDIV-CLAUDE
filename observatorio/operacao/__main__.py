@@ -6,6 +6,9 @@
     python -m observatorio.operacao validar-real ARQUIVO.pdf --data AAAA-MM-DD --url URL_OFICIAL --saida relatorio.json --amostra amostra.txt
         validação com PDF OFICIAL: executa o fluxo e grava um relatório SEM dados pessoais (versionável)
         e, se pedido, uma amostra PRIVADA para a conferência humana contra o PDF
+    python -m observatorio.operacao ouro --pdfs PASTA_COM_PDFS_OFICIAIS [--manifesto docs/validacao/conjunto_ouro.json] [--saida rel.json]
+        conjunto-ouro: roda o fluxo real em cada edição do manifesto (PDFs localizados pelo SHA-256) e compara com o
+        resultado esperado; saída 1 em caso de regressão. Relatório sem dados pessoais.
     python -m observatorio.operacao demonstracao --dados dados-demo
         cria uma base de DEMONSTRAÇÃO com documentos SINTÉTICOS (pessoas e processos fictícios)
 
@@ -23,14 +26,27 @@ from . import fluxo
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.operacao", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real"])
+    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro"])
     ap.add_argument("origem", nargs="?")
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--data", type=date.fromisoformat)
     ap.add_argument("--url")
     ap.add_argument("--saida", help="validar-real: arquivo JSON do relatório sem dados pessoais")
     ap.add_argument("--amostra", help="validar-real: arquivo de texto PRIVADO para a conferência humana")
+    ap.add_argument("--pdfs", help="ouro: pasta com os PDFs oficiais (fora do repositório)")
+    ap.add_argument("--manifesto", help="ouro: manifesto do conjunto-ouro")
     a = ap.parse_args(argv)
+    if a.comando == "ouro":
+        from . import ouro
+        if not a.pdfs:
+            ap.error("ouro exige --pdfs PASTA")
+        resultado = ouro.executar(a.pdfs, a.manifesto or ouro.MANIFESTO_PADRAO)
+        if a.saida:
+            with open(a.saida, "w", encoding="utf-8") as destino:
+                json.dump(resultado, destino, ensure_ascii=False, indent=2)
+        print(json.dumps({"resumo": resultado["resumo"], "edicoes": [{k: e.get(k) for k in ("data", "situacao", "divergencias", "desempenho")}
+                                                                     for e in resultado["edicoes"]]}, ensure_ascii=False, indent=2))
+        return ouro.codigo_de_saida(resultado)
     if a.comando == "validar-real":
         from . import validacao_real
         if not a.origem or not a.data:

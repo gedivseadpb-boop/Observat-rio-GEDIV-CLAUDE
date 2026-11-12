@@ -32,7 +32,7 @@ from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
 from .pagina import Palavra, identificar_edicao, ler_pagina
 
-VERSAO = "0.3"
+VERSAO = "0.4"           # 0.4: tolerância horizontal 1,5 pt entre letras da mesma palavra; cache liberado por página
 MIN_CARACTERES = 20       # abaixo disso a página é tratada como sem texto nativo
 RESOLUCAO_OCR = 300       # pontos por polegada
 RESOLUCAO_OCR_TRECHO = 400  # trechos com fonte ilegível costumam ser tabelas em corpo 4: mais resolução
@@ -40,6 +40,11 @@ MIN_SINAIS_ILEGIVEIS = 10   # sinais "(cid:N)" num bloco para justificar o OCR d
 CONFIANCA_BOA, CONFIANCA_MINIMA = 75.0, 50.0
 FRACAO_IMAGEM_MISTA = 0.25  # imagens cobrindo esta fração da página, junto com texto nativo, indicam página mista
 _CORROMPIDO = re.compile(r"\(cid:\d+\)|�")
+# Distância horizontal máxima (pt) entre letras de uma mesma palavra. O padrão do pdfplumber (3 pt) cola
+# palavras do DOE cujo espaço é estreito ("LICENÇAPARATRATAR", DOE 04/11/2026, p. 3). Medido em 225 páginas
+# de 5 edições oficiais (12/11/2026): com 1,5 pt, 10 páginas ficam mais próximas da leitura independente
+# (pypdfium2) e nenhuma piora; letras de texto justificado que se separam são reunidas na classificação.
+TOLERANCIA_X = 1.5
 
 
 @functools.lru_cache(maxsize=1)
@@ -154,7 +159,7 @@ def _classificar_ocr(numero, palavras, confianca, largura) -> dict:
 
 def _ler_uma_pagina(numero: int, pagina) -> dict:
     largura = float(pagina.width)
-    brutas = pagina.extract_words()
+    brutas = pagina.extract_words(x_tolerance=TOLERANCIA_X)
     palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas]
     texto, colunas = ler_pagina(palavras, largura)
     base = {"numero": numero, "confianca": None}
@@ -187,8 +192,15 @@ def _ler_uma_pagina(numero: int, pagina) -> dict:
 def ler_arquivo(caminho: str | Path) -> dict:
     import pdfplumber  # importado aqui para que a coleta funcione sem esta biblioteca
 
+    paginas = []
     with pdfplumber.open(str(caminho)) as documento:
-        paginas = [_ler_uma_pagina(numero, pagina) for numero, pagina in enumerate(documento.pages, start=1)]
+        for numero, pagina in enumerate(documento.pages, start=1):
+            try:
+                paginas.append(_ler_uma_pagina(numero, pagina))
+            finally:
+                # Sem isto o pdfplumber guarda caracteres, objetos e o mapa de texto de TODAS as páginas lidas
+                # até o fim do arquivo (pico de 0,8–1,2 GB por edição medido em 12/11/2026).
+                pagina.close()
     if not paginas:
         raise ValueError("o documento não tem páginas")
     numero_edicao, data_edicao = identificar_edicao(paginas[0]["texto"])

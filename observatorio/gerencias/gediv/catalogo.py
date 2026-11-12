@@ -176,9 +176,24 @@ def identificar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | Non
     return None, None
 
 
-def identificar_subcategoria(preambulo_normalizado: str) -> str | None:
+def _sem_espacos(padrao: str) -> str:
+    """Versão do padrão para texto COMPACTO (sem nenhum espaço): "\\s+" e "\\s*" deixam de exigir espaço."""
+    return re.sub(r"\\s[+*]", "", padrao)
+
+
+_SUB_COMPACTA = {s.codigo: re.compile(_sem_espacos(s.padrao)) for s in SUBCATEGORIAS}
+
+
+def compactar(texto_normalizado: str) -> str:
+    return re.sub(r"\s+", "", texto_normalizado)
+
+
+def identificar_subcategoria(preambulo_normalizado: str, compacto: bool = False) -> str | None:
+    """Subcategoria de Tempo de Serviço. Com `compacto=True`, o texto deve vir sem espaços (ver `compactar`):
+    recurso para palavras coladas ou partidas pela extração do PDF; só deve ser usado quando a busca normal falhar."""
     for codigo in _ORDEM_SUB:
-        if re.search(SUBCATEGORIA_POR_CODIGO[codigo].padrao, preambulo_normalizado):
+        padrao = _SUB_COMPACTA[codigo] if compacto else SUBCATEGORIA_POR_CODIGO[codigo].padrao
+        if re.search(padrao, preambulo_normalizado):
             return codigo
     return None
 

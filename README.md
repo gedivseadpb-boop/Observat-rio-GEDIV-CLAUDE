@@ -102,3 +102,4 @@ O banco (`observatorio.sqlite3`) e os PDFs ficam na pasta `dados/`, que **não**
 6. [Regras consolidadas: eixos, grupos, subcategorias e indicadores](docs/06-regras-consolidadas.md)
 7. [Integração, testes e evidências](docs/07-integracao-testes-e-evidencias.md)
 8. [Validação com PDFs oficiais (10/11/2026)](docs/08-validacao-com-pdf-oficial.md)
+9. [Etapa 03 — regras definitivas e correções de leitura (12/11/2026)](docs/09-etapa03-regras-definitivas-e-leitura.md)

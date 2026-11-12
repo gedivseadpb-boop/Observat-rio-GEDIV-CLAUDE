@@ -1,0 +1,350 @@
+{
+  "manifesto_versao": "1",
+  "situacao_do_manifesto": "CONFERIDO_TECNICAMENTE — expectativas verificadas em 12/11/2026 contra os documentos oficiais (ver 'conferencia' de cada edição). NÃO homologado pela GEDIV: só vira critério definitivo de aprovação após a conferência da GEDIV.",
+  "resumo": {
+    "CONFERE": 5
+  },
+  "edicoes": [
+    {
+      "data": "2026-10-01",
+      "sha256": "bb5b8b65a07243193f7f318ef05a9ed7b1a959d7e22e5bb24da851136330a18d",
+      "situacao": "CONFERE",
+      "divergencias": [],
+      "obtido": {
+        "atos": [],
+        "decisoes": 0,
+        "fora_escopo": [
+          {
+            "tipo": "RESENHA",
+            "numero": "114/2026",
+            "pagina": 4,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "115/2026",
+            "pagina": 4,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "533/2026",
+            "pagina": 4,
+            "motivo": "VACANCIA"
+          }
+        ]
+      },
+      "leitura": {
+        "situacao": "LIDA",
+        "numero_da_edicao_lido": "18683",
+        "paginas": 56,
+        "por_metodo": {
+          "OCR": 3,
+          "TEXTO": 52,
+          "TEXTO+OCR": 1
+        },
+        "por_qualidade": {
+          "OK": 56
+        }
+      },
+      "desempenho": {
+        "segundos_fluxo": 23.7,
+        "pico_memoria_mb": 224
+      },
+      "versoes": {
+        "versao": "0.4.0",
+        "versao_leitor": "0.4",
+        "versao_regras": "gediv-2026.11.12-1"
+      }
+    },
+    {
+      "data": "2026-10-02",
+      "sha256": "0f437acc186a7e808ae09f348968d99b7086ccdbcb21e87d29b7c529d8562757",
+      "situacao": "CONFERE",
+      "divergencias": [],
+      "obtido": {
+        "atos": [
+          {
+            "numero": "488/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-05",
+            "grupo": null,
+            "resultado": "INDEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          },
+          {
+            "numero": "504/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-04",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          },
+          {
+            "numero": "473/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-01",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 4
+          },
+          {
+            "numero": "470/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-05",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          }
+        ],
+        "decisoes": 7,
+        "fora_escopo": [
+          {
+            "tipo": "RESENHA",
+            "numero": "116/2026",
+            "pagina": 4,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "505/2026",
+            "pagina": 4,
+            "motivo": "LICENCA_SAUDE"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "506/2026",
+            "pagina": 4,
+            "motivo": "LICENCA_SAUDE"
+          }
+        ]
+      },
+      "leitura": {
+        "situacao": "LIDA_COM_PENDENCIAS",
+        "numero_da_edicao_lido": "18684",
+        "paginas": 40,
+        "por_metodo": {
+          "OCR": 1,
+          "TEXTO": 36,
+          "TEXTO+OCR": 3
+        },
+        "por_qualidade": {
+          "BAIXA_CONFIANCA": 1,
+          "OK": 39
+        }
+      },
+      "desempenho": {
+        "segundos_fluxo": 12.3,
+        "pico_memoria_mb": 219
+      },
+      "versoes": {
+        "versao": "0.4.0",
+        "versao_leitor": "0.4",
+        "versao_regras": "gediv-2026.11.12-1"
+      }
+    },
+    {
+      "data": "2026-10-03",
+      "sha256": "6f436c7f204a50b4a70e727d8e1106765177d3210d123e52b9b8ac9a8d803c13",
+      "situacao": "CONFERE",
+      "divergencias": [],
+      "obtido": {
+        "atos": [
+          {
+            "numero": "524/2026",
+            "eixo": "PROGRESSAO",
+            "classe": "VERTICAL",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "NAO_EXPRESSO",
+            "decisoes": 21
+          },
+          {
+            "numero": "527/2026",
+            "eixo": "PROGRESSAO",
+            "classe": "VERTICAL",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "NAO_EXPRESSO",
+            "decisoes": 20
+          },
+          {
+            "numero": "512/2026",
+            "eixo": "PROGRESSAO",
+            "classe": "HORIZONTAL",
+            "grupo": "SSA",
+            "resultado": "INDEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          }
+        ],
+        "decisoes": 42,
+        "fora_escopo": [
+          {
+            "tipo": "RESENHA",
+            "numero": "117/2026",
+            "pagina": 5,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "507/2026",
+            "pagina": 5,
+            "motivo": "LICENCA_SAUDE"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "509/2026",
+            "pagina": 5,
+            "motivo": "LICENCA_SAUDE"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "505/2026",
+            "pagina": 6,
+            "motivo": "LICENCA_SAUDE"
+          }
+        ]
+      },
+      "leitura": {
+        "situacao": "LIDA",
+        "numero_da_edicao_lido": "18685",
+        "paginas": 48,
+        "por_metodo": {
+          "OCR": 2,
+          "TEXTO": 45,
+          "TEXTO+OCR": 1
+        },
+        "por_qualidade": {
+          "OK": 48
+        }
+      },
+      "desempenho": {
+        "segundos_fluxo": 19.9,
+        "pico_memoria_mb": 219
+      },
+      "versoes": {
+        "versao": "0.4.0",
+        "versao_leitor": "0.4",
+        "versao_regras": "gediv-2026.11.12-1"
+      }
+    },
+    {
+      "data": "2026-10-06",
+      "sha256": "915cb793a24056d65f2cd09698d9550b5a1598b2bbfd907fe390951d9579b504",
+      "situacao": "CONFERE",
+      "divergencias": [],
+      "obtido": {
+        "atos": [],
+        "decisoes": 0,
+        "fora_escopo": []
+      },
+      "leitura": {
+        "situacao": "LIDA",
+        "numero_da_edicao_lido": "18686",
+        "paginas": 28,
+        "por_metodo": {
+          "OCR": 3,
+          "TEXTO": 25
+        },
+        "por_qualidade": {
+          "OK": 28
+        }
+      },
+      "desempenho": {
+        "segundos_fluxo": 13.4,
+        "pico_memoria_mb": 168
+      },
+      "versoes": {
+        "versao": "0.4.0",
+        "versao_leitor": "0.4",
+        "versao_regras": "gediv-2026.11.12-1"
+      }
+    },
+    {
+      "data": "2026-11-04",
+      "sha256": "02cbb8ae5d47ae8a22bc0ef374dac66b31d61a095b44a2893feaea126493c577",
+      "situacao": "CONFERE",
+      "divergencias": [],
+      "obtido": {
+        "atos": [
+          {
+            "numero": "543/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-02",
+            "grupo": null,
+            "resultado": "INDEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          },
+          {
+            "numero": "540/2026",
+            "eixo": "TEMPO_SERVICO",
+            "classe": "TS-03",
+            "grupo": null,
+            "resultado": "DEFERIDO",
+            "vinculo": "EXPRESSO",
+            "decisoes": 1
+          }
+        ],
+        "decisoes": 2,
+        "fora_escopo": [
+          {
+            "tipo": "RESENHA",
+            "numero": "122/2026",
+            "pagina": 3,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "123/2026",
+            "pagina": 3,
+            "motivo": "OUTRA_GERENCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "541/2026",
+            "pagina": 3,
+            "motivo": "LICENCA_SAUDE"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "568/2026",
+            "pagina": 3,
+            "motivo": "VACANCIA"
+          },
+          {
+            "tipo": "RESENHA",
+            "numero": "544/2026",
+            "pagina": 4,
+            "motivo": "LICENCA_SAUDE"
+          }
+        ]
+      },
+      "leitura": {
+        "situacao": "LIDA",
+        "numero_da_edicao_lido": "18705",
+        "paginas": 60,
+        "por_metodo": {
+          "TEXTO": 60
+        },
+        "por_qualidade": {
+          "OK": 60
+        }
+      },
+      "desempenho": {
+        "segundos_fluxo": 19.0,
+        "pico_memoria_mb": 160
+      },
+      "versoes": {
+        "versao": "0.4.0",
+        "versao_leitor": "0.4",
+        "versao_regras": "gediv-2026.11.12-1"
+      }
+    }
+  ]
+}

@@ -346,30 +346,58 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
     return decisoes
 
 
+PAT_PROGRESSAO_COMPACTA = re.compile(r"PROGRESSAO(?:FUNCIONAL|HORIZONTAL|VERTICAL)")
+
+
+def _variantes_do_preambulo(preambulo: str) -> list[tuple[str, str]]:
+    """Formas do preâmbulo em que o ASSUNTO é procurado, nesta ordem (a primeira que identificar um eixo vale):
+    1. o texto como foi lido;
+    2. com letras espaçadas reunidas ("D E S A V E R B A Ç Ã O" — DOE 04/11/2026, resenha 543);
+    3. compacto, sem espaços ("LICENÇAPARATRATAR" — palavras coladas pela extração, DOE 04/11/2026, resenha 540)."""
+    juntado = _juntar_letras_espacadas(preambulo)
+    variantes = [("original", preambulo)]
+    if juntado != preambulo:
+        variantes.append(("letras_reunidas", juntado))
+    variantes.append(("compacto", C.compactar(preambulo)))
+    return variantes
+
+
 def _tema(preambulo: str) -> dict:
     tema = dict(eixo=None, modalidade=None, condicao=None, grupo=None, grupo_expressao=None, subcategoria=None,
                 candidato=None, pendencias=[])
-    if PAT_PROGRESSAO.search(preambulo):
-        tema["eixo"] = C.PROGRESSAO
-        h, v = "HORIZONTAL" in preambulo, "VERTICAL" in preambulo
-        if h != v:
-            tema["modalidade"] = C.HORIZONTAL if h else C.VERTICAL
-        else:
-            tema["pendencias"].append("modalidade da progressão não identificada de forma inequívoca")
-        tema["condicao"] = C.identificar_condicao(preambulo)
-        tema["grupo"], tema["grupo_expressao"] = C.identificar_grupo(preambulo)
-        if not tema["grupo"]:
-            sem_grupo = C.expressao_sem_grupo(preambulo)
-            tema["pendencias"].append(sem_grupo[1] if sem_grupo else "grupo do PCCR não informado ou não reconhecido")
-        return tema
-    sub = C.identificar_subcategoria(preambulo)
-    if sub:
-        tema["eixo"], tema["subcategoria"] = C.TEMPO, sub
-        return tema
+    for forma, texto in _variantes_do_preambulo(preambulo):
+        compacto = forma == "compacto"
+        if (PAT_PROGRESSAO_COMPACTA if compacto else PAT_PROGRESSAO).search(texto):
+            return _tema_progressao(tema, preambulo, texto, forma)
+        sub = C.identificar_subcategoria(texto, compacto=compacto)
+        if sub:
+            tema["eixo"], tema["subcategoria"] = C.TEMPO, sub
+            if forma != "original":
+                tema["pendencias"].append(f"assunto identificado com texto reconstituído ({forma}); conferir a leitura no PDF")
+            return tema
     for nome, padrao in C.CONCEITOS_CANDIDATOS:
         if re.search(padrao, preambulo):
             tema["candidato"] = nome
             break
+    return tema
+
+
+def _tema_progressao(tema: dict, preambulo: str, texto: str, forma: str) -> dict:
+    """Progressão Funcional. A modalidade é procurada no texto em que o eixo foi achado; grupo e condição,
+    no preâmbulo como foi lido (os padrões de grupo dependem dos limites de palavra)."""
+    tema["eixo"] = C.PROGRESSAO
+    if forma != "original":
+        tema["pendencias"].append(f"assunto identificado com texto reconstituído ({forma}); conferir a leitura no PDF")
+    h, v = "HORIZONTAL" in texto, "VERTICAL" in texto
+    if h != v:
+        tema["modalidade"] = C.HORIZONTAL if h else C.VERTICAL
+    else:
+        tema["pendencias"].append("modalidade da progressão não identificada de forma inequívoca")
+    tema["condicao"] = C.identificar_condicao(preambulo)
+    tema["grupo"], tema["grupo_expressao"] = C.identificar_grupo(preambulo)
+    if not tema["grupo"]:
+        sem_grupo = C.expressao_sem_grupo(preambulo)
+        tema["pendencias"].append(sem_grupo[1] if sem_grupo else "grupo do PCCR não informado ou não reconhecido")
     return tema
 
 
@@ -443,7 +471,7 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
             data_expediente=f"{expediente.group(3)}-{expediente.group(2)}-{expediente.group(1)}" if expediente else None,
             natureza=natureza, eixo=tema["eixo"], modalidade=tema["modalidade"], condicao=tema["condicao"],
             grupo=tema["grupo"], grupo_expressao=tema["grupo_expressao"], subcategoria=tema["subcategoria"],
-            resultado=_merito(preambulo), texto=trecho[:6000], pendencias=list(tema["pendencias"]),
+            resultado=_merito(preambulo) if _merito(preambulo) != "NAO_INFORMADO" else _merito(_juntar_letras_espacadas(preambulo)), texto=trecho[:6000], pendencias=list(tema["pendencias"]),
         )
         if pendencia:
             ato.pendencias.append(pendencia)
