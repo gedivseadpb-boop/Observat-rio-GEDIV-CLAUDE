@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — sonda de acesso às fontes oficiais do DOE/PB.
+"""Painel Diário Oficial | GEDIV — sonda de acesso às fontes oficiais do DOE/PB.
 
 Uso:  python -m observatorio.sonda [--saida relatorio.json]
 

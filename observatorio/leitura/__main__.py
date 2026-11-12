@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — leitura dos PDFs do acervo.
+"""Painel Diário Oficial | GEDIV — leitura dos PDFs do acervo.
 
     python -m observatorio.leitura processar [--limite N]    # lê os arquivos ainda não lidos (baixados ou importados)
     python -m observatorio.leitura situacao                  # resumo do que já foi lido

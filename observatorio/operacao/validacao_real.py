@@ -101,6 +101,8 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
                                      for e in banco.con.execute("SELECT * FROM evento WHERE sha256 = ? ORDER BY pagina", (sha,))],
             "outras_publicacoes": [{"tipo": o["tipo"], "pagina": o["pagina"]}
                                    for o in banco.con.execute("SELECT * FROM outra_publicacao WHERE sha256 = ? ORDER BY pagina", (sha,))],
+            "fora_escopo": [{"tipo": f["tipo"], "numero": f["numero"], "pagina": f["pagina"], "motivo": f["motivo"]}
+                            for f in banco.con.execute("SELECT * FROM fora_escopo WHERE sha256 = ? ORDER BY pagina, numero", (sha,))],
             "por_validacao": _contar(d["validacao"] for d in decisoes),
         }
         pendente = indicadores.painel(banco, {"escopo": "pendente", "inicio": data.isoformat(), "fim": data.isoformat()}, indicadores.GERENCIA_PERFIL)

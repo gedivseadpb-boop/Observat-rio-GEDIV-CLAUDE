@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — servidor do dashboard.
+"""Painel Diário Oficial | GEDIV — servidor do dashboard.
 
     python -m observatorio.web                      # http://127.0.0.1:8000
     python -m observatorio.web --porta 8080 --dados dados

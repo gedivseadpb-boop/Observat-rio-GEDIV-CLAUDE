@@ -25,7 +25,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 4
+VERSAO_ESQUEMA = 5
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -245,6 +245,26 @@ CREATE TABLE auditoria (
 CREATE INDEX auditoria_alvo ON auditoria (alvo_tipo, alvo_id);
 """
 
+# Versão 5: registro PRIVADO dos atos excluídos do escopo da gerência (licença-saúde, vacância, outra gerência),
+# para que não reapareçam em "Outras publicações" nem nos indicadores. Não contém linhas de servidores.
+_ESQUEMA_V5 = """
+CREATE TABLE fora_escopo (
+    id              TEXT PRIMARY KEY,
+    gerencia        TEXT NOT NULL,
+    sha256          TEXT NOT NULL REFERENCES arquivo(sha256),
+    tipo            TEXT NOT NULL,
+    numero          TEXT,
+    pagina          INTEGER NOT NULL,
+    data_publicacao TEXT,
+    titulo          TEXT NOT NULL,
+    motivo          TEXT NOT NULL,
+    expressao       TEXT NOT NULL,
+    vinculo         TEXT NOT NULL,
+    versao_regras   TEXT NOT NULL
+);
+CREATE INDEX fora_escopo_arquivo ON fora_escopo (sha256);
+"""
+
 PENDENTES = (DESCOBERTA, FALHA_DOWNLOAD, INVALIDA)
 
 
@@ -262,7 +282,7 @@ class Banco:
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
         if versao > VERSAO_ESQUEMA:
             raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
-        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4)):
+        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5)):
             if versao < numero:
                 with self.con:
                     self.con.executescript(script)
@@ -534,6 +554,7 @@ class Banco:
             self.con.execute("DELETE FROM decisao WHERE sha256 = ? AND validacao = 'PENDENTE'", (sha256,))
             self.con.execute("DELETE FROM evento WHERE sha256 = ? AND estado IN ('PENDENTE_VINCULACAO', 'SUGERIDO')", (sha256,))
             self.con.execute("DELETE FROM outra_publicacao WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))
+            self.con.execute("DELETE FROM fora_escopo WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))
             self.con.execute(
                 "DELETE FROM ato WHERE sha256 = ? AND gerencia = ? AND id NOT IN (SELECT ato_id FROM decisao) "
                 "AND id NOT IN (SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL)", (sha256, gerencia))
@@ -567,8 +588,14 @@ class Banco:
                 self.con.execute(
                     "INSERT OR REPLACE INTO outra_publicacao (id, gerencia, sha256, tipo, pagina, data_publicacao, titulo, vinculo, trecho) "
                     "VALUES (?,?,?,?,?,?,?,?,?)", (o.id, gerencia, sha256, o.tipo, o.pagina, data, o.titulo, o.vinculo, o.trecho))
+            for f in getattr(resultado, "fora_escopo", []):
+                self.con.execute(
+                    "INSERT OR REPLACE INTO fora_escopo (id, gerencia, sha256, tipo, numero, pagina, data_publicacao, titulo, motivo, "
+                    "expressao, vinculo, versao_regras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (f.id, gerencia, sha256, f.tipo, f.numero, f.pagina, data, f.titulo, f.motivo, f.expressao, f.vinculo, versao_regras))
             resumo = {"atos": len(resultado.atos), "decisoes": len(resultado.decisoes), "eventos": len(resultado.eventos),
-                      "outras": len(resultado.outras), "descartados": resultado.descartados,
+                      "outras": len(resultado.outras), "fora_escopo": len(getattr(resultado, "fora_escopo", [])),
+                      "descartados": resultado.descartados,
                       "preservadas_por_revisao": len(revisadas) + len(eventos_revisados)}
             self.con.execute(
                 "INSERT OR REPLACE INTO classificacao (sha256, gerencia, versao_regras, atos, decisoes, eventos, descartados, "

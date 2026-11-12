@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — coleta dos Diários Oficiais.
+"""Painel Diário Oficial | GEDIV — coleta dos Diários Oficiais.
 
 Sequência normal de uso (cada passo pode ser repetido e retomado):
 

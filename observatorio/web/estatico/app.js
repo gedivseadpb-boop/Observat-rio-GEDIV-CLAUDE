@@ -1,4 +1,4 @@
-/* Painel de Publicações DOE-PB GEDIV — dashboard.
+/* Painel Diário Oficial | GEDIV — dashboard.
    Toda contagem vem da API (/api/painel): cartões, gráficos, tabela e exportações usam a mesma projeção.
    Sem bibliotecas externas e sem estilos embutidos (compatível com a política de segurança do servidor). */
 (function () {

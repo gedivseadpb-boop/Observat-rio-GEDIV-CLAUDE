@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import catalogo as C
+from . import exclusoes as EX
 
 PAT_PROCESSO = re.compile(r"\b([A-Z]{2,6})\s*-\s*(PSE|PRC|OFI)\s*-\s*(\d{4})\s*/\s*(\d{3,9})\b")
 PAT_RESENHA = re.compile(r"\bRESENHA\s*(?:N[O°.]*)?\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})((?:\s*[-/]\s*[A-Z]{2,10})*)")
@@ -126,11 +127,25 @@ class Outra:
 
 
 @dataclass
+class ForaEscopo:
+    """Ato reconhecido e EXCLUÍDO do escopo GEDIV (licença-saúde, vacância, outra gerência). Registro privado."""
+    id: str
+    tipo: str
+    numero: str | None
+    pagina: int
+    titulo: str
+    motivo: str
+    expressao: str
+    vinculo: str
+
+
+@dataclass
 class Resultado:
     atos: list[Ato] = field(default_factory=list)
     decisoes: list[Decisao] = field(default_factory=list)
     eventos: list[Evento] = field(default_factory=list)
     outras: list[Outra] = field(default_factory=list)
+    fora_escopo: list[ForaEscopo] = field(default_factory=list)
     pendencias: list[str] = field(default_factory=list)
     descartados: int = 0           # atos de outras unidades, não atribuídos à GEDIV
 
@@ -344,7 +359,8 @@ def _tema(preambulo: str) -> dict:
         tema["condicao"] = C.identificar_condicao(preambulo)
         tema["grupo"], tema["grupo_expressao"] = C.identificar_grupo(preambulo)
         if not tema["grupo"]:
-            tema["pendencias"].append("grupo do PCCR não informado ou não reconhecido")
+            sem_grupo = C.expressao_sem_grupo(preambulo)
+            tema["pendencias"].append(sem_grupo[1] if sem_grupo else "grupo do PCCR não informado ou não reconhecido")
         return tema
     sub = C.identificar_subcategoria(preambulo)
     if sub:
@@ -377,20 +393,41 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
         preambulo = norm[:primeiro.start()] if primeiro else norm[:1500]
         tema = _tema(preambulo)
         natureza, subtipo = _natureza(norm)
+        pagina = linhas[marco].pagina
+        titulo = f"{'Resenha' if tipo == 'RESENHA' else 'Portaria'} nº {numero}"
+
+        def excluir(motivo: str, expressao: str, vinculo_ato: str) -> None:
+            resultado.fora_escopo.append(ForaEscopo(_id(chave_arquivo, "FORA_ESCOPO", tipo, numero, pagina), tipo, numero, pagina,
+                                                    titulo, motivo, expressao[:120], vinculo_ato))
 
         if not gediv:
-            if outra_sigla or PAT_OUTRA_GERENCIA.search(norm) or not PAT_DEREH.search(norm):
+            dereh = PAT_DEREH.search(norm)
+            outra_gerencia = outra_sigla or PAT_OUTRA_GERENCIA.search(norm)
+            if outra_gerencia or not dereh:
                 if tema["eixo"]:
                     resultado.descartados += 1
+                if outra_gerencia and dereh:
+                    # Ato da estrutura da SEAD/DEREH atribuído a outra gerência: registrado para não reaparecer.
+                    expressao = sufixo if outra_sigla else PAT_OUTRA_GERENCIA.search(norm).group(0)
+                    excluir(EX.OUTRA_GERENCIA, expressao, NAO_EXPRESSO)
                 continue
+            if not tema["eixo"]:
+                exclusao = EX.motivo_de_exclusao(norm)
+                if exclusao:                              # licença-saúde ou vacância sob a DEREH
+                    excluir(*exclusao, NAO_EXPRESSO)
+                    continue
             if not tema["eixo"] and natureza == C.ORIGINAL:
                 continue                                  # ato da DEREH sem tema dos dois eixos: fora do escopo
             if not tema["eixo"] and not (PAT_PROGRESSAO.search(norm) or C.identificar_subcategoria(norm)):
                 continue
         vinculo = EXPRESSO if gediv else NAO_EXPRESSO
-        pagina = linhas[marco].pagina
-        titulo = f"{'Resenha' if tipo == 'RESENHA' else 'Portaria'} nº {numero}"
         trecho = " ".join(l.texto for l in corpo)
+
+        if not tema["eixo"]:
+            exclusao = EX.motivo_de_exclusao(norm)
+            if exclusao:                                  # licença-saúde ou vacância, mesmo com a GEDIV no cabeçalho
+                excluir(*exclusao, vinculo)
+                continue
 
         if not tema["eixo"] and natureza == C.ORIGINAL:
             # GEDIV comprovada, tema fora dos dois eixos (ou portaria comum): página "Outras publicações".

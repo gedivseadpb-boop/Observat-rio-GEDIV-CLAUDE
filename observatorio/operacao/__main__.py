@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — fluxo completo.
+"""Painel Diário Oficial | GEDIV — fluxo completo.
 
     python -m observatorio.operacao executar PASTA_OU_ARQUIVO.pdf [--data AAAA-MM-DD] [--url URL_OFICIAL]
         importa o(s) PDF(s), lê (texto e OCR) e classifica; os registros ficam PENDENTES de revisão

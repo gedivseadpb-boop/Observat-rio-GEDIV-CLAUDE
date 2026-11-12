@@ -292,7 +292,7 @@ class TesteLeitorComPdf(BaseLeitor):
         referencias = [{"data": "2026-05-08", "sha256": sha, "paginas": 1, "bytes": 1, "numero_edicao": "18585", "fonte_da_referencia": "teste"}]
         r = validacao.relatorio(self.banco, self.acervo, referencias)
         item = r["arquivos"][0]
-        self.assertEqual(r["sistema"], "Painel de Publicações DOE-PB GEDIV")
+        self.assertEqual(r["sistema"], "Painel Diário Oficial | GEDIV")
         self.assertEqual((item["integridade_do_acervo"], item["edicao"], item["paginas"]["por_colunas"]),
                          (True, {"numero": "18585", "data": "2026-05-08"}, {"2": 1}))
         self.assertEqual(item["referencia"]["conferidos"], {"sha256": True, "bytes": False, "paginas": True, "numero_edicao": True})
@@ -358,7 +358,7 @@ class TesteFluxoManualCompleto(unittest.TestCase):
                              ("manual", "2026-05-08", "2026-05-08", "LIDA"))
             _, saida = rodar(coleta, "progresso")
             progresso = json.loads(saida)
-            self.assertEqual(progresso["sistema"], "Painel de Publicações DOE-PB GEDIV")
+            self.assertEqual(progresso["sistema"], "Painel Diário Oficial | GEDIV")
             self.assertEqual(progresso["cobertura"]["situacao"], "PARCIAL")              # importação manual não é acervo completo
             self.assertEqual(progresso["fontes"]["auniao"]["situacao"], "NAO_TESTADA")
             codigo, saida = rodar(leitura, "pagina", item["sha256"][:10], "1")
@@ -369,11 +369,11 @@ class TesteNomeDoSistema(unittest.TestCase):
     def test_nome_oficial_exato(self):
         import observatorio
         raiz = Path(__file__).resolve().parents[1]
-        self.assertEqual(observatorio.NOME, "Painel de Publicações DOE-PB GEDIV")
-        self.assertEqual((raiz / "README.md").read_text(encoding="utf-8").splitlines()[0], "# Painel de Publicações DOE-PB GEDIV")
+        self.assertEqual(observatorio.NOME, "Painel Diário Oficial | GEDIV")
+        self.assertEqual((raiz / "README.md").read_text(encoding="utf-8").splitlines()[0], "# Painel Diário Oficial | GEDIV")
         for modulo in ("coleta", "leitura", "sonda"):
             texto = (raiz / "observatorio" / modulo / "__main__.py").read_text(encoding="utf-8")
-            self.assertIn("Painel de Publicações DOE-PB GEDIV", texto.split("\n")[0])
+            self.assertIn("Painel Diário Oficial | GEDIV", texto.split("\n")[0])
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
         fila = [l["sha256"] for l in banco.leituras() if l["situacao"] != "ERRO"]
     else:
         fila = [l["sha256"] for l in banco.arquivos_sem_classificacao(GERENCIA, C.VERSAO_REGRAS)]
-    resumo = {"arquivos": 0, "atos": 0, "decisoes": 0, "eventos": 0, "outras": 0, "descartados": 0,
+    resumo = {"arquivos": 0, "atos": 0, "decisoes": 0, "eventos": 0, "outras": 0, "fora_escopo": 0, "descartados": 0,
               "preservadas_por_revisao": 0}
     for sha in fila:
         paginas = banco.paginas(sha)
@@ -76,4 +76,6 @@ def situacao(banco: Banco) -> dict:
         "decisoes": {l[0]: l[1] for l in banco.con.execute("SELECT validacao, COUNT(*) FROM decisao GROUP BY validacao")},
         "eventos": {l[0]: l[1] for l in banco.con.execute("SELECT estado, COUNT(*) FROM evento GROUP BY estado")},
         "outras_publicacoes": um("SELECT COUNT(*) FROM outra_publicacao WHERE gerencia = 'GEDIV'"),
+        "fora_escopo": {l[0]: l[1] for l in banco.con.execute(
+            "SELECT motivo, COUNT(*) FROM fora_escopo WHERE gerencia = 'GEDIV' GROUP BY motivo")},
     }

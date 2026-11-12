@@ -226,7 +226,7 @@ def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> di
     um = lambda sql: banco.con.execute(sql).fetchone()[0]
     return {
         "meta": {
-            "sistema": "Painel de Publicações DOE-PB GEDIV", "versao_regras": C.VERSAO_REGRAS, "perfil": perfil, "escopo": f["escopo"],
+            "sistema": "Painel Diário Oficial | GEDIV", "versao_regras": C.VERSAO_REGRAS, "perfil": perfil, "escopo": f["escopo"],
             "preliminar": not conferido,
             "rotulo": "Decisões conferidas" if conferido else "Em conferência · dados preliminares, não homologados",
             "dados_individuais": individual, "filtros": f, "cartao": cartao, "cobertura": cob,

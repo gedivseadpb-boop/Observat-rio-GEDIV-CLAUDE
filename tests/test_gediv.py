@@ -22,15 +22,15 @@ class TesteCatalogo(unittest.TestCase):
             "Licença Especial", "Conversão de Licença Especial em Tempo de Serviço", "Conversão de Férias"])
 
     def test_os_dezesseis_grupos_do_documento_oficial_na_ordem_do_documento(self):
-        self.assertEqual([g.codigo for g in C.GRUPOS], ["MAG", "SAUDE", "GAJ", "FAP", "AST", "TEC-ADM", "ANS", "ESPECIAL", "DPS",
-                                                        "SFT", "OSPB", "GPC", "SEI", "SAT", "ACI", "PPGG"])
+        self.assertEqual([g.codigo for g in C.GRUPOS], ["MAG", "SSA", "GAJ", "FAP", "AST", "ANS", "ESP", "DPS",
+                                                        "SFT", "OSPB", "GPC", "SEI", "SAT", "ACI", "PPGG", "INT"])
         self.assertTrue(all(g.estado in (C.CONFIRMADA, C.PROVISORIA) for g in C.GRUPOS))
 
     def test_expressoes_dos_grupos(self):
-        casos = {"GRUPO OCUPACIONAL DE APOIO JUDICIARIO GAJ-1700:": "GAJ", "DO GRUPO FAP-1300": "FAP", "DO GRUPO TEC. ADM.": "TEC-ADM",
-                 "DO GRUPO TECNICO ADMINISTRATIVO - AST -:": "AST", "DOS PROFISSIONAIS DO GRUPO SAUDE ABAIXO": "SAUDE",
+        casos = {"GRUPO OCUPACIONAL DE APOIO JUDICIARIO GAJ-1700:": "GAJ", "DO GRUPO FAP-1300": "FAP", "DO GRUPO TEC. ADM.": None,
+                 "DO GRUPO TECNICO ADMINISTRATIVO - AST -:": "AST", "DOS PROFISSIONAIS DO GRUPO SAUDE ABAIXO": "SSA",
                  "DOS PROFISSIONAIS DO GRUPO MAG. ABAIXO": "MAG", "DOS PROFISSINAIS DA FAZENDA": "SFT", "DO GRUPO ANS-900": "ANS",
-                 "DO GRUPO ESPECIAL": "ESPECIAL", "DO GRUPO DPS-1600": "DPS", "DO GRUPO OSPB": "OSPB", "DO GRUPO GPC": "GPC",
+                 "DO GRUPO ESPECIAL": "ESP", "DO GRUPO DPS-1600": "DPS", "DO GRUPO OSPB": "OSPB", "DO GRUPO GPC": "GPC",
                  "DO GRUPO SEI": "SEI", "DO GRUPO SAT": "SAT", "DO GRUPO ACI": "ACI", "DO GRUPO PPGG": "PPGG"}
         for texto, esperado in casos.items():
             with self.subTest(texto=texto):
@@ -83,7 +83,9 @@ class TesteClassificador(unittest.TestCase):
     def test_progressao_vertical_traz_classe_anterior_e_posterior(self):
         r = um(T.VERTICAL_SEM_GEDIV)
         self.assertEqual(r.decisoes[0].detalhe, {"classe_anterior": "A", "classe_posterior": "F"})
-        self.assertEqual((r.atos[0].modalidade, r.atos[0].grupo), (C.VERTICAL, "TEC-ADM"))
+        # "TEC. ADM" não tem grupo homologado: sem grupo, expressão guardada e pendência (decisão da GEDIV).
+        self.assertEqual((r.atos[0].modalidade, r.atos[0].grupo, r.atos[0].grupo_expressao), (C.VERTICAL, None, "TEC. ADM"))
+        self.assertTrue(any("TEC. ADM" in p and "AST" in p for p in r.atos[0].pendencias))
 
     def test_resenha_so_com_dereh_fica_com_vinculo_nao_expresso_e_sinalizada(self):
         ato = um(T.VERTICAL_SEM_GEDIV).atos[0]
@@ -210,7 +212,9 @@ class TesteFormatosVistosEmTextoReal(unittest.TestCase):
     def test_variante_stf_auditor_fiscal_tributario_guarda_a_expressao_literal(self):
         ato = self.vertical("SAD-PSE-2026/90023 900023-4 PESSOA FICTICIA AUDITOR FISCAL TRIBUTARIO EST D E",
                             "STF - AUDITOR FISCAL TRIBUTARIO").atos[0]
-        self.assertEqual((ato.grupo, ato.grupo_expressao), ("SFT", "STF"))
+        # A equivalência STF/SFT não está comprovada: sem grupo, com a expressão literal e pendência.
+        self.assertEqual((ato.grupo, ato.grupo_expressao), (None, "STF"))
+        self.assertTrue(any("STF" in p and "SFT" in p for p in ato.pendencias))
 
     def test_dias_com_separador_de_milhar_e_linha_seguida_de_nota_de_publicacao(self):
         texto = T.ANOTACAO.replace("PESSOA FICTICIA UM 0 0 0 451", "PESSOA FICTICIA UM 0 0 2.450 0\nPublicado no D.O.E. Edição do dia : 01/10/2026")
@@ -254,7 +258,9 @@ class TesteAchadosDoPdfOficial(unittest.TestCase):
                  "Órgão/Secretaria Nome Matrícula Reg. Previd. Dias Data de Início Data Fim\nTIPO DE LICENÇA => DOENÇA NÃO RELACIONADA AO TRABALHO\n"
                  "SEE - REGIONAL 01 PESSOA FICTICIA 9000034 RPPS 90 18/09/2026 16/12/2026\n" + T.ANOTACAO)
         r = um(texto)
-        self.assertEqual([o.tipo for o in r.outras], ["TEMA_FORA_DOS_EIXOS"])
+        # Licença-saúde fica FORA DO ESCOPO (registro privado), não em "Outras publicações".
+        self.assertEqual([o.tipo for o in r.outras], [])
+        self.assertEqual([(f.numero, f.motivo) for f in r.fora_escopo], [("916/2026", "LICENCA_SAUDE")])
         self.assertEqual([a.numero for a in r.atos], ["901/2026"])            # a resenha seguinte abre outro ato e não herda nada
         self.assertEqual(len(r.decisoes), 2)
 
@@ -263,7 +269,7 @@ class TesteAchadosDoPdfOficial(unittest.TestCase):
                   "EXECUTIVA CONC. DE DIREITOS E VANTAGENS\nDEFERIU os seguintes pedidos de licença médica:\nSEE PESSOA FICTICIA 9000035 RPPS 30")
         r = classificar([(4, medica), (5, T.LICENCA_ESPECIAL)], "x")
         self.assertEqual([(a.numero, a.pagina, a.subcategoria) for a in r.atos], [("905/2026", 5, "TS-05")])
-        self.assertEqual(r.outras[0].titulo, "Resenha nº 917/2026")
+        self.assertEqual([(f.titulo, f.motivo) for f in r.fora_escopo], [("Resenha nº 917/2026", "LICENCA_SAUDE")])
 
 
 if __name__ == "__main__":

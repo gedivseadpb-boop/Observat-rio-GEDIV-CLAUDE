@@ -1,1 +1,1 @@
-"""API e dashboard web do Painel de Publicações DOE-PB GEDIV."""
+"""API e dashboard web do Painel Diário Oficial | GEDIV."""

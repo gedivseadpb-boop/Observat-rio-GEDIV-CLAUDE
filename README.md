@@ -1,4 +1,4 @@
-# Painel de Publicações DOE-PB GEDIV
+# Painel Diário Oficial | GEDIV
 
 Observatório automatizado das publicações do Diário Oficial do Estado da Paraíba relacionadas à
 Gerência Executiva de Concessão de Direitos e Vantagens (GEDIV/SEAD-PB).

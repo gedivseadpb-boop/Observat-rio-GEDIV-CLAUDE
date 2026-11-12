@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — observatório do Diário Oficial da Paraíba."""
+"""Painel Diário Oficial | GEDIV — observatório do Diário Oficial da Paraíba."""
 
-NOME = "Painel de Publicações DOE-PB GEDIV"
+NOME = "Painel Diário Oficial | GEDIV"
 __version__ = "0.4.0"

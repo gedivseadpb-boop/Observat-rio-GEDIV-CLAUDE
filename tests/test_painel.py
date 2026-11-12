@@ -185,7 +185,8 @@ class TesteIndicadores(Base):
         self.assertEqual(self.painel(eixo="TEMPO_SERVICO")["indicadores"]["decisoes"], 3)
         mag = self.painel(eixo="PROGRESSAO", modalidade="HORIZONTAL", grupo="MAG")
         self.assertEqual((mag["indicadores"]["decisoes"], {l["grupo"] for l in mag["linhas"]}), (1, {"MAG"}))
-        self.assertEqual(self.painel(grupo="GAJ,TEC-ADM")["indicadores"]["decisoes"], 4)
+        self.assertEqual(self.painel(grupo="GAJ")["indicadores"]["decisoes"], 3)
+        self.assertEqual(self.painel(grupo="GAJ,TEC-ADM")["indicadores"]["decisoes"], 3)   # TEC-ADM não é grupo: ignorado
         self.assertEqual(self.painel(subcategoria="TS-05")["indicadores"]["decisoes"], 1)
         self.assertEqual(self.painel(vinculo="NAO_EXPRESSO")["indicadores"]["decisoes"], 1)
         self.assertEqual(self.painel(busca="ficticia tres")["indicadores"]["decisoes"], 1)
@@ -197,7 +198,7 @@ class TesteIndicadores(Base):
         self.assertEqual([(x["chave"], x["total"]) for x in s["por_assunto"]], [("VERTICAL", 1), ("HORIZONTAL", 4), ("TEMPO_SERVICO", 3)])
         self.assertEqual([x["codigo"] for x in s["por_subcategoria"]], [f"TS-0{i}" for i in range(1, 8)])
         self.assertEqual({x["codigo"]: x["situacao"] for x in s["por_subcategoria"] if not x["total"]}["TS-07"], "cobertura pendente")
-        self.assertEqual({x["grupo"]: x["total"] for x in s["por_grupo"]}, {"MAG": 1, "GAJ": 3, "TEC-ADM": 1})
+        self.assertEqual({x["grupo"]: x["total"] for x in s["por_grupo"]}, {"MAG": 1, "GAJ": 3, "NAO_INFORMADO": 1})
         self.assertEqual(sum(x["total"] for x in s["por_data"]), 8)
 
     def test_fonte_oficial_so_quando_conhecida(self):

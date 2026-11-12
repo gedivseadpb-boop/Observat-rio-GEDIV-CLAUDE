@@ -15,7 +15,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-VERSAO_REGRAS = "gediv-2026.11.10-1"
+VERSAO_REGRAS = "gediv-2026.11.12-1"   # grupos definitivos (SSA, ESP, INT), TEC. ADM e STF sem grupo, exclusões
 
 PROGRESSAO = "PROGRESSAO"
 TEMPO = "TEMPO_SERVICO"
@@ -59,26 +59,27 @@ class Grupo:
     observacao: str = ""
 
 
-# Os 16 grupos do documento oficial "Eixos e grupos da GEDIV", na ordem do documento.
+# Os 16 grupos do PCCR definidos pela GEDIV (regra definitiva da Etapa 02), nesta ordem:
+# MAG, SSA, GAJ, FAP, AST, ANS, ESP, DPS, SFT, OSPB, GPC, SEI, SAT, ACI, PPGG, INT.
 # A ordem de avaliação é a de GRUPOS_AVALIACAO (casos específicos primeiro).
 GRUPOS = (
     Grupo("MAG", "Magistério", r"\bMAG\b|MAGISTERIO", CONFIRMADA),
-    Grupo("SAUDE", "Saúde", r"GRUPO\s+(?:OCUPACIONAL\s+)?(?:DA\s+)?SAUDE", CONFIRMADA,
-          "O documento oficial não informa código para este grupo."),
+    Grupo("SSA", "Saúde", r"\bSSA\b|GRUPO\s+(?:OCUPACIONAL\s+)?(?:DA\s+)?SAUDE", CONFIRMADA,
+          "Código SSA (antes registrado como SAUDE). Visto em resenha real como 'GRUPO SAUDE'."),
     Grupo("GAJ", "Apoio Judiciário", r"\bGAJ\b|APOIO\s+JUDICIARIO", CONFIRMADA, "Visto também como GAJ-1700."),
     Grupo("FAP", "Fiscalização Agropecuária", r"\bFAP\b|FISCALIZACAO\s+AGROPECUARIA", CONFIRMADA,
           "Visto também como FAP-1300."),
     Grupo("AST", "Técnicos Administrativos", r"\bAST\b", CONFIRMADA,
-          "Visto como 'Grupo TECNICO ADMINISTRATIVO - AST -'."),
-    Grupo("TEC-ADM", "Técnicos Administrativos (Tec. Adm)", r"\bTEC\.?\s*ADM\b", CONFIRMADA,
-          "O documento oficial lista AST e Tec. Adm separadamente; não são fundidos sem autorização da GEDIV."),
+          "Visto como 'Grupo TECNICO ADMINISTRATIVO - AST -'. A expressão 'TEC. ADM' NÃO é tratada como AST "
+          "sem decisão da GEDIV (ver EXPRESSOES_SEM_GRUPO)."),
     Grupo("ANS", "Nível Superior", r"\bANS\b|ATIVIDADES\s+DE\s+NIVEL\s+SUPERIOR", PROVISORIA),
-    Grupo("ESPECIAL", "Grupo Especial", r"GRUPO\s+(?:OCUPACIONAL\s+)?ESPECIAL", PROVISORIA),
+    Grupo("ESP", "Grupo Especial", r"\bESP\b|GRUPO\s+(?:OCUPACIONAL\s+)?ESPECIAL", PROVISORIA,
+          "Código ESP (antes registrado como ESPECIAL)."),
     Grupo("DPS", "Divulgação e Promoção", r"\bDPS\b|DIVULGACAO\s+E\s+PROMOCAO", PROVISORIA),
-    Grupo("SFT", "Fazenda · Auditor Fiscal", r"\bSFT\b|\bSTF\b|SERVIDORES\s+FISCAIS\s+TRIBUTARIOS|"
+    Grupo("SFT", "Fazenda · Auditor Fiscal", r"\bSFT\b|SERVIDORES\s+FISCAIS\s+TRIBUTARIOS|"
           r"(?:GRUPO|PROFISSI\w*)\s+(?:D[AO]\s+)?FAZENDA|AUDITOR(?:ES)?\s+FISCA(?:L|IS)\s+TRIBUTARIOS?", CONFIRMADA,
-          "Visto como 'profissionais da Fazenda' e como 'Grupo STF - AUDITOR FISCAL TRIBUTARIO'. A expressão literal "
-          "fica guardada em cada ato; a equivalência STF/SFT precisa de confirmação da GEDIV."),
+          "Visto como 'profissionais da Fazenda'. A sigla 'STF' NÃO é tratada como SFT sem comprovação "
+          "(ver EXPRESSOES_SEM_GRUPO)."),
     Grupo("OSPB", "Orquestra Sinfônica", r"\bOSPB\b|ORQUESTRA\s+SINFONICA", PROVISORIA),
     Grupo("GPC", "Polícia Civil", r"\bGPC\b|GRUPO\s+(?:OCUPACIONAL\s+)?(?:D[AE]\s+)?POLICIA\s+CIVIL", PROVISORIA),
     Grupo("SEI", "Informática", r"\bSEI\b|GRUPO\s+(?:DE\s+)?INFORMATICA", PROVISORIA),
@@ -86,12 +87,26 @@ GRUPOS = (
     Grupo("ACI", "Auditoria e Controle Interno", r"\bACI\b|AUDITORIA\s+E\s+CONTROLE\s+INTERNO", PROVISORIA),
     Grupo("PPGG", "PPGG", r"\bPPGG\b|POLITICAS\s+PUBLICAS\s+E\s+GESTAO", PROVISORIA,
           "O documento oficial lista a sigla sem a denominação."),
+    # INT: incluído por regra da GEDIV; denominação e expressões ainda não confirmadas. Só a sigla em forma
+    # inequívoca de grupo é reconhecida ("GRUPO INT", "INT-1234"), nunca "INT" solto no texto.
+    Grupo("INT", "INT (denominação a confirmar)", r"GRUPO\s+(?:OCUPACIONAL\s+)?INT\b|\bINT\s*-\s*\d{3,4}\b", PROVISORIA,
+          "Expressões a confirmar pela GEDIV."),
 )
 GRUPO_POR_CODIGO = {g.codigo: g for g in GRUPOS}
-_ORDEM_AVALIACAO = ("AST", "TEC-ADM", "GAJ", "FAP", "SAUDE", "SFT", "GPC", "OSPB", "ACI", "DPS", "PPGG", "ANS",
-                    "ESPECIAL", "SEI", "SAT", "MAG")
+CODIGOS_GRUPOS = ("MAG", "SSA", "GAJ", "FAP", "AST", "ANS", "ESP", "DPS", "SFT", "OSPB", "GPC", "SEI", "SAT", "ACI",
+                  "PPGG", "INT")
+_ORDEM_AVALIACAO = ("AST", "GAJ", "FAP", "SSA", "SFT", "GPC", "OSPB", "ACI", "DPS", "PPGG", "ANS",
+                    "ESP", "SEI", "SAT", "INT", "MAG")
 GRUPOS_AVALIACAO = tuple(GRUPO_POR_CODIGO[c] for c in _ORDEM_AVALIACAO)
-assert len(GRUPOS) == len(GRUPOS_AVALIACAO) == 16
+assert tuple(g.codigo for g in GRUPOS) == CODIGOS_GRUPOS
+assert len(GRUPOS) == len(GRUPOS_AVALIACAO) == len(set(_ORDEM_AVALIACAO)) == 16
+
+# Expressões vistas em resenhas reais que NÃO têm grupo homologado: o ato fica sem grupo, com a expressão
+# literal guardada e uma pendência — nunca é atribuído por aproximação a um dos 16 grupos.
+EXPRESSOES_SEM_GRUPO = (
+    ("TEC. ADM", r"\bTEC\.?\s*ADM\b", "expressão 'TEC. ADM' sem grupo homologado: a GEDIV precisa decidir se corresponde a AST"),
+    ("STF", r"\bSTF\b", "sigla 'STF' sem grupo homologado: a equivalência com SFT não está comprovada"),
+)
 
 
 @dataclass(frozen=True)
@@ -139,8 +154,21 @@ OUTRAS = {"REPUBLICADO_POR_INCORRECAO": "Republicado por incorreção", "PORTARI
           "TEMA_FORA_DOS_EIXOS": "Tema GEDIV fora dos dois eixos"}
 
 
+def expressao_sem_grupo(preambulo_normalizado: str) -> tuple[str, str] | None:
+    """(expressão literal, pendência) quando o preâmbulo usa uma expressão de grupo sem homologação."""
+    for _rotulo, padrao, pendencia in EXPRESSOES_SEM_GRUPO:
+        achado = re.search(padrao, preambulo_normalizado)
+        if achado:
+            return achado.group(0), pendencia
+    return None
+
+
 def identificar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None]:
-    """Código do grupo e a expressão literal que o demonstra. Sem expressão reconhecida: (None, None)."""
+    """Código do grupo e a expressão literal que o demonstra. Sem expressão reconhecida: (None, None).
+    Expressão sem grupo homologado (TEC. ADM, STF) tem precedência: devolve (None, expressão)."""
+    sem_grupo = expressao_sem_grupo(preambulo_normalizado)
+    if sem_grupo:
+        return None, sem_grupo[0]
     for grupo in GRUPOS_AVALIACAO:
         achado = re.search(grupo.padrao, preambulo_normalizado)
         if achado:
@@ -168,6 +196,7 @@ def como_dicionario() -> dict:
         "modalidades": [{"codigo": c, "nome": n} for c, n in MODALIDADES.items()],
         "condicoes": [{"codigo": c, "nome": n} for c, n in CONDICOES.items()],
         "grupos": [{"codigo": g.codigo, "nome": g.nome, "estado": g.estado, "observacao": g.observacao} for g in GRUPOS],
+        "expressoes_sem_grupo": [{"expressao": r, "pendencia": p} for r, _padrao, p in EXPRESSOES_SEM_GRUPO],
         "subcategorias": [{"codigo": s.codigo, "nome": s.nome} for s in SUBCATEGORIAS],
         "alteracoes": [{"codigo": c, "nome": n} for c, n in ALTERACOES.items()],
         "outras": [{"codigo": c, "nome": n} for c, n in OUTRAS.items()],

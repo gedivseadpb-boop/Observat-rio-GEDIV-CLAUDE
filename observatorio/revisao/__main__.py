@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — revisão pela linha de comando (a revisão normal é feita no painel web).
+"""Painel Diário Oficial | GEDIV — revisão pela linha de comando (a revisão normal é feita no painel web).
 
     python -m observatorio.revisao fila                                  # atos com decisões pendentes
     python -m observatorio.revisao ato ID --decisao CONFERIR --responsavel "Nome" \\

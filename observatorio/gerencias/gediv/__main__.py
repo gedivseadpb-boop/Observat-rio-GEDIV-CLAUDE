@@ -1,4 +1,4 @@
-"""Painel de Publicações DOE-PB GEDIV — classificação das edições lidas.
+"""Painel Diário Oficial | GEDIV — classificação das edições lidas.
 
     python -m observatorio.gerencias.gediv classificar            # classifica o que ainda não foi classificado
     python -m observatorio.gerencias.gediv classificar --refazer  # reclassifica tudo, preservando o que já foi revisado

@@ -76,7 +76,7 @@ class TesteFluxoCompleto(unittest.TestCase):
         self.assertEqual(dados["indicadores"], {"processos": 45, "resenhas": 10, "decisoes": 45, "deferidos": 38, "indeferidos": 7,
                                                 "refeitos": 1, "sem_efeito": 1})
         self.assertEqual((dados["apoio"]["decisoes_pendentes"], dados["linhas"]), (11, []))
-        self.assertEqual({g["grupo"] for g in dados["series"]["por_grupo"]}, {"MAG", "SAUDE", "GAJ", "FAP", "AST", "TEC-ADM"})
+        self.assertEqual({g["grupo"] for g in dados["series"]["por_grupo"]}, {"MAG", "SSA", "GAJ", "FAP", "AST", "NAO_INFORMADO"})
         pedido = urllib.request.Request(f"http://127.0.0.1:{servidor.server_address[1]}/api/pdf/" +
                                         self.banco().con.execute("SELECT sha256 FROM arquivo").fetchone()[0],
                                         headers={"Authorization": "Bearer credencial-de-teste-0123456789"})
