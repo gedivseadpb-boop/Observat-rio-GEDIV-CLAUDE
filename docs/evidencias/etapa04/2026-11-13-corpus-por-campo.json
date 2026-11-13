@@ -1,0 +1,362 @@
+{
+  "desenvolvimento": {
+    "casos": [
+      {
+        "caso": "2026-11-07 579/2026",
+        "linhas_esperadas": 20,
+        "linhas_encontradas": 20,
+        "linhas_inteiramente_corretas": 20,
+        "por_campo": {
+          "processo": {
+            "acertos": 20,
+            "total": 20
+          },
+          "matricula": {
+            "acertos": 20,
+            "total": 20
+          },
+          "servidor": {
+            "acertos": 20,
+            "total": 20
+          },
+          "cargo": {
+            "acertos": 20,
+            "total": 20
+          },
+          "evolucao_anterior": {
+            "acertos": 20,
+            "total": 20
+          },
+          "evolucao_posterior": {
+            "acertos": 20,
+            "total": 20
+          }
+        }
+      },
+      {
+        "caso": "2026-11-07 575/2026",
+        "linhas_esperadas": 16,
+        "linhas_encontradas": 16,
+        "linhas_inteiramente_corretas": 16,
+        "por_campo": {
+          "processo": {
+            "acertos": 16,
+            "total": 16
+          },
+          "matricula": {
+            "acertos": 16,
+            "total": 16
+          },
+          "servidor": {
+            "acertos": 16,
+            "total": 16
+          },
+          "cargo": {
+            "acertos": 16,
+            "total": 16
+          },
+          "evolucao_anterior": {
+            "acertos": 16,
+            "total": 16
+          },
+          "evolucao_posterior": {
+            "acertos": 16,
+            "total": 16
+          }
+        }
+      },
+      {
+        "caso": "2026-11-11 576/2026",
+        "linhas_esperadas": 1,
+        "linhas_encontradas": 1,
+        "linhas_inteiramente_corretas": 1,
+        "por_campo": {
+          "processo": {
+            "acertos": 1,
+            "total": 1
+          },
+          "matricula": {
+            "acertos": 1,
+            "total": 1
+          },
+          "servidor": {
+            "acertos": 1,
+            "total": 1
+          },
+          "cargo": {
+            "acertos": 1,
+            "total": 1
+          },
+          "evolucao_anterior": {
+            "acertos": 1,
+            "total": 1
+          },
+          "evolucao_posterior": {
+            "acertos": 1,
+            "total": 1
+          }
+        }
+      },
+      {
+        "caso": "2026-11-05 564/2026",
+        "linhas_esperadas": 21,
+        "linhas_encontradas": 21,
+        "linhas_inteiramente_corretas": 21,
+        "por_campo": {
+          "processo": {
+            "acertos": 21,
+            "total": 21
+          },
+          "matricula": {
+            "acertos": 21,
+            "total": 21
+          },
+          "servidor": {
+            "acertos": 21,
+            "total": 21
+          },
+          "cargo": {
+            "acertos": 21,
+            "total": 21
+          },
+          "evolucao_anterior": {
+            "acertos": 21,
+            "total": 21
+          },
+          "evolucao_posterior": {
+            "acertos": 21,
+            "total": 21
+          }
+        }
+      },
+      {
+        "caso": "2026-11-06 549/2026",
+        "linhas_esperadas": 1,
+        "linhas_encontradas": 1,
+        "linhas_inteiramente_corretas": 1,
+        "por_campo": {
+          "processo": {
+            "acertos": 1,
+            "total": 1
+          },
+          "matricula": {
+            "acertos": 1,
+            "total": 1
+          },
+          "servidor": {
+            "acertos": 1,
+            "total": 1
+          },
+          "cargo": {
+            "acertos": 1,
+            "total": 1
+          },
+          "evolucao_anterior": {
+            "acertos": 0,
+            "total": 0
+          },
+          "evolucao_posterior": {
+            "acertos": 0,
+            "total": 0
+          }
+        }
+      },
+      {
+        "caso": "2026-11-12 531/2026",
+        "linhas_esperadas": 4,
+        "linhas_encontradas": 4,
+        "linhas_inteiramente_corretas": 4,
+        "por_campo": {
+          "processo": {
+            "acertos": 4,
+            "total": 4
+          },
+          "matricula": {
+            "acertos": 4,
+            "total": 4
+          },
+          "servidor": {
+            "acertos": 4,
+            "total": 4
+          },
+          "cargo": {
+            "acertos": 4,
+            "total": 4
+          },
+          "evolucao_anterior": {
+            "acertos": 0,
+            "total": 0
+          },
+          "evolucao_posterior": {
+            "acertos": 0,
+            "total": 0
+          }
+        }
+      }
+    ],
+    "total": {
+      "linhas_esperadas": 63,
+      "linhas_encontradas": 63,
+      "linhas_inteiramente_corretas": 63,
+      "por_campo": {
+        "processo": {
+          "acertos": 63,
+          "total": 63
+        },
+        "matricula": {
+          "acertos": 63,
+          "total": 63
+        },
+        "servidor": {
+          "acertos": 63,
+          "total": 63
+        },
+        "cargo": {
+          "acertos": 63,
+          "total": 63
+        },
+        "evolucao_anterior": {
+          "acertos": 58,
+          "total": 58
+        },
+        "evolucao_posterior": {
+          "acertos": 58,
+          "total": 58
+        }
+      },
+      "precisao_todos_os_campos": 100.0
+    }
+  },
+  "validacao_cega": {
+    "casos": [
+      {
+        "caso": "2026-11-07 580/2026",
+        "linhas_esperadas": 22,
+        "linhas_encontradas": 22,
+        "linhas_inteiramente_corretas": 22,
+        "por_campo": {
+          "processo": {
+            "acertos": 22,
+            "total": 22
+          },
+          "matricula": {
+            "acertos": 22,
+            "total": 22
+          },
+          "servidor": {
+            "acertos": 22,
+            "total": 22
+          },
+          "cargo": {
+            "acertos": 22,
+            "total": 22
+          },
+          "evolucao_anterior": {
+            "acertos": 22,
+            "total": 22
+          },
+          "evolucao_posterior": {
+            "acertos": 22,
+            "total": 22
+          }
+        }
+      },
+      {
+        "caso": "2026-11-07 550/2026",
+        "linhas_esperadas": 9,
+        "linhas_encontradas": 9,
+        "linhas_inteiramente_corretas": 9,
+        "por_campo": {
+          "processo": {
+            "acertos": 9,
+            "total": 9
+          },
+          "matricula": {
+            "acertos": 9,
+            "total": 9
+          },
+          "servidor": {
+            "acertos": 9,
+            "total": 9
+          },
+          "cargo": {
+            "acertos": 9,
+            "total": 9
+          },
+          "evolucao_anterior": {
+            "acertos": 0,
+            "total": 0
+          },
+          "evolucao_posterior": {
+            "acertos": 0,
+            "total": 0
+          }
+        }
+      },
+      {
+        "caso": "2026-11-11 584/2026",
+        "linhas_esperadas": 5,
+        "linhas_encontradas": 5,
+        "linhas_inteiramente_corretas": 5,
+        "por_campo": {
+          "processo": {
+            "acertos": 5,
+            "total": 5
+          },
+          "matricula": {
+            "acertos": 5,
+            "total": 5
+          },
+          "servidor": {
+            "acertos": 5,
+            "total": 5
+          },
+          "cargo": {
+            "acertos": 5,
+            "total": 5
+          },
+          "evolucao_anterior": {
+            "acertos": 5,
+            "total": 5
+          },
+          "evolucao_posterior": {
+            "acertos": 5,
+            "total": 5
+          }
+        }
+      }
+    ],
+    "total": {
+      "linhas_esperadas": 36,
+      "linhas_encontradas": 36,
+      "linhas_inteiramente_corretas": 36,
+      "por_campo": {
+        "processo": {
+          "acertos": 36,
+          "total": 36
+        },
+        "matricula": {
+          "acertos": 36,
+          "total": 36
+        },
+        "servidor": {
+          "acertos": 36,
+          "total": 36
+        },
+        "cargo": {
+          "acertos": 36,
+          "total": 36
+        },
+        "evolucao_anterior": {
+          "acertos": 27,
+          "total": 27
+        },
+        "evolucao_posterior": {
+          "acertos": 27,
+          "total": 27
+        }
+      },
+      "precisao_todos_os_campos": 100.0
+    }
+  }
+}

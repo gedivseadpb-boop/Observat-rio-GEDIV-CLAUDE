@@ -30,9 +30,11 @@ from pathlib import Path
 
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
+from . import tabela_ocr
 from .pagina import Palavra, identificar_edicao, ler_pagina
 
-VERSAO = "0.4"           # 0.4: tolerância horizontal 1,5 pt entre letras da mesma palavra; cache liberado por página
+VERSAO = "0.6"           # 0.4: cache liberado por página; 0.5: OCR de tabela pela grade vetorial;
+                         # 0.6: tolerância proporcional ao corpo da letra; leitura de caracteres sobrepostos
 MIN_CARACTERES = 20       # abaixo disso a página é tratada como sem texto nativo
 RESOLUCAO_OCR = 300       # pontos por polegada
 RESOLUCAO_OCR_TRECHO = 400  # trechos com fonte ilegível costumam ser tabelas em corpo 4: mais resolução
@@ -40,11 +42,17 @@ MIN_SINAIS_ILEGIVEIS = 10   # sinais "(cid:N)" num bloco para justificar o OCR d
 CONFIANCA_BOA, CONFIANCA_MINIMA = 75.0, 50.0
 FRACAO_IMAGEM_MISTA = 0.25  # imagens cobrindo esta fração da página, junto com texto nativo, indicam página mista
 _CORROMPIDO = re.compile(r"\(cid:\d+\)|�")
-# Distância horizontal máxima (pt) entre letras de uma mesma palavra. O padrão do pdfplumber (3 pt) cola
-# palavras do DOE cujo espaço é estreito ("LICENÇAPARATRATAR", DOE 04/11/2026, p. 3). Medido em 225 páginas
-# de 5 edições oficiais (12/11/2026): com 1,5 pt, 10 páginas ficam mais próximas da leitura independente
-# (pypdfium2) e nenhuma piora; letras de texto justificado que se separam são reunidas na classificação.
-TOLERANCIA_X = 1.5
+# Distância horizontal máxima entre letras de uma mesma palavra, PROPORCIONAL ao corpo da letra. Uma tolerância
+# fixa em pontos não serve às tabelas do DOE, que usam corpos de 4 a 8 pt: com 3 pt (padrão do pdfplumber) colava
+# "LICENÇAPARATRATAR" (04/11/2026); com 1,5 pt ainda colava nomes em tabelas de corpo 4,3 pt (vão de 0,87 pt entre
+# palavras, 05/11/2026). Medido em 513 páginas de 12 edições oficiais (12/11/2026): com 0,15 do corpo, 17 páginas
+# ficam mais próximas da leitura independente (pypdfium2) que com 1,5 pt, e nenhuma piora.
+TOLERANCIA_X_PROPORCIONAL = 0.15
+# Caracteres de fontes diferentes desenhados no MESMO lugar (correção impressa por cima do texto original, DOE
+# 05/11/2026, resenha 564: camada de texto "A", impresso visível "D" em fonte sem mapeamento). A palavra é relida por
+# OCR do próprio recorte, que devolve o que está visível na publicação.
+SOBREPOSICAO_MAX_PT = 0.6
+RESOLUCAO_OCR_PALAVRA = 400
 
 
 @functools.lru_cache(maxsize=1)
@@ -120,13 +128,23 @@ def _reler_trechos_ilegiveis(numero: int, pagina, brutas: list[dict]) -> dict | 
     if not blocos:
         return None
     dentro = lambda w, b: b[0] <= (w["x0"] + w["x1"]) / 2 <= b[2] and b[1] <= (w["top"] + w["bottom"]) / 2 <= b[3]
-    palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas
-                if not any(dentro(w, b) for b in blocos) and not _CORROMPIDO.search(w["text"])]
-    confiancas: list[float] = []
+    lidas_por_bloco, confiancas, areas = [], [], []
     for b in blocos:
-        lidas, conf = _ocr_bruto(pagina.crop(b), RESOLUCAO_OCR_TRECHO, (b[0], b[1]))
-        palavras += lidas
+        centro = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+        if any(a[0] <= centro[0] <= a[2] and a[1] <= centro[1] <= a[3] for a in areas):
+            continue                                     # trecho já relido junto com a tabela a que pertence
+        # Tabela com grade vetorial: OCR coluna a coluna, célula por célula (tabela_ocr). Sem grade: o bloco inteiro.
+        tabela = tabela_ocr.ler_tabela(pagina, b, brutas, lambda t: bool(_CORROMPIDO.search(t)))
+        if tabela:
+            lidas, conf, area = tabela
+        else:
+            (lidas, conf), area = _ocr_bruto(pagina.crop(b), RESOLUCAO_OCR_TRECHO, (b[0], b[1])), b
+        lidas_por_bloco += lidas
         confiancas += conf
+        areas.append(area)
+    palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas
+                if not any(dentro(w, a) for a in areas) and not _CORROMPIDO.search(w["text"])]
+    palavras += lidas_por_bloco
     if not confiancas:
         return None
     confianca = round(sum(confiancas) / len(confiancas), 1)
@@ -157,16 +175,41 @@ def _classificar_ocr(numero, palavras, confianca, largura) -> dict:
             "palavras": len(palavras), "qualidade": qualidade, "confianca": confianca}
 
 
+def _ler_sobreposicoes(pagina, brutas: list[dict]) -> int:
+    """Relê por OCR as palavras em que dois caracteres diferentes ocupam a mesma posição e um deles está em fonte
+    sem mapeamento. Altera `brutas` no lugar; devolve quantas palavras foram relidas."""
+    import pytesseract
+    relidas = 0
+    for w in brutas:
+        if not _CORROMPIDO.search(w["text"]):
+            continue
+        caracteres = sorted((c for c in pagina.chars if w["x0"] - 0.5 <= c["x0"] <= w["x1"] and w["top"] - 2 <= c["top"] <= w["bottom"]),
+                            key=lambda c: c["x0"])
+        if not any(b["x0"] - a["x0"] < SOBREPOSICAO_MAX_PT and a["text"] != b["text"] and a["fontname"] != b["fontname"]
+                   for a, b in zip(caracteres, caracteres[1:])):
+            continue
+        caixa = (max(0.0, w["x0"] - 1.5), max(0.0, w["top"] - 1.5), min(float(pagina.width), w["x1"] + 1.5),
+                 min(float(pagina.height), w["bottom"] + 1.5))
+        imagem = pagina.crop(caixa).to_image(resolution=RESOLUCAO_OCR_PALAVRA).original
+        lido = pytesseract.image_to_string(imagem, lang="por", config=f"--psm {10 if len(_CORROMPIDO.sub('x', w['text'])) <= 2 else 7}").strip()
+        if lido and not _CORROMPIDO.search(lido):
+            w["text"] = lido
+            relidas += 1
+    return relidas
+
+
 def _ler_uma_pagina(numero: int, pagina) -> dict:
     largura = float(pagina.width)
-    brutas = pagina.extract_words(x_tolerance=TOLERANCIA_X)
+    brutas = pagina.extract_words(x_tolerance_ratio=TOLERANCIA_X_PROPORCIONAL)
+    sobrepostas = _ler_sobreposicoes(pagina, brutas) if ocr_disponivel()[0] else 0
     palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas]
     texto, colunas = ler_pagina(palavras, largura)
     base = {"numero": numero, "confianca": None}
     if len(re.sub(r"\s", "", texto)) >= MIN_CARACTERES:
         corrompidos = len(_CORROMPIDO.findall(texto))
         qualidade = "INCONSISTENTE" if corrompidos > max(3, 0.02 * len(palavras)) or corrompidos >= MIN_SINAIS_ILEGIVEIS else "OK"
-        nativo = {**base, "metodo": "TEXTO", "colunas": colunas, "texto": texto, "palavras": len(palavras), "qualidade": qualidade}
+        nativo = {**base, "metodo": "TEXTO+OCR" if sobrepostas else "TEXTO", "colunas": colunas, "texto": texto,
+                  "palavras": len(palavras), "qualidade": qualidade}
         if corrompidos and ocr_disponivel()[0]:
             relida = _reler_trechos_ilegiveis(numero, pagina, brutas)
             if relida:

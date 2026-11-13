@@ -1,0 +1,643 @@
+{
+ "versao": "1",
+ "o_que_e": "Corpus de PDFs DIFÍCEIS do DOE-PB (Etapa 04). Público: identidade dos arquivos, páginas, dificuldades e o esperado SEM dados pessoais. Os valores por campo (processo, matrícula, nome, cargo) ficam num arquivo PRIVADO fora do repositório, usado por `python -m observatorio.operacao corpus`.",
+ "conjuntos": {
+  "desenvolvimento": "casos usados para desenvolver as correções (a precisão neles não é independente)",
+  "validacao_cega": "casos medidos ANTES de serem olhados no desenvolvimento; a primeira medição é a estimativa honesta de generalização"
+ },
+ "pagina_impressa": "número impresso no cabeçalho corrido da página; em todas as páginas do corpus coincide com o índice do PDF",
+ "casos": [
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-07",
+   "numero_edicao": "18708",
+   "arquivo": "diario-oficial-07-11-2026-portal.pdf",
+   "sha256": "8bac8dad7d7e18f9fd2f1848c45ad1b6b8ac07cc05de0a79a2d24496cffb9fd1",
+   "bytes": 2449072,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-07-11-2026-portal.pdf",
+   "resenha": "579/2026",
+   "pagina_pdf": 7,
+   "pagina_impressa": 7,
+   "dificuldades": [
+    "tabela inteira em fonte sem mapeamento de caracteres (cid)",
+    "grade vetorial com linhas grossas: OCR do bloco devolvia só 2 de 6 colunas",
+    "número de documento com hífen (ofício) repetido em todas as linhas",
+    "nível no formato 'NÍVEL n'"
+   ],
+   "esperado_publico": {
+    "linhas": 20,
+    "evolucao_por_linha": [
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 4",
+      "NIVEL 5"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 4",
+      "NIVEL 5"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 1",
+      "NIVEL 2"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-07",
+   "numero_edicao": "18708",
+   "arquivo": "diario-oficial-07-11-2026-portal.pdf",
+   "sha256": "8bac8dad7d7e18f9fd2f1848c45ad1b6b8ac07cc05de0a79a2d24496cffb9fd1",
+   "bytes": 2449072,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-07-11-2026-portal.pdf",
+   "resenha": "575/2026",
+   "pagina_pdf": 6,
+   "pagina_impressa": 6,
+   "dificuldades": [
+    "tabela em texto nativo de corpo pequeno (palavras do nome coladas com tolerância fixa)",
+    "salto de nível II → V publicado (mantido)"
+   ],
+   "esperado_publico": {
+    "linhas": 16,
+    "evolucao_por_linha": [
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "II",
+      "III"
+     ],
+     [
+      "II",
+      "III"
+     ],
+     [
+      "IV",
+      "V"
+     ],
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "IV",
+      "V"
+     ],
+     [
+      "II",
+      "V"
+     ],
+     [
+      "IV",
+      "V"
+     ],
+     [
+      "IV",
+      "V"
+     ],
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "II",
+      "III"
+     ],
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "II",
+      "III"
+     ],
+     [
+      "I",
+      "II"
+     ],
+     [
+      "IV",
+      "V"
+     ],
+     [
+      "II",
+      "III"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-11",
+   "numero_edicao": "18710",
+   "arquivo": "diario-oficial-11-11-2026-portal.pdf",
+   "sha256": "15dbd30e8c786627bc15fbbf8995eeaf67fb006c1aaa0fa9542ad1aae3b7ad80",
+   "bytes": 3221427,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-11-11-2026-portal.pdf",
+   "resenha": "576/2026",
+   "pagina_pdf": "5-6",
+   "pagina_impressa": "5-6",
+   "dificuldades": [
+    "cabeçalho e preâmbulo no pé da última coluna da p. 5; tabela no topo da p. 6",
+    "nome e cargo quebrados em duas linhas da célula"
+   ],
+   "esperado_publico": {
+    "linhas": 1,
+    "evolucao_por_linha": [
+     [
+      "II",
+      "III"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-05",
+   "numero_edicao": "18706",
+   "arquivo": "diario-oficial-05-11-2026-portal.pdf",
+   "sha256": "956fdb01bdf6ff5edbeed314669ce294821c02c19797f201f61aa4421c32c448",
+   "bytes": 1598598,
+   "paginas_do_pdf": 56,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-05-11-2026-portal.pdf",
+   "resenha": "564/2026",
+   "pagina_pdf": 5,
+   "pagina_impressa": 5,
+   "dificuldades": [
+    "caractere sobreposto: camada de texto 'A' e correção impressa 'D' em fonte sem mapeamento (linha 10)",
+    "nome com palavras coladas em corpo 4,3 pt (linha 9)",
+    "saltos de classe A→C, A→D, A→E, A→F, C→E publicados (mantidos)",
+    "grupo 'TEC. ADM' sem grupo homologado"
+   ],
+   "esperado_publico": {
+    "linhas": 21,
+    "evolucao_por_linha": [
+     [
+      "C",
+      "D"
+     ],
+     [
+      "A",
+      "C"
+     ],
+     [
+      "A",
+      "F"
+     ],
+     [
+      "D",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "D",
+      "E"
+     ],
+     [
+      "C",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "D",
+      "E"
+     ],
+     [
+      "D",
+      "E"
+     ],
+     [
+      "C",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "A",
+      "C"
+     ],
+     [
+      "A",
+      "E"
+     ],
+     [
+      "A",
+      "D"
+     ],
+     [
+      "A",
+      "D"
+     ],
+     [
+      "C",
+      "D"
+     ],
+     [
+      "C",
+      "E"
+     ],
+     [
+      "A",
+      "E"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-06",
+   "numero_edicao": "18707",
+   "arquivo": "diario-oficial-06-11-2026-portal.pdf",
+   "sha256": "fe06986428d5f299ee2f3599bf6238bd4016d9bcf9103c3ac0fa589c7d59ca6f",
+   "bytes": 2883513,
+   "paginas_do_pdf": 52,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-06-11-2026-portal.pdf",
+   "resenha": "549/2026",
+   "pagina_pdf": 5,
+   "pagina_impressa": 5,
+   "dificuldades": [
+    "resenha inteira em fonte sem mapeamento; lida por OCR do trecho",
+    "ruído de OCR no cabeçalho das colunas e no preâmbulo"
+   ],
+   "esperado_publico": {
+    "linhas": 1,
+    "evolucao_por_linha": [
+     [
+      null,
+      null
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-12",
+   "numero_edicao": "18711",
+   "arquivo": "diario-oficial-12-11-2026-portal-1.pdf",
+   "sha256": "a379f837b3ed67f3b4afd5d64317fc8f98cdcf8b5ba6a9b7b79a0fd010dda9a4",
+   "bytes": 3877553,
+   "paginas_do_pdf": 56,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-12-11-2026-portal-1.pdf",
+   "resenha": "531/2026",
+   "pagina_pdf": 5,
+   "pagina_impressa": 5,
+   "dificuldades": [
+    "indeferimento sem classe/nível na tabela",
+    "numeração de resenha fora da sequência do dia"
+   ],
+   "esperado_publico": {
+    "linhas": 4,
+    "evolucao_por_linha": [
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "validacao_cega",
+   "data": "2026-11-07",
+   "numero_edicao": "18708",
+   "arquivo": "diario-oficial-07-11-2026-portal.pdf",
+   "sha256": "8bac8dad7d7e18f9fd2f1848c45ad1b6b8ac07cc05de0a79a2d24496cffb9fd1",
+   "bytes": 2449072,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-07-11-2026-portal.pdf",
+   "resenha": "580/2026",
+   "pagina_pdf": 7,
+   "pagina_impressa": 7,
+   "dificuldades": [
+    "mesmas características da 579 (validação cega)",
+    "cargos ausentes do vocabulário (Necrotomista)",
+    "OCR perde o espaço em 'NÍVEL3'"
+   ],
+   "esperado_publico": {
+    "linhas": 22,
+    "evolucao_por_linha": [
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 1",
+      "NIVEL 2"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ],
+     [
+      "NIVEL 1",
+      "NIVEL 2"
+     ],
+     [
+      "NIVEL 3",
+      "NIVEL 4"
+     ],
+     [
+      "NIVEL 2",
+      "NIVEL 3"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "validacao_cega",
+   "data": "2026-11-07",
+   "numero_edicao": "18708",
+   "arquivo": "diario-oficial-07-11-2026-portal.pdf",
+   "sha256": "8bac8dad7d7e18f9fd2f1848c45ad1b6b8ac07cc05de0a79a2d24496cffb9fd1",
+   "bytes": 2449072,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-07-11-2026-portal.pdf",
+   "resenha": "550/2026",
+   "pagina_pdf": 7,
+   "pagina_impressa": 7,
+   "dificuldades": [
+    "indeferimento, grupo MAG, tabela nativa (validação cega)"
+   ],
+   "esperado_publico": {
+    "linhas": 9,
+    "evolucao_por_linha": [
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "validacao_cega",
+   "data": "2026-11-11",
+   "numero_edicao": "18710",
+   "arquivo": "diario-oficial-11-11-2026-portal.pdf",
+   "sha256": "15dbd30e8c786627bc15fbbf8995eeaf67fb006c1aaa0fa9542ad1aae3b7ad80",
+   "bytes": 3221427,
+   "paginas_do_pdf": 44,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-11-11-2026-portal.pdf",
+   "resenha": "584/2026",
+   "pagina_pdf": 6,
+   "pagina_impressa": 6,
+   "dificuldades": [
+    "salto de nível III → VII publicado (validação cega)"
+   ],
+   "esperado_publico": {
+    "linhas": 5,
+    "evolucao_por_linha": [
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "III",
+      "VII"
+     ],
+     [
+      "III",
+      "IV"
+     ],
+     [
+      "II",
+      "III"
+     ],
+     [
+      "III",
+      "IV"
+     ]
+    ]
+   },
+   "conferencia": "visual: cada linha comparada com a imagem renderizada da página do PDF oficial (12–13/11/2026)"
+  },
+  {
+   "conjunto": "desenvolvimento",
+   "data": "2026-11-10",
+   "numero_edicao": "18709",
+   "arquivo": "diario-oficial-10-11-2026-portal.pdf",
+   "sha256": "53996ecc12e66893713d2ea53ec26adf84fcbfe01c898187bda159385a4d5c98",
+   "bytes": 1902249,
+   "paginas_do_pdf": 48,
+   "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-10-11-2026-portal.pdf",
+   "resenha": "Portaria 8/2026-DEREH",
+   "pagina_pdf": 2,
+   "pagina_impressa": 2,
+   "dificuldades": [
+    "ato 'tornado sem efeito' sem número de resenha; original publicado em 1999, fora da base",
+    "processo no formato antigo (999.999-9), igual ao de matrícula"
+   ],
+   "esperado_publico": {
+    "evento": "TORNADO_SEM_EFEITO",
+    "subcategoria": "TS-05",
+    "publicacoes_citadas": [
+     "1999-07-28"
+    ],
+    "resenhas_citadas": []
+   },
+   "conferencia": "texto do ato lido e conferido (texto nativo íntegro)"
+  }
+ ]
+}

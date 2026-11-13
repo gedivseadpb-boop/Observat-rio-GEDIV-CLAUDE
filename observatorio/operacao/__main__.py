@@ -9,6 +9,9 @@
     python -m observatorio.operacao ouro --pdfs PASTA_COM_PDFS_OFICIAIS [--manifesto docs/validacao/conjunto_ouro.json] [--saida rel.json]
         conjunto-ouro: roda o fluxo real em cada edição do manifesto (PDFs localizados pelo SHA-256) e compara com o
         resultado esperado; saída 1 em caso de regressão. Relatório sem dados pessoais.
+    python -m observatorio.operacao corpus --pdfs PASTA --esperado-privado ARQUIVO.json [--saida rel.json]
+        corpus de PDFs difíceis: precisão POR CAMPO contra o esperado conferido visualmente (arquivo PRIVADO,
+        fora do repositório); relatório só com contagens e percentuais
     python -m observatorio.operacao demonstracao --dados dados-demo
         cria uma base de DEMONSTRAÇÃO com documentos SINTÉTICOS (pessoas e processos fictícios)
 
@@ -26,7 +29,7 @@ from . import fluxo
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.operacao", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro"])
+    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro", "corpus"])
     ap.add_argument("origem", nargs="?")
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--data", type=date.fromisoformat)
@@ -35,7 +38,18 @@ def main(argv=None) -> int:
     ap.add_argument("--amostra", help="validar-real: arquivo de texto PRIVADO para a conferência humana")
     ap.add_argument("--pdfs", help="ouro: pasta com os PDFs oficiais (fora do repositório)")
     ap.add_argument("--manifesto", help="ouro: manifesto do conjunto-ouro")
+    ap.add_argument("--esperado-privado", help="corpus: arquivo PRIVADO com os valores esperados por campo")
     a = ap.parse_args(argv)
+    if a.comando == "corpus":
+        from . import corpus
+        if not a.pdfs or not a.esperado_privado:
+            ap.error("corpus exige --pdfs PASTA e --esperado-privado ARQUIVO")
+        resultado = corpus.executar(a.pdfs, a.esperado_privado)
+        if a.saida:
+            with open(a.saida, "w", encoding="utf-8") as destino:
+                json.dump(resultado, destino, ensure_ascii=False, indent=2)
+        print(json.dumps(resultado, ensure_ascii=False, indent=2))
+        return 0
     if a.comando == "ouro":
         from . import ouro
         if not a.pdfs:

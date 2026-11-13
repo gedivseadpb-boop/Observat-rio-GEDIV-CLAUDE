@@ -72,7 +72,8 @@ class TesteClassificador(unittest.TestCase):
         r = um(T.HORIZONTAL_GAJ)
         ato = r.atos[0]
         self.assertEqual((ato.eixo, ato.modalidade, ato.grupo, ato.condicao), (C.PROGRESSAO, C.HORIZONTAL, "GAJ", "NAO_INFORMADA"))
-        self.assertEqual(r.decisoes[0].detalhe, {"nivel_anterior": "I", "nivel_atual": "III"})
+        self.assertEqual(r.decisoes[0].detalhe, {"nivel_anterior": "I", "nivel_atual": "III",
+                                                     "observacoes": ["salto de 2 posições (I → III); mantido como publicado"]})
         self.assertEqual(r.decisoes[0].cargo, "POLICIAL PENAL")
 
     def test_resenha_com_tres_linhas_e_dois_processos_distintos(self):
@@ -82,7 +83,8 @@ class TesteClassificador(unittest.TestCase):
 
     def test_progressao_vertical_traz_classe_anterior_e_posterior(self):
         r = um(T.VERTICAL_SEM_GEDIV)
-        self.assertEqual(r.decisoes[0].detalhe, {"classe_anterior": "A", "classe_posterior": "F"})
+        self.assertEqual(r.decisoes[0].detalhe, {"classe_anterior": "A", "classe_posterior": "F",
+                                                     "observacoes": ["salto de 5 posições (A → F); mantido como publicado"]})
         # "TEC. ADM" não tem grupo homologado: sem grupo, expressão guardada e pendência (decisão da GEDIV).
         self.assertEqual((r.atos[0].modalidade, r.atos[0].grupo, r.atos[0].grupo_expressao), (C.VERTICAL, None, "TEC. ADM"))
         self.assertTrue(any("TEC. ADM" in p and "AST" in p for p in r.atos[0].pendencias))
@@ -224,7 +226,8 @@ class TesteFormatosVistosEmTextoReal(unittest.TestCase):
     def test_cabecalho_de_pagina_colado_ao_fim_da_linha_nao_entra_no_registro(self):
         d = self.vertical("SAD-PSE-2026/90024 900024-5 PESSOA FICTICIA TECNICO ADMINISTRATIVO A EDiário Ofi cial João Pessoa - Sábado, 10 de Outubro de 2026 3").decisoes[0]
         self.assertEqual((d.servidor, d.cargo, d.detalhe), ("PESSOA FICTICIA", "TECNICO ADMINISTRATIVO",
-                                                            {"classe_anterior": "A", "classe_posterior": "E"}))
+                                                            {"classe_anterior": "A", "classe_posterior": "E",
+                                                             "observacoes": ["salto de 4 posições (A → E); mantido como publicado"]}))
 
 
 class TesteAchadosDoPdfOficial(unittest.TestCase):

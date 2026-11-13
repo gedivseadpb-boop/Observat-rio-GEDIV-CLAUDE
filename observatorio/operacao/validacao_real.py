@@ -100,7 +100,8 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
                "linha_quebrada_sinalizada": sum("linha_quebrada" in json.loads(d["detalhe"] or "{}") for d in decisoes)},
             "processos_repetidos_no_mesmo_arquivo": len(decisoes) - len({(d["ato_id"], d["processo"]) for d in decisoes}),
             "eventos_de_alteracao": [{"tipo": e["tipo"], "subtipo": e["subtipo"], "pagina": e["pagina"], "modificador": e["modificador"],
-                                      "estado": e["estado"], "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]")}
+                                      "estado": e["estado"], "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
+                                      "publicacoes_citadas": json.loads(e["publicacoes_citadas"] or "[]"), "fundamento": e["fundamento"]}
                                      for e in banco.con.execute("SELECT * FROM evento WHERE sha256 = ? ORDER BY pagina", (sha,))],
             "outras_publicacoes": [{"tipo": o["tipo"], "pagina": o["pagina"]}
                                    for o in banco.con.execute("SELECT * FROM outra_publicacao WHERE sha256 = ? ORDER BY pagina", (sha,))],

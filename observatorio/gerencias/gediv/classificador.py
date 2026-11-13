@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 from . import catalogo as C
 from . import exclusoes as EX
 
-PAT_PROCESSO = re.compile(r"\b([A-Z]{2,6})\s*-\s*(PSE|PRC|OFI)\s*-\s*(\d{4})\s*/\s*(\d{3,9})\b")
+# Número do processo/documento. O separador antes do número final é "/" (SAD-PSE-2026/12345) ou, em ofícios
+# da Polícia Civil, "-" (SDS-OFI-AAAA-NNNNN, DOE 07/11/2026): ambos aceitos e guardados COMO PUBLICADOS.
+PAT_PROCESSO = re.compile(r"\b([A-Z]{2,6})\s*-\s*(PSE|PRC|OFI)\s*-\s*(\d{4})\s*([/-])\s*(\d{3,9})\b")
 PAT_RESENHA = re.compile(r"\bRESENHA\s*(?:N[O°.]*)?\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})((?:\s*[-/]\s*[A-Z]{2,10})*)")
 PAT_PORTARIA = re.compile(r"^PORTARIA\s+N[O°.]*\s*(\d{1,5})\s*/\s*(20\d{2})")
 PAT_EXPEDIENTE = re.compile(r"EXPEDIENTE(?:\s+DO\s+DIA)?\s*:?\s*(\d{2})[-/.](\d{2})[-/.](20\d{2})")
@@ -38,6 +40,13 @@ PAT_MOBILIARIO = re.compile(r"^(?:\d{1,3}\s+)?JOAO\s+PESSOA\s*-\s*[\w-]+\s*,\s*\
 PAT_MERITO = re.compile(r"\b(IN)?DEFER(?:I(?:U|R|D[AO]S?|MOS|MENTO)|E)\b")
 PAT_MATRICULA = re.compile(r"(?<![\w/.-])(\d{3}\.\d{3}-\d|\d{5,7}-\d|\d{6,8})(?![\w/-])")
 PAT_PROGRESSAO = re.compile(r"PROGRESSAO\s+FUNCIONAL|PROGRESSAO\s+(?:HORIZONTAL|VERTICAL)")
+# Referência à publicação do ato ORIGINAL dentro de uma retificação, republicação ou "sem efeito":
+# "publicado no D.O.E. edição do dia 28/07/1999" (DOE 10/11/2026, Portaria 008/2026-DEREH).
+PAT_PUBLICACAO_CITADA = re.compile(r"PUBLICAD[OA]S?\s+NO\s+D\.?\s*O\.?\s*E?\.?\s*(?:,\s*)?(?:EDICAO\s+)?(?:DO\s+DIA\s+|DE\s+)?"
+                                   r"(\d{2})[/.](\d{2})[/.](\d{4})")
+# Processo antigo citado nesses atos, no formato "999.999-9" — só quando precedido da palavra PROCESSO
+# (o mesmo formato é usado para matrículas).
+PAT_PROCESSO_ANTIGO = re.compile(r"PROCESSO\s+(?:N[O°.]*\s*)?(\d{2,3}\.\d{3}-\d)\b")
 PAT_REF_RESENHA = re.compile(r"RESENHA\s*(?:N[O°.]*)?\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})")
 
 _ALTERACOES = (
@@ -49,7 +58,8 @@ _ALTERACOES = (
 _CARGOS = (r"TECNIC|PROFESSOR|POLICIAL|FISCAL|AUDITOR|AGENTE|ANALISTA|AUXILIAR|ASSISTENTE|ENFERMEIR|MEDIC[OA]|"
            r"PSICOLOG|MOTORISTA|DELEGAD|ESCRIVA|PERITO|MUSICO|FARMACEUT|FISIOTERAP|FONOAUDIOLOG|NUTRICIONISTA|"
            r"ODONTOLOG|BIOQUIMIC|ATENDENTE|ENGENHEIR|ADVOGAD|CONTADOR|ADMINISTRADOR|ARQUIVISTA|BIBLIOTECARI|"
-           r"PEDAGOG|REGENTE|SUPERVISOR|ORIENTADOR|INSPETOR|VIGILANTE|DIGITADOR|PROGRAMADOR|GESTOR|ESPECIALISTA")
+           r"PEDAGOG|REGENTE|SUPERVISOR|ORIENTADOR|INSPETOR|VIGILANTE|DIGITADOR|PROGRAMADOR|GESTOR|ESPECIALISTA|"
+           r"INVESTIGADOR|PAPILOSCOPIST|COMISSARI|NECROTOMIST")
 PAT_NOME = re.compile(r"^([A-Z][A-Z .'-]{4,80}?)\s*(?=\*|\d|$|\s(?:" + _CARGOS + r"|SEC\.|SECRETARIA\b))")
 
 MAX_LINHAS_RESENHA = 600
@@ -114,6 +124,7 @@ class Evento:
     processos_citados: list[str]
     vinculo: str
     texto: str
+    publicacoes_citadas: list[str] = field(default_factory=list)   # datas (AAAA-MM-DD) de edições do DOE citadas no ato
 
 
 @dataclass
@@ -234,7 +245,7 @@ def _natureza(norm: str) -> tuple[str, str | None]:
 
 
 def _processo(achado) -> str:
-    return f"{achado.group(1)}-{achado.group(2)}-{achado.group(3)}/{achado.group(4)}"
+    return f"{achado.group(1)}-{achado.group(2)}-{achado.group(3)}{achado.group(4)}{achado.group(5)}"
 
 
 _CONECTIVOS = {"DE", "DA", "DO", "DOS", "DAS", "E"}
@@ -254,23 +265,70 @@ def _juntar_letras_espacadas(texto: str) -> str:
 PAT_MOBILIARIO_COLADO = re.compile(r"\s*DIARIO\s+OFICIAL\s+JOAO\s+PESSOA\b.*$|\s*\d*\s*JOAO\s+PESSOA\s*-\s*[\w-]+\s*,.*$")
 
 
+_CLASSES = "ABCDEF"
+_ROMANOS = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10}
+PAT_CLASSES = re.compile(r"(?:^|\s)([A-Z])\s+([A-Z])$")
+PAT_CLASSES_COLADAS = re.compile(r"\s([A-Z])([A-Z])$")
+PAT_NIVEIS_ROMANOS = re.compile(r"(?:^|\s)([IVX]{1,4})\s+([IVX]{1,4})$")
+PAT_NIVEIS_NUMERADOS = re.compile(r"(?:^|\s)(NIVEL\s*\d{1,2})\s+(NIVEL\s*\d{1,2})$")
+
+
+def _posicao(valor: str, ordem) -> int | None:
+    """Posição ordinal do valor publicado: letra na sequência A–F, algarismo romano ou "NÍVEL n"."""
+    if isinstance(ordem, str):
+        return ordem.find(valor) + 1 or None
+    numero = re.search(r"\d+", valor)
+    return int(numero.group(0)) if numero else ordem.get(valor)
+
+
+def _observar_evolucao(anterior: str, posterior: str, ordem) -> list[str]:
+    """Observações sobre a evolução PUBLICADA. Nunca altera o valor: salto (A→E), regressão ou valor fora da
+    faixa ficam registrados como foram lidos, para conferência."""
+    a, p = _posicao(anterior, ordem), _posicao(posterior, ordem)
+    if a is None or p is None:
+        return [f"valor fora da faixa esperada ({anterior} → {posterior}); mantido como publicado"]
+    if p <= a:
+        return [f"evolução sem avanço ({anterior} → {posterior}); mantida como publicada, conferir no PDF"]
+    if p - a > 1:
+        return [f"salto de {p - a} posições ({anterior} → {posterior}); mantido como publicado"]
+    return []
+
+
 def _evolucao(cauda: str, eixo, modalidade, subcategoria) -> tuple[str, dict]:
-    """Dados expressamente publicados no fim da linha: classe/nível (Progressão), dias e períodos (Tempo de Serviço).
-    Devolve (o que sobrou antes desses dados, detalhe). Nada é deduzido: sem padrão reconhecido, detalhe vazio."""
+    """Dados expressamente publicados no fim da linha: classe (Progressão VERTICAL, letras A–F), nível (Progressão
+    HORIZONTAL, algarismos romanos ou "NÍVEL n") e dias/períodos (Tempo de Serviço).
+    Devolve (o que sobrou antes desses dados, detalhe). Nada é deduzido nem corrigido: classe e nível ficam em
+    campos distintos, com o valor como publicado; formato trocado (nível numa vertical, classe numa horizontal),
+    salto ou regressão geram observação, nunca conversão."""
     cauda = re.sub(r"\s+", " ", re.sub(r"[$%*]+", " ", cauda)).strip()
     if eixo == C.PROGRESSAO:
+        classes = PAT_CLASSES.search(cauda)
+        niveis = PAT_NIVEIS_NUMERADOS.search(cauda) or PAT_NIVEIS_ROMANOS.search(cauda)
         if modalidade == C.VERTICAL:
-            m = re.search(r"(?:^|\s)([A-Z])\s+([A-Z])$", cauda)
-            if m:
-                return cauda[:m.start()].strip(), {"classe_anterior": m.group(1), "classe_posterior": m.group(2)}
-            m = re.search(r"\s([A-Z])([A-Z])$", cauda)
-            if m:            # as duas letras saíram coladas na leitura ("AC"): guardado como lido, a conferir
+            if classes and not (niveis and niveis.start() <= classes.start()):
+                a, p = classes.group(1), classes.group(2)
+                detalhe = {"classe_anterior": a, "classe_posterior": p}
+                observacoes = _observar_evolucao(a, p, _CLASSES)
+                return cauda[:classes.start()].strip(), {**detalhe, **({"observacoes": observacoes} if observacoes else {})}
+            m = PAT_CLASSES_COLADAS.search(cauda)
+            if m and not niveis:            # as duas letras saíram coladas na leitura ("AC"): guardado como lido, a conferir
                 return cauda[:m.start()].strip(), {"classe_anterior": m.group(1), "classe_posterior": m.group(2),
                                                    "observacao": f"classes lidas coladas: {m.group(1)}{m.group(2)}"}
+            if niveis:
+                return cauda[:niveis.start()].strip(), {"evolucao_lida": f"{niveis.group(1)} {niveis.group(2)}",
+                                                        "observacoes": ["progressão VERTICAL publicada com níveis, não classes; "
+                                                                        "não convertido, conferir no PDF"]}
         elif modalidade == C.HORIZONTAL:
-            m = re.search(r"(?:^|\s)([IVX]{1,4})\s+([IVX]{1,4})$", cauda)
-            if m:
-                return cauda[:m.start()].strip(), {"nivel_anterior": m.group(1), "nivel_atual": m.group(2)}
+            if niveis:
+                # "NÍVEL3" e "NÍVEL 3" (o OCR às vezes perde o espaço) são a mesma grafia: guardada como "NIVEL 3".
+                a, p = (re.sub(r"^NIVEL\s*", "NIVEL ", v) for v in (niveis.group(1), niveis.group(2)))
+                detalhe = {"nivel_anterior": a, "nivel_atual": p}
+                observacoes = _observar_evolucao(a, p, _ROMANOS)
+                return cauda[:niveis.start()].strip(), {**detalhe, **({"observacoes": observacoes} if observacoes else {})}
+            if classes and classes.group(1) in _CLASSES and classes.group(2) in _CLASSES:
+                return cauda[:classes.start()].strip(), {"evolucao_lida": f"{classes.group(1)} {classes.group(2)}",
+                                                         "observacoes": ["progressão HORIZONTAL publicada com classes, não níveis; "
+                                                                         "não convertido, conferir no PDF"]}
         return cauda, {}
     m = re.search(r"(\d{1,4})\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})", cauda)
     if m:
@@ -484,9 +542,10 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
 
         if natureza != C.ORIGINAL:
             citadas = sorted({f"{int(a)}/{b}" for a, b in PAT_REF_RESENHA.findall(norm)} - ({numero} if tipo == "RESENHA" and natureza != C.REPUBLICACAO else set()))
-            processos = sorted({_processo(m) for m in PAT_PROCESSO.finditer(norm)})
+            processos = sorted({_processo(m) for m in PAT_PROCESSO.finditer(norm)} | set(PAT_PROCESSO_ANTIGO.findall(norm)))
+            publicacoes = sorted({f"{a}-{m}-{d}" for d, m, a in PAT_PUBLICACAO_CITADA.findall(norm)})
             resultado.eventos.append(Evento(_id(chave_arquivo, "EVENTO", natureza, tipo, numero, pagina), ato.id, natureza, subtipo,
-                                            pagina, titulo, citadas, processos, vinculo, trecho[:2000]))
+                                            pagina, titulo, citadas, processos, vinculo, trecho[:2000], publicacoes))
             if subtipo == "POR_INCORRECAO":
                 resultado.outras.append(Outra(_id(chave_arquivo, "REPUB", numero, pagina), "REPUBLICADO_POR_INCORRECAO", pagina,
                                               titulo, vinculo, trecho[:600]))

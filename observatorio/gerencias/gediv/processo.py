@@ -12,6 +12,7 @@ from . import catalogo as C
 from .classificador import classificar
 
 GERENCIA = "GEDIV"
+INICIO_DA_BASE = "2026-01-01"     # primeira data coberta pela coleta histórica
 
 
 def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
@@ -56,6 +57,16 @@ def sugerir_vinculos(banco: Banco) -> int:
                     "AND id <> COALESCE(?, '') AND (data_publicacao IS NULL OR ? IS NULL OR data_publicacao <= ?)",
                     (GERENCIA, numero, evento["ato_id"], evento["data_publicacao"], evento["data_publicacao"])):
                 candidatos.add(ato["id"])
+        citadas = json.loads(evento["publicacoes_citadas"] or "[]")
+        if not candidatos and citadas and all(d < INICIO_DA_BASE for d in citadas) and not evento["fundamento"]:
+            # O ato original foi publicado antes do período coberto: o vínculo não é possível nesta base.
+            # Fica registrado o motivo; o evento continua pendente e fora dos indicadores.
+            with banco.con:
+                banco.con.execute("UPDATE evento SET fundamento = ? WHERE id = ?",
+                                  ("ato original publicado no DOE de " + ", ".join(f"{d[8:]}/{d[5:7]}/{d[:4]}" for d in citadas)
+                                   + f", antes do início da base ({INICIO_DA_BASE[8:]}/{INICIO_DA_BASE[5:7]}/{INICIO_DA_BASE[:4]}); "
+                                   "vínculo automático impossível", evento["id"]))
+            continue
         if len(candidatos) == 1:
             with banco.con:
                 banco.con.execute(

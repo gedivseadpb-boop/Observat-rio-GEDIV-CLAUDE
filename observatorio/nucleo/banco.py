@@ -25,7 +25,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 5
+VERSAO_ESQUEMA = 6
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -265,6 +265,11 @@ CREATE TABLE fora_escopo (
 CREATE INDEX fora_escopo_arquivo ON fora_escopo (sha256);
 """
 
+# Versão 6: datas das edições do DOE citadas por retificações, republicações e "sem efeito" (ato original).
+_ESQUEMA_V6 = """
+ALTER TABLE evento ADD COLUMN publicacoes_citadas TEXT;
+"""
+
 PENDENTES = (DESCOBERTA, FALHA_DOWNLOAD, INVALIDA)
 
 
@@ -282,7 +287,8 @@ class Banco:
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
         if versao > VERSAO_ESQUEMA:
             raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
-        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5)):
+        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5),
+                               (6, _ESQUEMA_V6)):
             if versao < numero:
                 with self.con:
                     self.con.executescript(script)
@@ -581,9 +587,9 @@ class Banco:
                     continue
                 self.con.execute(
                     "INSERT INTO evento (id, gerencia, sha256, ato_id, tipo, subtipo, pagina, data_publicacao, modificador, "
-                    "resenhas_citadas, processos_citados, vinculo, texto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "resenhas_citadas, processos_citados, vinculo, texto, publicacoes_citadas) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (e.id, gerencia, sha256, e.ato_id, e.tipo, e.subtipo, e.pagina, data, e.modificador, j(e.resenhas_citadas),
-                     j(e.processos_citados), e.vinculo, e.texto))
+                     j(e.processos_citados), e.vinculo, e.texto, j(getattr(e, "publicacoes_citadas", []))))
             for o in resultado.outras:
                 self.con.execute(
                     "INSERT OR REPLACE INTO outra_publicacao (id, gerencia, sha256, tipo, pagina, data_publicacao, titulo, vinculo, trecho) "
