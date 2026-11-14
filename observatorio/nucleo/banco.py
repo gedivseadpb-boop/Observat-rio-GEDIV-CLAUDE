@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -277,22 +278,91 @@ def agora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+_MIGRACOES = ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5), (6, _ESQUEMA_V6))
+_CRIAR = re.compile(r"^CREATE\s+(TABLE|INDEX)\s+(\w+)", re.I)
+_ADICIONAR = re.compile(r"^ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)", re.I)
+
+
+def _instrucoes(script: str) -> list[str]:
+    return [i.strip() for i in script.split(";") if i.strip()]
+
+
+def _ja_existe(con: sqlite3.Connection, instrucao: str) -> bool:
+    """A estrutura que a instrução cria já está no banco? (tabela, índice ou coluna)"""
+    criar = _CRIAR.match(instrucao)
+    if criar:
+        tipo = criar.group(1).lower()
+        return con.execute("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?", (tipo, criar.group(2))).fetchone() is not None
+    adicionar = _ADICIONAR.match(instrucao)
+    if adicionar:
+        return any(c[1] == adicionar.group(2) for c in con.execute(f"PRAGMA table_info({adicionar.group(1)})"))
+    raise ValueError(f"instrução de migração sem verificação estrutural: {instrucao[:60]}")
+
+
+def estruturas_pendentes(con: sqlite3.Connection) -> dict[int, list[str]]:
+    """Por versão, as instruções cuja estrutura AINDA NÃO existe no banco — decidido pela estrutura presente,
+    não só pelo número gravado em `user_version` (bancos de desenvolvimento podem ter o mesmo número com
+    esquemas diferentes)."""
+    pendentes = {}
+    for numero, script in _MIGRACOES:
+        faltam = [i for i in _instrucoes(script) if not _ja_existe(con, i)]
+        if faltam:
+            pendentes[numero] = faltam
+    return pendentes
+
+
 class Banco:
-    def __init__(self, caminho: str | Path):
+    def __init__(self, caminho: str | Path, backup_antes_de_migrar: bool = True):
         if str(caminho) != ":memory:":
             Path(caminho).parent.mkdir(parents=True, exist_ok=True)
+        self.caminho = caminho
         self.con = sqlite3.connect(str(caminho))
         self.con.row_factory = sqlite3.Row
         self.con.execute("PRAGMA foreign_keys = ON")
+        self.backup_da_migracao: Path | None = None
+        self._migrar(backup_antes_de_migrar)
+
+    def _migrar(self, backup: bool) -> None:
+        """Leva o banco à versão VERSAO_ESQUEMA.
+
+        - Cada instrução só é executada se a estrutura (tabela, índice, coluna) ainda não existir: uma migração
+          interrompida no meio, ou um banco com o mesmo número de versão e esquema diferente, é completado sem
+          erro e sem perda.
+        - Todas as instruções pendentes e a nova versão são gravadas numa ÚNICA transação explícita (o
+          `executescript` do sqlite3 faz COMMIT antes de rodar e não permitia isso).
+        - Antes de alterar um banco existente em arquivo, é feita uma cópia íntegra (`.antes-v<N>.bak`).
+        - Banco gravado por uma versão MAIS NOVA do programa é recusado.
+        """
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
         if versao > VERSAO_ESQUEMA:
             raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
-        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5),
-                               (6, _ESQUEMA_V6)):
-            if versao < numero:
-                with self.con:
-                    self.con.executescript(script)
-                    self.con.execute(f"PRAGMA user_version = {numero}")
+        pendentes = estruturas_pendentes(self.con)
+        if not pendentes and versao == VERSAO_ESQUEMA:
+            return
+        existia = bool(self.con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone())
+        if backup and existia and str(self.caminho) != ":memory:":
+            destino = Path(f"{self.caminho}.antes-v{VERSAO_ESQUEMA}.bak")
+            copia = sqlite3.connect(str(destino))
+            try:
+                self.con.backup(copia)
+            finally:
+                copia.close()
+            self.backup_da_migracao = destino
+        nivel = self.con.isolation_level
+        self.con.isolation_level = None                       # controle manual da transação
+        try:
+            self.con.execute("BEGIN IMMEDIATE")
+            try:
+                for numero in sorted(pendentes):
+                    for instrucao in pendentes[numero]:
+                        self.con.execute(instrucao)
+                self.con.execute(f"PRAGMA user_version = {VERSAO_ESQUEMA}")
+                self.con.execute("COMMIT")
+            except BaseException:
+                self.con.execute("ROLLBACK")
+                raise
+        finally:
+            self.con.isolation_level = nivel
 
     def fechar(self) -> None:
         self.con.close()
