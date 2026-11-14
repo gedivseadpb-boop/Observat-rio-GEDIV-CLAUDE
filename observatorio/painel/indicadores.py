@@ -65,7 +65,10 @@ def _linhas(banco: Banco) -> list[dict]:
         "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
         "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
         "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
-        "a.grupo_expressao, a.subcategoria, a.pendencias FROM decisao d JOIN ato a ON a.id = d.ato_id WHERE a.gerencia = 'GEDIV' "
+        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        # Só a representação VIGENTE de cada decisão lógica (Etapa 05.3.3): cópias de outra versão do PDF, ou de uma
+        # releitura, não contam duas vezes; correspondências ambíguas ficam fora até a gerência decidir.
+        "WHERE a.gerencia = 'GEDIV' AND d.vigente = 1 "
         "ORDER BY a.data_publicacao DESC, a.pagina, d.rowid")
     linhas = []
     for l in consulta:
@@ -135,6 +138,13 @@ def _fonte(banco: Banco, cache: dict, sha: str, pagina) -> dict:
 
 
 def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> dict:
+    """Todas as consultas do painel leem o banco num mesmo momento (instantâneo), para que indicadores, séries e tabela
+    nunca misturem estados de uma reclassificação em andamento."""
+    with banco.instantaneo():
+        return _painel(banco, bruto, perfil)
+
+
+def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
     f = normalizar_filtros(bruto or {}, perfil)
     estado = "CONFERIDO" if f["escopo"] == "conferido" else "PENDENTE"
     todas = _linhas(banco)
@@ -142,21 +152,27 @@ def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> di
     originais = [l for l in dim if l["natureza"] == C.ORIGINAL and _no_periodo(l["data"], f)]
 
     # Eventos: somente vínculos VALIDADOS a atos originais do recorte; a data relevante é a do evento.
-    atos_dim = {l["ato_id"] for l in dim if l["natureza"] == C.ORIGINAL}
+    # O ato original é identificado pelo ato LÓGICO: um evento validado contra outra representação do mesmo ato
+    # (outra versão do PDF) conta para ele uma única vez.
+    logico = {a["id"]: (a["chave_logica"] or a["id"]) for a in banco.con.execute("SELECT id, chave_logica FROM ato")}
+    atos_dim = {logico.get(l["ato_id"], l["ato_id"]) for l in dim if l["natureza"] == C.ORIGINAL}
     eventos = [dict(e) for e in banco.con.execute("SELECT * FROM evento WHERE gerencia = 'GEDIV' ORDER BY data_publicacao, pagina")]
-    validos = [e for e in eventos if e["estado"] == "VALIDADO" and e["ato_original_id"] in atos_dim and _no_periodo(e["data_publicacao"], f)]
-    refeitos = {e["ato_original_id"] for e in validos if e["tipo"] in C.TIPOS_REFEITO}
-    sem_efeito = {e["ato_original_id"] for e in validos if e["tipo"] == C.SEM_EFEITO}
+    validos = [e for e in eventos if e["estado"] == "VALIDADO" and logico.get(e["ato_original_id"], e["ato_original_id"]) in atos_dim
+               and _no_periodo(e["data_publicacao"], f)]
+    refeitos_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] in C.TIPOS_REFEITO}
+    sem_efeito_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.SEM_EFEITO}
+    refeitos = {l["ato_id"] for l in dim if logico.get(l["ato_id"], l["ato_id"]) in refeitos_logicos}
+    sem_efeito = {l["ato_id"] for l in dim if logico.get(l["ato_id"], l["ato_id"]) in sem_efeito_logicos}
     conferido = f["escopo"] == "conferido"
 
     indicadores = {
         "processos": len({l["processo"] for l in originais if l["processo"]}),
-        "resenhas": len({l["ato_id"] for l in originais}),
+        "resenhas": len({logico.get(l["ato_id"], l["ato_id"]) for l in originais}),
         "decisoes": len(originais),
         "deferidos": sum(l["resultado"] == "DEFERIDO" for l in originais),
         "indeferidos": sum(l["resultado"] == "INDEFERIDO" for l in originais),
-        "refeitos": len(refeitos) if conferido else None,
-        "sem_efeito": len(sem_efeito) if conferido else None,
+        "refeitos": len(refeitos_logicos) if conferido else None,
+        "sem_efeito": len(sem_efeito_logicos) if conferido else None,
     }
 
     # Clique em um cartão: a tabela e os gráficos mostram exclusivamente o universo daquele indicador.
@@ -237,9 +253,11 @@ def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> di
             "eventos_de_alteracao": len([e for e in validos if e["tipo"] in C.TIPOS_REFEITO]) if conferido else None,
             "eventos_por_tipo": {t: sum(e["tipo"] == t for e in validos) for t in C.ALTERACOES} if conferido else None,
             "eventos_sem_vinculo": sum(e["estado"] in ("PENDENTE_VINCULACAO", "SUGERIDO") for e in eventos),
-            "decisoes_pendentes": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'PENDENTE'"),
-            "decisoes_conferidas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'CONFERIDO'"),
+            "decisoes_pendentes": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'PENDENTE' AND vigente = 1"),
+            "decisoes_conferidas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'CONFERIDO' AND vigente = 1"),
             "decisoes_rejeitadas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'REJEITADO'"),
+            "conflitos_abertos": um("SELECT COUNT(*) FROM conflito WHERE estado = 'ABERTO'"),
+            "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV"),
             "vinculo_nao_expresso_pendente": um(
                 "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id WHERE d.validacao = 'PENDENTE' AND a.vinculo <> 'EXPRESSO'"),
         },
