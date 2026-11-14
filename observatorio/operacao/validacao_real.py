@@ -25,7 +25,7 @@ from ..leitura import leitor, validacao
 from ..nucleo import pdf
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
-from ..painel import indicadores
+from ..painel import indicadores, projecao
 from . import fluxo
 
 REFERENCIAS = Path(__file__).resolve().parents[2] / "docs" / "validacao" / "referencias.json"
@@ -99,9 +99,9 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
             | {"classe_nivel_ou_dias": sum(bool(set(json.loads(d["detalhe"] or "{}")) - {"linha_quebrada"}) for d in decisoes),
                "linha_quebrada_sinalizada": sum("linha_quebrada" in json.loads(d["detalhe"] or "{}") for d in decisoes)},
             "processos_repetidos_no_mesmo_arquivo": len(decisoes) - len({(d["ato_id"], d["processo"]) for d in decisoes}),
-            "eventos_de_alteracao": [{"tipo": e["tipo"], "subtipo": e["subtipo"], "pagina": e["pagina"], "modificador": e["modificador"],
-                                      "estado": e["estado"], "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
-                                      "publicacoes_citadas": json.loads(e["publicacoes_citadas"] or "[]"), "fundamento": e["fundamento"]}
+            "eventos_de_alteracao": [projecao.projetar("evento_relatorio", {
+                                         **dict(e), "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
+                                         "publicacoes_citadas": json.loads(e["publicacoes_citadas"] or "[]")}, projecao.PUBLICO)
                                      for e in banco.con.execute("SELECT * FROM evento WHERE sha256 = ? ORDER BY pagina", (sha,))],
             "outras_publicacoes": [{"tipo": o["tipo"], "pagina": o["pagina"]}
                                    for o in banco.con.execute("SELECT * FROM outra_publicacao WHERE sha256 = ? ORDER BY pagina", (sha,))],

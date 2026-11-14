@@ -23,8 +23,9 @@ import unicodedata
 
 from ..gerencias.gediv import catalogo as C
 from ..nucleo.banco import Banco
+from . import projecao
 
-GERENCIA_PERFIL, PUBLICO = "gerencia", "publico"
+GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
 CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
 ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
            "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
@@ -215,16 +216,15 @@ def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> di
             "ato_id": l["ato_id"], "resenha": l["resenha"], "sufixo": l["sufixo"], "data": l["data"], "pagina": l["pagina"],
             "eixo": l["eixo"], "modalidade": l["modalidade"], "condicao": l["condicao"], "grupo": l["grupo"],
             "subcategoria": l["subcategoria"], "vinculo": l["vinculo"], "natureza": l["natureza"], "decisoes": 0,
-            "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"] if individual else [],
+            "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"],
             "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito,
-            **(_fonte(banco, cache, l["sha256"], l["pagina"]) if individual else
-               {"url_oficial": _fonte(banco, cache, l["sha256"], l["pagina"])["url_oficial"], "pdf_no_acervo": None})})
+            **_fonte(banco, cache, l["sha256"], l["pagina"])})
         r["decisoes"] += 1
         r["deferido"] += l["resultado"] == "DEFERIDO"
         r["indeferido"] += l["resultado"] == "INDEFERIDO"
 
     um = lambda sql: banco.con.execute(sql).fetchone()[0]
-    return {
+    resposta = {
         "meta": {
             "sistema": "Painel Diário Oficial | GEDIV", "versao_regras": C.VERSAO_REGRAS, "perfil": perfil, "escopo": f["escopo"],
             "preliminar": not conferido,
@@ -244,18 +244,17 @@ def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> di
                 "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id WHERE d.validacao = 'PENDENTE' AND a.vinculo <> 'EXPRESSO'"),
         },
         "series": series,
-        "resenhas": sorted(resenhas.values(), key=lambda r: (r["data"] or "", r["pagina"]), reverse=True),
+        "resenhas": [projecao.projetar("resenha", r, perfil)
+                     for r in sorted(resenhas.values(), key=lambda r: (r["data"] or "", r["pagina"]), reverse=True)],
         "linhas": [{**{k: v for k, v in l.items() if k not in ("sha256", "pendencias")}, **_fonte(banco, cache, l["sha256"], l["pagina"]),
                     "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito}
                    for l in recorte] if individual else [],
-        "eventos": [{k: e[k] for k in ("id", "tipo", "subtipo", "data_publicacao", "pagina", "modificador", "estado",
-                                       "ato_original_id", "ato_sugerido_id", "vinculo", "fundamento")}
-                    | {"resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
-                       "processos_citados": json.loads(e["processos_citados"] or "[]") if individual else [],
-                       "texto": e["texto"] if individual else None,
-                       **(_fonte(banco, cache, e["sha256"], e["pagina"]) if individual else {})}
+        "eventos": [projecao.projetar("evento", {**e, "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
+                                                  "processos_citados": json.loads(e["processos_citados"] or "[]"),
+                                                  **_fonte(banco, cache, e["sha256"], e["pagina"])}, perfil)
                     for e in eventos if individual or e["estado"] == "VALIDADO"],
     }
+    return {k: resposta[k] for k in projecao.CHAVES_PAINEL}
 
 
 def outras_publicacoes(banco: Banco, perfil: str = PUBLICO) -> list[dict]:
@@ -265,10 +264,7 @@ def outras_publicacoes(banco: Banco, perfil: str = PUBLICO) -> list[dict]:
     saida = []
     for o in banco.con.execute("SELECT * FROM outra_publicacao WHERE gerencia = 'GEDIV' ORDER BY data_publicacao DESC, pagina"):
         item = {"id": o["id"], "tipo": o["tipo"], "nome_tipo": C.OUTRAS.get(o["tipo"], o["tipo"]), "data": o["data_publicacao"],
-                "pagina": o["pagina"], "titulo": o["titulo"], "vinculo": o["vinculo"], "situacao": "triagem, a conferir"}
-        fonte = _fonte(banco, cache, o["sha256"], o["pagina"])
-        item["url_oficial"] = fonte["url_oficial"]
-        if perfil == GERENCIA_PERFIL:
-            item["trecho"], item["pdf_no_acervo"] = o["trecho"], fonte["pdf_no_acervo"]
-        saida.append(item)
+                "pagina": o["pagina"], "titulo": o["titulo"], "vinculo": o["vinculo"], "situacao": "triagem, a conferir",
+                "trecho": o["trecho"], **_fonte(banco, cache, o["sha256"], o["pagina"])}
+        saida.append(projecao.projetar("outra_publicacao", item, perfil))
     return saida
