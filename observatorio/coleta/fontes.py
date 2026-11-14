@@ -104,6 +104,10 @@ class AUniao:
     def url_mes(self, ano: int, mes: int) -> str:
         return f"{self.base}/servicos/doe/{self.pastas_ano.get(ano, str(ano))}/{self.MESES[mes]}"
 
+    def url_recentes(self) -> str:
+        """Listagem "Edições recentes" (12 por página, paginada por ?b_start:int=N). Estrutura conferida em 14/11/2026."""
+        return f"{self.base}/doe/edicoes-recentes"
+
     def extrair(self, html: str, url_pagina: str) -> tuple[list[Item], list[str]]:
         itens: dict[str, Item] = {}
         paginas: list[str] = []

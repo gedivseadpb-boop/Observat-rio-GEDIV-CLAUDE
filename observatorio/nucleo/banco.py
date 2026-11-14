@@ -25,12 +25,13 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 5
+VERSAO_ESQUEMA = 6
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
 FALHA_DOWNLOAD = "FALHA_DOWNLOAD"
 INVALIDA = "INVALIDA"
+QUARENTENA = "QUARENTENA"  # bytes aparentemente completos, estrutura não confirmada; retidos à parte
 
 _ESQUEMA = """
 CREATE TABLE arquivo (
@@ -265,7 +266,44 @@ CREATE TABLE fora_escopo (
 CREATE INDEX fora_escopo_arquivo ON fora_escopo (sha256);
 """
 
+# Versão 6 (Etapa 05): manifesto de cada tentativa de download, com procedência completa, e o resultado da
+# verificação estrutural do arquivo. Nenhuma linha anterior é alterada.
+_ESQUEMA_V6 = """
+CREATE TABLE verificacao_arquivo (
+    sha256        TEXT PRIMARY KEY REFERENCES arquivo(sha256),
+    paginas       INTEGER,
+    integridade   TEXT NOT NULL,
+    verificado_em TEXT NOT NULL
+);
+CREATE TABLE download (
+    id              INTEGER PRIMARY KEY,
+    publicacao_id   INTEGER NOT NULL REFERENCES publicacao(id),
+    url_pedida      TEXT NOT NULL,
+    url_final       TEXT,
+    redirecionamentos TEXT,
+    transporte      TEXT NOT NULL,
+    status_http     INTEGER,
+    tipo_conteudo   TEXT,
+    content_length  INTEGER,
+    bytes           INTEGER,
+    sha256          TEXT,
+    paginas         INTEGER,
+    integridade     TEXT,
+    resultado       TEXT NOT NULL,
+    erro            TEXT,
+    alertas         TEXT,
+    versao_coletor  TEXT NOT NULL,
+    iniciado_em     TEXT NOT NULL,
+    segundos        REAL,
+    tentativas_rede INTEGER
+);
+CREATE INDEX download_publicacao ON download (publicacao_id);
+"""
+
 PENDENTES = (DESCOBERTA, FALHA_DOWNLOAD, INVALIDA)
+_COLUNAS_DOWNLOAD = frozenset({"url_pedida", "url_final", "redirecionamentos", "transporte", "status_http", "tipo_conteudo",
+                               "content_length", "bytes", "sha256", "paginas", "integridade", "resultado", "erro", "alertas",
+                               "versao_coletor", "iniciado_em", "segundos", "tentativas_rede"})
 
 
 def agora() -> str:
@@ -282,7 +320,7 @@ class Banco:
         versao = self.con.execute("PRAGMA user_version").fetchone()[0]
         if versao > VERSAO_ESQUEMA:
             raise RuntimeError(f"esquema {versao} é mais novo que este programa ({VERSAO_ESQUEMA})")
-        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5)):
+        for numero, script in ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5), (6, _ESQUEMA_V6)):
             if versao < numero:
                 with self.con:
                     self.con.executescript(script)
@@ -377,6 +415,33 @@ class Banco:
         if anterior is None:
             return "NOVO"
         return "IGUAL" if anterior == sha256 else "ALTERADO"
+
+    def registrar_verificacao(self, sha256: str, paginas: int | None, integridade: str) -> None:
+        with self.con:
+            self.con.execute(
+                "INSERT INTO verificacao_arquivo (sha256, paginas, integridade, verificado_em) VALUES (?,?,?,?) "
+                "ON CONFLICT (sha256) DO UPDATE SET paginas = excluded.paginas, integridade = excluded.integridade, "
+                "verificado_em = excluded.verificado_em", (sha256, paginas, integridade, agora()))
+
+    def verificacao(self, sha256: str):
+        return self.con.execute("SELECT * FROM verificacao_arquivo WHERE sha256 = ?", (sha256,)).fetchone()
+
+    def registrar_download(self, publicacao_id: int, **campos) -> int:
+        """Acrescenta uma linha ao manifesto de downloads. Nunca altera linhas anteriores."""
+        desconhecidas = set(campos) - _COLUNAS_DOWNLOAD
+        if desconhecidas:
+            raise ValueError(f"colunas inexistentes no manifesto: {sorted(desconhecidas)}")
+        colunas = ["publicacao_id", *campos]
+        with self.con:
+            cursor = self.con.execute(
+                f"INSERT INTO download ({', '.join(colunas)}) VALUES ({', '.join('?' * len(colunas))})",
+                (publicacao_id, *campos.values()))
+        return cursor.lastrowid
+
+    def downloads(self, publicacao_id: int | None = None):
+        if publicacao_id is None:
+            return self.con.execute("SELECT * FROM download ORDER BY id").fetchall()
+        return self.con.execute("SELECT * FROM download WHERE publicacao_id = ? ORDER BY id", (publicacao_id,)).fetchall()
 
     def versoes(self, publicacao_id: int):
         return self.con.execute("SELECT * FROM versao WHERE publicacao_id = ? ORDER BY id", (publicacao_id,)).fetchall()

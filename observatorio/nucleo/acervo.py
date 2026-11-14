@@ -47,6 +47,17 @@ class Acervo:
             raise
         return sha, True
 
+    def guardar_quarentena(self, dados: bytes) -> str:
+        """Retém, fora do acervo, um arquivo cuja estrutura não foi confirmada. Nunca entra na leitura."""
+        sha = hashlib.sha256(dados).hexdigest()
+        destino = self.raiz.parent / "quarentena" / f"{sha}.pdf"
+        if not destino.exists():
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            temporario = destino.with_suffix(".parcial")
+            temporario.write_bytes(dados)
+            os.replace(temporario, destino)
+        return sha
+
     def ler(self, sha256: str) -> bytes:
         return self.caminho(sha256).read_bytes()
 

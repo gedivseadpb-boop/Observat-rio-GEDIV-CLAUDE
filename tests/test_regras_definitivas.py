@@ -204,7 +204,7 @@ class TesteMigracaoV5(unittest.TestCase):
             con.close()
             banco = B.Banco(caminho)
             try:
-                self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], 5)
+                self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)  # 5 até a Etapa 04
                 self.assertEqual(banco.con.execute("SELECT COUNT(*) FROM arquivo").fetchone()[0], 1)
                 self.assertEqual(banco.con.execute("SELECT COUNT(*) FROM fora_escopo").fetchone()[0], 0)
             finally:
