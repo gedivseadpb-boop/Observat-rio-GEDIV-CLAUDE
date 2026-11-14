@@ -8,6 +8,9 @@ Regras aplicadas a toda requisição:
   truncada e 5xx), com espera progressiva limitada e respeito ao Retry-After;
 - HTTP 429 e 403 não são repetidos: são recusas da fonte;
 - uma resposta com menos bytes que o Content-Length anunciado é TRUNCADO, mesmo com HTTP 200;
+- HTTP 206 (conteúdo parcial) nunca é tratado como arquivo inteiro: o coletor não pede intervalos, e uma resposta 206
+  só é aceita se o Content-Range cobrir o arquivo todo (bytes 0-N/N+1) e os bytes recebidos fecharem com ele.
+  Outros 2xx que não 200 são recusados;
 - cada falha recebe uma categoria, para que o diagnóstico não dependa de texto livre.
 
 A validação TLS é sempre a padrão do Python; não há opção para desativá-la.
@@ -15,6 +18,7 @@ A validação TLS é sempre a padrão do Python; não há opção para desativá
 from __future__ import annotations
 
 import http.client
+import re
 import socket
 import time
 import urllib.error
@@ -36,7 +40,7 @@ class ErroRede(Exception):
     @property
     def transitorio(self) -> bool:
         # HTTP 429 NÃO é repetido: é um pedido da fonte para parar. Quem decide o que fazer é o lote, que se encerra.
-        return self.categoria in {"TEMPO_ESGOTADO", "CONEXAO", "TRUNCADO"} or self.categoria.startswith("HTTP_5")
+        return self.categoria in {"TEMPO_ESGOTADO", "CONEXAO", "TRUNCADO", "RESPOSTA_PARCIAL"} or self.categoria.startswith("HTTP_5")
 
     @property
     def recusa(self) -> bool:
@@ -110,6 +114,18 @@ def _tamanho_anunciado(valor: str | None) -> int | None:
         return None
 
 
+_FAIXA = re.compile(r"bytes\s+(\d+)-(\d+)/(\d+)", re.I)
+
+
+def _faixa_completa(content_range: str | None, recebidos: int) -> bool:
+    """Content-Range de uma resposta 206 que cobre o arquivo INTEIRO e coincide com os bytes recebidos."""
+    achado = _FAIXA.fullmatch((content_range or "").strip())
+    if not achado:
+        return False
+    primeiro, ultimo, total = (int(x) for x in achado.groups())
+    return primeiro == 0 and ultimo + 1 == total == recebidos
+
+
 def _uma_requisicao(url: str, politica: Politica) -> Resposta:
     redirecionamentos: list[str] = []
     atual = normalizar(url)
@@ -130,6 +146,10 @@ def _uma_requisicao(url: str, politica: Politica) -> Resposta:
                     blocos.append(bloco)
                 if anunciado is not None and total != anunciado:
                     raise ErroRede("TRUNCADO", f"{atual} ({total} de {anunciado} bytes)")
+                if r.status == 206 and not _faixa_completa(r.headers.get("Content-Range"), total):
+                    raise ErroRede("RESPOSTA_PARCIAL", f"{atual} (HTTP 206, {r.headers.get('Content-Range') or 'sem Content-Range'})")
+                if r.status not in (200, 206):
+                    raise ErroRede(f"HTTP_{r.status}", f"{atual} (resposta sem o conteúdo esperado)")
                 return Resposta(atual, r.status, r.headers.get("Content-Type", ""), b"".join(blocos), redirecionamentos,
                                 anunciado, round(time.monotonic() - inicio, 3))
         except http.client.IncompleteRead as e:
