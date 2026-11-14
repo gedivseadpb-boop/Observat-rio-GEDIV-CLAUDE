@@ -16,6 +16,7 @@ OCR do bloco inteiro (comportamento anterior).
 """
 from __future__ import annotations
 
+from . import ocr
 from .pagina import Palavra
 
 RESOLUCAO = 400          # pontos por polegada no recorte de cada coluna
@@ -83,8 +84,6 @@ def ler_tabela(pagina, bloco: tuple[float, float, float, float], palavras_nativa
                ) -> tuple[list[Palavra], list[float], tuple] | None:
     """(palavras — uma por linha da tabela —, confianças do OCR, área coberta pela tabela) ou None se não houver
     tabela vetorial no bloco. A área coberta substitui todo o texto nativo que estiver dentro dela."""
-    import pytesseract
-
     tabela = _tabela_que_cobre(pagina, bloco)
     if tabela is None or not _tabela_e_do_bloco(tabela, bloco, palavras_nativas, ilegivel):
         return None
@@ -102,7 +101,7 @@ def ler_tabela(pagina, bloco: tuple[float, float, float, float], palavras_nativa
             continue
         recorte = pagina.crop((a + RECUO_BORDA, topo_tabela, z - RECUO_BORDA, base_tabela))
         imagem = recorte.to_image(resolution=RESOLUCAO).original
-        dados = pytesseract.image_to_data(imagem, lang="por", config="--psm 6", output_type=pytesseract.Output.DICT)
+        dados = ocr.dados(imagem, config="--psm 6")
         for texto, conf, y, h, n_bloco, n_par, n_linha, n_palavra in zip(
                 dados["text"], dados["conf"], dados["top"], dados["height"], dados["block_num"], dados["par_num"],
                 dados["line_num"], dados["word_num"]):

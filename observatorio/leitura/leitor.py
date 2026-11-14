@@ -30,7 +30,7 @@ from pathlib import Path
 
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
-from . import tabela_ocr
+from . import ocr, tabela_ocr
 from .pagina import Palavra, identificar_edicao, ler_pagina
 
 VERSAO = "0.6"           # 0.4: cache liberado por página; 0.5: OCR de tabela pela grade vetorial;
@@ -72,9 +72,8 @@ def _ocr(pagina, resolucao: int = RESOLUCAO_OCR, origem: tuple[float, float] = (
 
 
 def _ocr_bruto(pagina, resolucao: int, origem: tuple[float, float]) -> tuple[list[Palavra], list[float]]:
-    import pytesseract
     imagem = pagina.to_image(resolution=resolucao).original
-    dados = pytesseract.image_to_data(imagem, lang="por", output_type=pytesseract.Output.DICT)
+    dados = ocr.dados(imagem)
     escala = 72.0 / resolucao
     palavras, confiancas = [], []
     for texto, conf, x, y, w, h in zip(dados["text"], dados["conf"], dados["left"], dados["top"], dados["width"],
@@ -178,7 +177,6 @@ def _classificar_ocr(numero, palavras, confianca, largura) -> dict:
 def _ler_sobreposicoes(pagina, brutas: list[dict]) -> int:
     """Relê por OCR as palavras em que dois caracteres diferentes ocupam a mesma posição e um deles está em fonte
     sem mapeamento. Altera `brutas` no lugar; devolve quantas palavras foram relidas."""
-    import pytesseract
     relidas = 0
     for w in brutas:
         if not _CORROMPIDO.search(w["text"]):
@@ -191,7 +189,7 @@ def _ler_sobreposicoes(pagina, brutas: list[dict]) -> int:
         caixa = (max(0.0, w["x0"] - 1.5), max(0.0, w["top"] - 1.5), min(float(pagina.width), w["x1"] + 1.5),
                  min(float(pagina.height), w["bottom"] + 1.5))
         imagem = pagina.crop(caixa).to_image(resolution=RESOLUCAO_OCR_PALAVRA).original
-        lido = pytesseract.image_to_string(imagem, lang="por", config=f"--psm {10 if len(_CORROMPIDO.sub('x', w['text'])) <= 2 else 7}").strip()
+        lido = ocr.texto(imagem, config=f"--psm {10 if len(_CORROMPIDO.sub('x', w['text'])) <= 2 else 7}").strip()
         if lido and not _CORROMPIDO.search(lido):
             w["text"] = lido
             relidas += 1
@@ -232,6 +230,16 @@ def _ler_uma_pagina(numero: int, pagina) -> dict:
     return _classificar_ocr(numero, palavras, confianca, largura)
 
 
+def _pagina_com_ocr_esgotado(numero: int, pagina) -> dict:
+    """O OCR não respondeu a tempo: fica o texto nativo que houver, e a página vira pendência para nova tentativa
+    (`processar(..., refazer_pendentes=True)`). O robô segue para a página seguinte em vez de travar."""
+    brutas = pagina.extract_words(x_tolerance_ratio=TOLERANCIA_X_PROPORCIONAL)
+    palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas]
+    texto, colunas = ler_pagina(palavras, float(pagina.width)) if palavras else ("", 0)
+    return {"numero": numero, "metodo": "TEXTO" if palavras else "NENHUM", "colunas": colunas, "texto": texto,
+            "palavras": len(palavras), "qualidade": "OCR_ESGOTADO", "confianca": None}
+
+
 def ler_arquivo(caminho: str | Path) -> dict:
     import pdfplumber  # importado aqui para que a coleta funcione sem esta biblioteca
 
@@ -239,7 +247,10 @@ def ler_arquivo(caminho: str | Path) -> dict:
     with pdfplumber.open(str(caminho)) as documento:
         for numero, pagina in enumerate(documento.pages, start=1):
             try:
-                paginas.append(_ler_uma_pagina(numero, pagina))
+                try:
+                    paginas.append(_ler_uma_pagina(numero, pagina))
+                except ocr.OcrEsgotado:
+                    paginas.append(_pagina_com_ocr_esgotado(numero, pagina))
             finally:
                 # Sem isto o pdfplumber guarda caracteres, objetos e o mapa de texto de TODAS as páginas lidas
                 # até o fim do arquivo (pico de 0,8–1,2 GB por edição medido em 12/11/2026).
