@@ -112,8 +112,14 @@ class TesteMigracoes(unittest.TestCase):
         banco = self.abrir()
         depois = _estrutura(banco.con)
         self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
-        self.assertEqual(depois["evento"], antes["evento"] + ["publicacoes_citadas"])
-        self.assertEqual({t: c for t, c in depois.items() if t != "evento"}, {t: c for t, c in antes.items() if t != "evento"})
+        # Da v7 da Etapa 05, o evento ganha só a coluna da v6 da Etapa 04 (as colunas novas da v8 vêm depois dela).
+        self.assertEqual(depois["evento"][:len(antes["evento"]) + 1], antes["evento"] + ["publicacoes_citadas"])
+        # Etapa 05.3.3 (v8): só ACRÉSCIMOS. Nenhuma tabela ou coluna anterior some, muda de nome ou de posição; as
+        # tabelas novas são exatamente as da v8.
+        for tabela, colunas in antes.items():
+            if tabela != "evento":
+                self.assertEqual(depois[tabela][:len(colunas)], colunas, tabela)
+        self.assertEqual(set(depois) - set(antes), {"tentativa_leitura", "correcao", "conflito"})
         self.assertEqual(banco.con.execute("SELECT resultado, versao_coletor FROM download").fetchone()[:], ("NOVO", "0.5"))
         self.assertEqual(banco.con.execute("SELECT integridade FROM verificacao_arquivo").fetchone()[0], "OK")
         self.assertEqual(B.estruturas_pendentes(banco.con), {})

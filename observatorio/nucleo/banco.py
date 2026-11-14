@@ -19,6 +19,7 @@ O SQL usado é compatível com uma futura migração para PostgreSQL.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -26,7 +27,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 7
+VERSAO_ESQUEMA = 8
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -320,9 +321,139 @@ def agora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# --- identidade lógica e comparação de leituras (Etapa 05.3.3) -------------------------------------------------
+# A identidade FÍSICA de um documento é o SHA-256 do PDF; a identidade LÓGICA de um ato é o que o próprio ato publica
+# (gerência, tipo, número, sufixo e natureza: original ou republicação/retificação). Uma decisão é reconhecida dentro do
+# ato lógico pelo processo e, na falta dele, pela matrícula. Sem número do ato, ou sem processo e matrícula, não há
+# identidade segura: nada é fundido automaticamente e a correspondência vai para conferência.
+import unicodedata as _ud
+
+
+def _normalizar_chave(valor) -> str:
+    texto = "".join(c for c in _ud.normalize("NFKD", str(valor or "")) if not _ud.combining(c)).upper()
+    return re.sub(r"[^0-9A-Z]", "", texto)
+
+
+def normalizar_texto(valor) -> str:
+    texto = "".join(c for c in _ud.normalize("NFKD", str(valor or "")) if not _ud.combining(c)).upper()
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def chave_ato(gerencia, tipo, numero, sufixo, natureza) -> str | None:
+    if not _normalizar_chave(numero):
+        return None
+    return "|".join((_normalizar_chave(gerencia), _normalizar_chave(tipo), _normalizar_chave(numero),
+                     _normalizar_chave(sufixo), _normalizar_chave(natureza)))
+
+
+def chave_decisao(chave_do_ato: str | None, processo, matricula) -> str | None:
+    if not chave_do_ato:
+        return None
+    if _normalizar_chave(processo):
+        return f"{chave_do_ato}|P:{_normalizar_chave(processo)}"
+    if _normalizar_chave(matricula):
+        return f"{chave_do_ato}|M:{_normalizar_chave(matricula)}"
+    return None
+
+
+def revisao_de_paginas(paginas) -> str:
+    """Identificação da REVISÃO de leitura: muda se, e somente se, o texto aceito de alguma página muda."""
+    partes = sorted((int(numero), hashlib.sha256((texto or "").encode("utf-8")).hexdigest()) for numero, texto in paginas)
+    return hashlib.sha256(json.dumps(partes).encode("utf-8")).hexdigest()[:24]
+
+
+PRIMEIRA, NEUTRA, MELHORA, MUDANCA = "PRIMEIRA", "NEUTRA", "MELHORA", "MUDANCA"
+PERDA_DE_CONTEUDO, FALHA_TECNICA = "PERDA_DE_CONTEUDO", "FALHA_TECNICA"
+LEITURA_ACEITA = (PRIMEIRA, NEUTRA, MELHORA, MUDANCA)
+_RUIM = lambda qualidade: qualidade not in ("OK", "VAZIA")
+
+
+def comparar_leituras(anteriores, novas) -> tuple[str, dict]:
+    """Compara a última leitura VÁLIDA com uma nova tentativa, página a página. Não usa contagem de palavras como
+    medida de qualidade: perda de página, página que piora de qualidade ou que fica sem texto é PERDA_DE_CONTEUDO
+    (a tentativa não substitui a leitura válida); texto diferente sem perda é MUDANCA (aceita e encaminhada à
+    reclassificação); página que deixa de ter pendência é MELHORA; nada diferente é NEUTRA."""
+    if not novas:
+        return FALHA_TECNICA, {}
+    if not anteriores:
+        return PRIMEIRA, {}
+    a = {int(p["numero"]): p for p in anteriores}
+    n = {int(p["numero"]): p for p in novas}
+    faltam = sorted(set(a) - set(n))
+    pioraram = sorted(k for k in a if k in n and not _RUIM(a[k]["qualidade"]) and _RUIM(n[k]["qualidade"]))
+    esvaziadas = sorted(k for k in a if k in n and (a[k]["texto"] or "").strip() and not (n[k]["texto"] or "").strip())
+    if faltam or pioraram or esvaziadas:
+        return PERDA_DE_CONTEUDO, {"paginas_ausentes": faltam, "paginas_que_pioraram": pioraram, "paginas_sem_texto": esvaziadas}
+    melhoraram = sorted(k for k in a if k in n and _RUIM(a[k]["qualidade"]) and not _RUIM(n[k]["qualidade"]))
+    acrescidas = sorted(set(n) - set(a))
+    mudaram = sorted(k for k in a if k in n and (a[k]["texto"] or "") != (n[k]["texto"] or ""))
+    if not (melhoraram or acrescidas or mudaram) and all(a[k]["qualidade"] == n[k]["qualidade"] for k in a):
+        return NEUTRA, {}
+    detalhe = {"paginas_que_melhoraram": melhoraram, "paginas_acrescidas": acrescidas, "paginas_com_texto_alterado": mudaram}
+    return (MELHORA if melhoraram or acrescidas else MUDANCA), detalhe
+
+
+# Versão 8 (Etapa 05.3.3): revisões de leitura, classificação ligada à leitura que a originou, identidade lógica e
+# vigência das decisões, correções humanas por campo e conflitos explícitos. Só acréscimos: nenhuma tabela ou coluna
+# anterior muda, e bancos v1–v7 (inclusive as duas variantes da v6) são levados à v8 pela estrutura presente.
+_ESQUEMA_V8 = """
+CREATE TABLE tentativa_leitura (
+    id            INTEGER PRIMARY KEY,
+    sha256        TEXT NOT NULL,
+    versao_leitor TEXT NOT NULL,
+    situacao      TEXT NOT NULL,
+    resultado     TEXT NOT NULL,
+    aceita        INTEGER NOT NULL,
+    paginas       INTEGER,
+    revisao       TEXT,
+    erro          TEXT,
+    detalhe       TEXT,
+    momento       TEXT NOT NULL
+);
+CREATE INDEX tentativa_leitura_arquivo ON tentativa_leitura (sha256, versao_leitor);
+ALTER TABLE leitura ADD COLUMN revisao TEXT;
+ALTER TABLE classificacao ADD COLUMN revisao_leitura TEXT;
+ALTER TABLE ato ADD COLUMN chave_logica TEXT;
+ALTER TABLE decisao ADD COLUMN chave_logica TEXT;
+ALTER TABLE decisao ADD COLUMN vigente INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE decisao ADD COLUMN representada_por TEXT;
+ALTER TABLE decisao ADD COLUMN origem TEXT NOT NULL DEFAULT 'EXTRAIDA';
+CREATE INDEX ato_chave ON ato (chave_logica);
+CREATE INDEX decisao_chave ON decisao (chave_logica);
+CREATE TABLE correcao (
+    id              INTEGER PRIMARY KEY,
+    alvo_tipo       TEXT NOT NULL,
+    alvo_id         TEXT NOT NULL,
+    campo           TEXT NOT NULL,
+    valor_extraido  TEXT,
+    valor_anterior  TEXT,
+    valor_corrigido TEXT,
+    autor           TEXT NOT NULL,
+    momento         TEXT NOT NULL,
+    justificativa   TEXT NOT NULL
+);
+CREATE INDEX correcao_alvo ON correcao (alvo_tipo, alvo_id, campo);
+CREATE TABLE conflito (
+    id             INTEGER PRIMARY KEY,
+    alvo_tipo      TEXT NOT NULL,
+    alvo_id        TEXT NOT NULL,
+    campo          TEXT NOT NULL,
+    valor_vigente  TEXT NOT NULL,
+    valor_proposto TEXT NOT NULL,
+    origem         TEXT NOT NULL,
+    referencia     TEXT,
+    estado         TEXT NOT NULL DEFAULT 'ABERTO',
+    criado_em      TEXT NOT NULL,
+    resolvido_por  TEXT,
+    resolvido_em   TEXT,
+    justificativa  TEXT
+);
+CREATE UNIQUE INDEX conflito_unico ON conflito (alvo_tipo, alvo_id, campo, valor_proposto, origem)
+"""
+
 _MIGRACOES = ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5), (6, _ESQUEMA_V6),
-              (7, _ESQUEMA_V7))
-_CRIAR = re.compile(r"^CREATE\s+(TABLE|INDEX)\s+(\w+)", re.I)
+              (7, _ESQUEMA_V7), (8, _ESQUEMA_V8))
+_CRIAR = re.compile(r"^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(\w+)", re.I)
 _ADICIONAR = re.compile(r"^ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)", re.I)
 
 
@@ -365,11 +496,39 @@ class Banco:
             self.con.row_factory = sqlite3.Row
             self.con.execute("PRAGMA foreign_keys = ON")
             self._migrar(backup_antes_de_migrar)
+            self._completar_v8()
         except BaseException:
             # Quem chamou não recebe o objeto e não teria como fechar a conexão: no Windows o arquivo ficava
             # preso (não podia ser apagado nem renomeado). Fecha aqui e propaga o erro ORIGINAL.
             self._fechar_sem_mascarar()
             raise
+
+    def _completar_v8(self) -> None:
+        """Preenche, em bancos anteriores à v8, o que a migração estrutural não calcula: revisão da leitura, revisão
+        da leitura das classificações já feitas (que vieram da leitura atual) e identidades lógicas; reconcilia as
+        versões já existentes. Idempotente: só toca linhas ainda sem valor."""
+        sem_revisao = self.con.execute("SELECT sha256 FROM leitura WHERE revisao IS NULL AND situacao <> 'ERRO'").fetchall()
+        atos_sem_chave = self.con.execute("SELECT * FROM ato WHERE chave_logica IS NULL AND numero IS NOT NULL").fetchall()
+        sem_ligacao = self.con.execute("SELECT 1 FROM classificacao WHERE revisao_leitura IS NULL LIMIT 1").fetchone()
+        if not (sem_revisao or atos_sem_chave or sem_ligacao):
+            return
+        with self.con:
+            for linha in sem_revisao:
+                paginas = self.con.execute("SELECT numero, texto FROM pagina WHERE sha256 = ?", (linha["sha256"],)).fetchall()
+                self.con.execute("UPDATE leitura SET revisao = ? WHERE sha256 = ?",
+                                 (revisao_de_paginas((p["numero"], p["texto"]) for p in paginas), linha["sha256"]))
+            self.con.execute("UPDATE classificacao SET revisao_leitura = (SELECT revisao FROM leitura l WHERE l.sha256 = "
+                             "classificacao.sha256) WHERE revisao_leitura IS NULL")
+            chaves = set()
+            for a in atos_sem_chave:
+                chave = chave_ato(a["gerencia"], a["tipo"], a["numero"], a["sufixo"], a["natureza"])
+                self.con.execute("UPDATE ato SET chave_logica = ? WHERE id = ?", (chave, a["id"]))
+                for d in self.con.execute("SELECT id, processo, matricula FROM decisao WHERE ato_id = ?", (a["id"],)).fetchall():
+                    self.con.execute("UPDATE decisao SET chave_logica = ? WHERE id = ?",
+                                     (chave_decisao(chave, d["processo"], d["matricula"]), d["id"]))
+                if chave:
+                    chaves.add(chave)
+            self._reconciliar_atos(chaves)
 
     def __enter__(self) -> "Banco":
         return self
@@ -739,46 +898,83 @@ class Banco:
 
     # --- leitura ---------------------------------------------------------
     def arquivos_sem_leitura(self, versao_leitor: str, refazer_pendentes: bool = False):
-        """Arquivos ainda não lidos por esta versão do leitor. Com `refazer_pendentes`, voltam à fila também
-        as leituras que terminaram em ERRO ou com páginas pendentes (por exemplo, OCR indisponível)."""
-        extra = " OR l.situacao = 'ERRO' OR l.paginas_com_pendencia > 0" if refazer_pendentes else ""
+        """Arquivos ainda não lidos por esta versão do leitor. Uma tentativa desta versão que falhou ou foi recusada
+        (perda de conteúdo) não volta sozinha à fila — senão repetiria a cada execução —, mas continua visível e volta
+        com `refazer_pendentes`, junto com leituras em ERRO ou com páginas pendentes (por exemplo, OCR indisponível).
+        Antes (Etapa 05.3.3), a tentativa malsucedida gravava a versão nova e o arquivo saía da fila como se lido."""
+        extra = ""
+        if refazer_pendentes:
+            extra = (" OR l.situacao = 'ERRO' OR l.paginas_com_pendencia > 0 OR EXISTS (SELECT 1 FROM tentativa_leitura t "
+                     "WHERE t.sha256 = a.sha256 AND t.versao_leitor = :v AND t.aceita = 0 AND t.id = "
+                     "(SELECT MAX(id) FROM tentativa_leitura u WHERE u.sha256 = a.sha256))")
         return self.con.execute(
-            "SELECT a.* FROM arquivo a LEFT JOIN leitura l ON l.sha256 = a.sha256 AND l.versao_leitor = ? "
-            f"WHERE l.sha256 IS NULL{extra} ORDER BY a.guardado_em, a.sha256", (versao_leitor,)
-        ).fetchall()
+            "SELECT a.* FROM arquivo a LEFT JOIN leitura l ON l.sha256 = a.sha256 "
+            "WHERE l.sha256 IS NULL OR (l.versao_leitor <> :v AND NOT EXISTS (SELECT 1 FROM tentativa_leitura t "
+            f"WHERE t.sha256 = a.sha256 AND t.versao_leitor = :v)){extra} ORDER BY a.guardado_em, a.sha256",
+            {"v": versao_leitor}).fetchall()
+
+    def tentativas_de_leitura(self, sha256: str):
+        return self.con.execute("SELECT * FROM tentativa_leitura WHERE sha256 = ? ORDER BY id", (sha256,)).fetchall()
 
     def registrar_leitura(self, sha256, situacao, versao_leitor, paginas, numero_edicao, data_edicao, erro,
-                          inconsistencias=()) -> None:
-        """Grava páginas e resumo na mesma transação: ou o arquivo fica lido por inteiro, ou não fica."""
-        anterior = self.con.execute("SELECT situacao FROM leitura WHERE sha256 = ?", (sha256,)).fetchone()
-        if situacao == "ERRO" and anterior is not None and anterior["situacao"] != "ERRO" and not paginas:
-            # A nova tentativa falhou: o texto já lido é preservado e a falha fica registrada.
-            with self.con:
-                self.con.execute(
-                    "UPDATE leitura SET versao_leitor = ?, erro = ?, concluida_em = ? WHERE sha256 = ?",
-                    (versao_leitor, f"releitura falhou; mantida a leitura anterior ({anterior['situacao']}): {erro}", agora(), sha256))
-            return
+                          inconsistencias=()) -> str:
+        """Registra uma TENTATIVA de leitura e decide, numa só transação, se ela substitui a última leitura válida.
+
+        - Toda tentativa fica em ``tentativa_leitura`` (versão, momento, resultado, páginas, revisão, erro, detalhe).
+        - A última leitura válida (``leitura`` + ``pagina``) só é substituída por tentativa ACEITA: primeira leitura,
+          melhora, mudança sem perda ou mudança neutra. Falha técnica ou perda de conteúdo (página ausente, página que
+          piorou ou ficou sem texto) não toca nas páginas, no estado nem na versão da leitura válida.
+        - A revisão da leitura (``revisao``) muda quando o texto aceito muda; a classificação derivada da revisão
+          anterior passa a desatualizada e volta à fila (ver ``arquivos_sem_classificacao``).
+        Devolve o resultado da comparação (PRIMEIRA, NEUTRA, MELHORA, MUDANCA, PERDA_DE_CONTEUDO, FALHA_TECNICA)."""
+        anterior = self.con.execute("SELECT * FROM leitura WHERE sha256 = ?", (sha256,)).fetchone()
+        valida = anterior is not None and anterior["situacao"] != "ERRO"
+        paginas_validas = self.paginas(sha256) if valida else []
+        novas = [] if situacao == "ERRO" else list(paginas)
+        resultado, detalhe = comparar_leituras(paginas_validas, novas)
+        aceita = resultado in LEITURA_ACEITA
+        revisao = revisao_de_paginas((p["numero"], p["texto"]) for p in novas) if novas else None
+        momento = agora()
         with self.con:
+            self.con.execute(
+                "INSERT INTO tentativa_leitura (sha256, versao_leitor, situacao, resultado, aceita, paginas, revisao, erro, detalhe, "
+                "momento) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (sha256, versao_leitor, situacao, resultado, int(aceita), len(novas), revisao, erro,
+                 json.dumps(detalhe, ensure_ascii=False) if detalhe else None, momento))
+            if not aceita and valida:
+                # A tentativa não substitui a leitura válida: só o aviso fica registrado (estado e versão intactos).
+                motivo = (f"releitura falhou; mantida a leitura anterior ({anterior['situacao']}): {erro}" if resultado == FALHA_TECNICA
+                          else f"releitura recusada por perda de conteúdo; mantida a leitura anterior: {json.dumps(detalhe)}")
+                self.con.execute("UPDATE leitura SET erro = ? WHERE sha256 = ?", (motivo[:1000], sha256))
+                return resultado
+            if resultado == NEUTRA:
+                # Mesmo texto e mesma qualidade: só a versão do leitor e o momento mudam; a classificação continua válida.
+                self.con.execute("UPDATE leitura SET versao_leitor = ?, concluida_em = ?, erro = NULL, numero_edicao = ?, "
+                                 "data_edicao = ?, inconsistencias = ? WHERE sha256 = ?",
+                                 (versao_leitor, momento, numero_edicao, data_edicao,
+                                  json.dumps(list(inconsistencias), ensure_ascii=False), sha256))
+                return resultado
             self.con.execute("DELETE FROM pagina WHERE sha256 = ?", (sha256,))
             self.con.executemany(
                 "INSERT INTO pagina (sha256, numero, metodo, colunas, texto, qualidade, confianca, palavras, texto_sha256) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 [(sha256, p["numero"], p["metodo"], p["colunas"], p["texto"], p["qualidade"], p.get("confianca"),
-                  p["palavras"], hashlib.sha256(p["texto"].encode("utf-8")).hexdigest()) for p in paginas],
+                  p["palavras"], hashlib.sha256(p["texto"].encode("utf-8")).hexdigest()) for p in novas],
             )
             self.con.execute(
                 "INSERT INTO leitura (sha256, situacao, versao_leitor, paginas, paginas_sem_texto, numero_edicao, "
-                "data_edicao, erro, concluida_em, paginas_com_pendencia, inconsistencias) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                "data_edicao, erro, concluida_em, paginas_com_pendencia, inconsistencias, revisao) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT (sha256) DO UPDATE SET situacao = excluded.situacao, versao_leitor = excluded.versao_leitor, "
                 "paginas = excluded.paginas, paginas_sem_texto = excluded.paginas_sem_texto, "
                 "numero_edicao = excluded.numero_edicao, data_edicao = excluded.data_edicao, erro = excluded.erro, "
                 "concluida_em = excluded.concluida_em, paginas_com_pendencia = excluded.paginas_com_pendencia, "
-                "inconsistencias = excluded.inconsistencias",
-                (sha256, situacao, versao_leitor, len(paginas), sum(p["metodo"] != "TEXTO" for p in paginas),
-                 numero_edicao, data_edicao, erro, agora(),
-                 sum(p["qualidade"] not in ("OK", "VAZIA") for p in paginas),
-                 json.dumps(list(inconsistencias), ensure_ascii=False)),
+                "inconsistencias = excluded.inconsistencias, revisao = excluded.revisao",
+                (sha256, situacao, versao_leitor, len(novas), sum(p["metodo"] != "TEXTO" for p in novas),
+                 numero_edicao, data_edicao, erro, momento,
+                 sum(p["qualidade"] not in ("OK", "VAZIA") for p in novas),
+                 json.dumps(list(inconsistencias), ensure_ascii=False), revisao),
             )
+        return resultado
 
     def origens(self, sha256: str):
         """De onde veio o arquivo: todas as publicações (fonte, endereço, data) que o ofereceram."""
@@ -815,48 +1011,132 @@ class Banco:
         return None
 
     def arquivos_sem_classificacao(self, gerencia: str, versao_regras: str):
+        """Arquivos lidos sem classificação VIGENTE: nunca classificados, classificados por outra versão das regras ou
+        classificados a partir de outra revisão da leitura (o mesmo PDF relido com texto diferente — antes, a
+        classificação antiga continuava valendo porque só o SHA do PDF e as regras eram comparados)."""
         return self.con.execute(
             "SELECT l.sha256 FROM leitura l LEFT JOIN classificacao c ON c.sha256 = l.sha256 AND c.gerencia = ? "
-            "AND c.versao_regras = ? WHERE l.situacao <> 'ERRO' AND c.sha256 IS NULL ORDER BY l.sha256",
+            "WHERE l.situacao <> 'ERRO' AND (c.sha256 IS NULL OR c.versao_regras <> ? OR "
+            "(l.revisao IS NOT NULL AND c.revisao_leitura IS NOT l.revisao)) ORDER BY l.sha256",
             (gerencia, versao_regras)).fetchall()
 
+    def classificacoes_desatualizadas(self, gerencia: str) -> int:
+        return self.con.execute(
+            "SELECT COUNT(*) FROM classificacao c JOIN leitura l ON l.sha256 = c.sha256 WHERE c.gerencia = ? "
+            "AND l.revisao IS NOT NULL AND c.revisao_leitura IS NOT l.revisao", (gerencia,)).fetchone()[0]
+
+    # Campos homologados por conferência/correção humana: uma nova extração não os sobrescreve; propõe (conflito).
+    CAMPOS_ATO_HOMOLOGADOS = ("eixo", "modalidade", "condicao", "grupo", "subcategoria", "vinculo")
+    CAMPOS_DECISAO = ("processo", "servidor", "matricula", "lotacao", "cargo", "resultado")
+    CAMPOS_DETALHE = ("classe_anterior", "classe_posterior", "nivel_anterior", "nivel_atual")
+
+    def _conflito(self, alvo_tipo, alvo_id, campo, vigente, proposto, origem, referencia=None) -> None:
+        """Conflito explícito para a gerência. Idempotente: a mesma proposta (mesmo alvo, campo, valor e origem) não é
+        repetida — nem depois de resolvida (uma proposta já mantida pela gerência não volta a incomodar)."""
+        self.con.execute(
+            "INSERT OR IGNORE INTO conflito (alvo_tipo, alvo_id, campo, valor_vigente, valor_proposto, origem, referencia, criado_em) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (alvo_tipo, alvo_id, campo, json.dumps(vigente, ensure_ascii=False), json.dumps(proposto, ensure_ascii=False),
+             origem, referencia, agora()))
+
+    def conflitos(self, estado: str | None = "ABERTO", alvo_tipo: str | None = None, alvo_ids=None):
+        sql, parametros = "SELECT * FROM conflito WHERE 1=1", []
+        if estado:
+            sql += " AND estado = ?"
+            parametros.append(estado)
+        if alvo_tipo:
+            sql += " AND alvo_tipo = ?"
+            parametros.append(alvo_tipo)
+        if alvo_ids is not None:
+            alvo_ids = list(alvo_ids)
+            if not alvo_ids:
+                return []
+            sql += f" AND alvo_id IN ({','.join('?' * len(alvo_ids))})"
+            parametros += alvo_ids
+        return self.con.execute(sql + " ORDER BY id", parametros).fetchall()
+
+    def correcoes(self, alvo_tipo: str, alvo_id: str):
+        return self.con.execute("SELECT * FROM correcao WHERE alvo_tipo = ? AND alvo_id = ? ORDER BY id",
+                                (alvo_tipo, alvo_id)).fetchall()
+
+    def _extraido_original(self, alvo_tipo: str, alvo_id: str, campo: str, atual):
+        """Valor que a extração tinha produzido antes da primeira correção humana do campo (ou o atual, sem correção)."""
+        primeira = self.con.execute("SELECT valor_extraido FROM correcao WHERE alvo_tipo = ? AND alvo_id = ? AND campo = ? "
+                                    "ORDER BY id LIMIT 1", (alvo_tipo, alvo_id, campo)).fetchone()
+        return json.loads(primeira[0]) if primeira and primeira[0] is not None else atual
+
     def gravar_classificacao(self, gerencia: str, sha256: str, versao_regras: str, data: str | None, resultado) -> dict:
-        """Substitui os candidatos deste arquivo preservando TUDO o que já passou por revisão humana."""
+        """Substitui os candidatos deste arquivo preservando TUDO o que já passou por revisão humana, numa só transação.
+
+        Etapa 05.3.3:
+        - a classificação fica ligada à revisão da leitura que a originou (``revisao_leitura``);
+        - decisão já revisada não é regravada; se a nova extração diverge dela (inclusive de um valor corrigido por uma
+          pessoa), o que muda vira CONFLITO explícito para a gerência, nunca sobrescrita silenciosa;
+        - o ato com decisões revisadas não fica mais "congelado": metadados técnicos (texto, pendências, páginas,
+          versão das regras) são atualizados; só a classificação homologada (eixo, modalidade, grupo, assunto...)
+          é preservada, e a divergência vira conflito;
+        - ato referenciado por QUALQUER evento remanescente (modificador, original ou sugerido) não é apagado
+          (antes, o ato modificador de um evento revisado podia sumir e deixar o evento órfão);
+        - as várias representações do mesmo ato lógico (versões do PDF, releituras) são reconciliadas para que cada
+          decisão lógica tenha uma só representação vigente nos indicadores.
+        """
         j = lambda v: json.dumps(v, ensure_ascii=False)
+        revisao_leitura = (self.con.execute("SELECT revisao FROM leitura WHERE sha256 = ?", (sha256,)).fetchone() or [None])[0]
         with self.con:
-            revisadas = {r["id"] for r in self.con.execute(
-                "SELECT id FROM decisao WHERE sha256 = ? AND validacao <> 'PENDENTE'", (sha256,))}
+            revisadas = {r["id"]: r for r in self.con.execute(
+                "SELECT * FROM decisao WHERE sha256 = ? AND validacao <> 'PENDENTE'", (sha256,))}
             eventos_revisados = {r["id"] for r in self.con.execute(
                 "SELECT id FROM evento WHERE sha256 = ? AND estado NOT IN ('PENDENTE_VINCULACAO', 'SUGERIDO')", (sha256,))}
-            atos_presos = {r["ato_id"] for r in self.con.execute(
-                "SELECT DISTINCT ato_id FROM decisao WHERE sha256 = ? AND validacao <> 'PENDENTE'", (sha256,))}
-            atos_presos |= {r[0] for r in self.con.execute(
-                "SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL")}
+            atos_homologados = {r["ato_id"] for r in revisadas.values()}
+            atos_homologados |= {r[0] for r in self.con.execute("SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL")}
+            atos_homologados |= {r[0] for r in self.con.execute("SELECT alvo_id FROM correcao WHERE alvo_tipo = 'ato'")}
+            existentes = {r["id"]: r for r in self.con.execute("SELECT * FROM ato WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))}
             self.con.execute("DELETE FROM decisao WHERE sha256 = ? AND validacao = 'PENDENTE'", (sha256,))
             self.con.execute("DELETE FROM evento WHERE sha256 = ? AND estado IN ('PENDENTE_VINCULACAO', 'SUGERIDO')", (sha256,))
             self.con.execute("DELETE FROM outra_publicacao WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))
             self.con.execute("DELETE FROM fora_escopo WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))
             self.con.execute(
                 "DELETE FROM ato WHERE sha256 = ? AND gerencia = ? AND id NOT IN (SELECT ato_id FROM decisao) "
-                "AND id NOT IN (SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL)", (sha256, gerencia))
+                "AND id NOT IN (SELECT ato_id FROM evento WHERE ato_id IS NOT NULL) "
+                "AND id NOT IN (SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL) "
+                "AND id NOT IN (SELECT ato_sugerido_id FROM evento WHERE ato_sugerido_id IS NOT NULL)", (sha256, gerencia))
+            conflitos = 0
+            chaves = {r["chave_logica"] for r in existentes.values() if r["chave_logica"]}
             for a in resultado.atos:
-                if a.id in atos_presos:
+                chave = chave_ato(gerencia, a.tipo, a.numero, a.sufixo, a.natureza)
+                if chave:
+                    chaves.add(chave)
+                atual = existentes.get(a.id)
+                if a.id in atos_homologados and atual is not None:
+                    for campo in self.CAMPOS_ATO_HOMOLOGADOS:
+                        novo, vigente = getattr(a, campo), atual[campo]
+                        if novo != self._extraido_original("ato", a.id, campo, vigente) and novo != vigente:
+                            self._conflito("ato", a.id, campo, vigente, novo, "RECLASSIFICACAO", sha256)
+                            conflitos += 1
+                    self.con.execute(
+                        "UPDATE ato SET pagina = ?, pagina_final = ?, data_publicacao = ?, data_expediente = ?, expressao_vinculo = ?, "
+                        "grupo_expressao = ?, resultado = ?, texto = ?, pendencias = ?, versao_regras = ?, chave_logica = ? WHERE id = ?",
+                        (a.pagina, a.pagina_final, data, a.data_expediente, a.expressao_vinculo, a.grupo_expressao, a.resultado,
+                         a.texto, j(a.pendencias), versao_regras, chave, a.id))
                     continue
                 self.con.execute(
                     "INSERT OR REPLACE INTO ato (id, gerencia, sha256, tipo, numero, sufixo, pagina, pagina_final, data_publicacao, "
                     "data_expediente, vinculo, expressao_vinculo, natureza, eixo, modalidade, condicao, grupo, grupo_expressao, "
-                    "subcategoria, resultado, texto, pendencias, versao_regras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "subcategoria, resultado, texto, pendencias, versao_regras, chave_logica) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (a.id, gerencia, sha256, a.tipo, a.numero, a.sufixo, a.pagina, a.pagina_final, data, a.data_expediente, a.vinculo,
                      a.expressao_vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, a.grupo_expressao, a.subcategoria,
-                     a.resultado, a.texto, j(a.pendencias), versao_regras))
+                     a.resultado, a.texto, j(a.pendencias), versao_regras, chave))
+            chave_do_ato = {r["id"]: r["chave_logica"] for r in self.con.execute("SELECT id, chave_logica FROM ato WHERE sha256 = ?", (sha256,))}
             for d in resultado.decisoes:
                 if d.id in revisadas:
+                    conflitos += self._comparar_com_revisada(revisadas[d.id], d, sha256)
                     continue
                 self.con.execute(
-                    "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, lotacao, cargo, detalhe, resultado, trecho) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, lotacao, cargo, detalhe, resultado, "
+                    "trecho, chave_logica) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (d.id, d.ato_id, sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, j(d.detalhe),
-                     d.resultado, d.trecho))
+                     d.resultado, d.trecho, chave_decisao(chave_do_ato.get(d.ato_id), d.processo, d.matricula)))
             for e in resultado.eventos:
                 if e.id in eventos_revisados:
                     continue
@@ -874,16 +1154,161 @@ class Banco:
                     "INSERT OR REPLACE INTO fora_escopo (id, gerencia, sha256, tipo, numero, pagina, data_publicacao, titulo, motivo, "
                     "expressao, vinculo, versao_regras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f.id, gerencia, sha256, f.tipo, f.numero, f.pagina, data, f.titulo, f.motivo, f.expressao, f.vinculo, versao_regras))
+            conflitos += self._reconciliar_atos(chaves)
             resumo = {"atos": len(resultado.atos), "decisoes": len(resultado.decisoes), "eventos": len(resultado.eventos),
                       "outras": len(resultado.outras), "fora_escopo": len(getattr(resultado, "fora_escopo", [])),
                       "descartados": resultado.descartados,
-                      "preservadas_por_revisao": len(revisadas) + len(eventos_revisados)}
+                      "preservadas_por_revisao": len(revisadas) + len(eventos_revisados), "conflitos": conflitos}
             self.con.execute(
                 "INSERT OR REPLACE INTO classificacao (sha256, gerencia, versao_regras, atos, decisoes, eventos, descartados, "
-                "pendencias, concluida_em) VALUES (?,?,?,?,?,?,?,?,?)",
+                "pendencias, concluida_em, revisao_leitura) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (sha256, gerencia, versao_regras, resumo["atos"], resumo["decisoes"], resumo["eventos"], resumo["descartados"],
-                 j(resultado.pendencias), agora()))
+                 j(resultado.pendencias), agora(), revisao_leitura))
         return resumo
+
+    def _comparar_com_revisada(self, revisada, d, sha256) -> int:
+        """A nova extração da MESMA decisão (mesmo id) diverge do que foi revisado? Cada campo diferente vira conflito.
+        Pessoa diferente (matrícula ou nome) na mesma posição nunca herda a revisão: conflito de identidade."""
+        novos = 0
+        detalhe_revisado = json.loads(revisada["detalhe"] or "{}")
+        for campo in self.CAMPOS_DECISAO + self.CAMPOS_DETALHE:
+            vigente = detalhe_revisado.get(campo) if campo in self.CAMPOS_DETALHE else revisada[campo]
+            novo = d.detalhe.get(campo) if campo in self.CAMPOS_DETALHE else getattr(d, campo)
+            original = self._extraido_original("decisao", revisada["id"], campo, vigente)
+            if normalizar_texto(novo) not in (normalizar_texto(original), normalizar_texto(vigente)):
+                self._conflito("decisao", revisada["id"], campo, vigente, novo, "RECLASSIFICACAO", sha256)
+                novos += 1
+        return novos
+
+    def _reconciliar_atos(self, chaves) -> int:
+        """Uma decisão LÓGICA tem uma única representação vigente. Para cada ato lógico com mais de uma representação
+        (versões do PDF, mesmo ato em dois arquivos, releitura que mudou a página), escolhe a principal — a que tem
+        revisão humana (a mais antiga), senão a do arquivo mais recente — e liga as demais a ela:
+
+        - mesma decisão (mesmo processo; sem processo, mesma matrícula): a cópia deixa de ser vigente e aponta para a
+          principal; o que diverge vira conflito na principal (nada é sobrescrito);
+        - mesmo processo com matrícula diferente, ou decisão sem processo nem matrícula: correspondência AMBÍGUA — fica
+          fora dos indicadores até a gerência decidir (conflito);
+        - decisão só na versão mais nova: acréscimo legítimo, vigente (vai à conferência normalmente);
+        - decisão só numa versão mais antiga: fora dos indicadores, com conflito (pode ter sido retirada).
+        Republicação/retificação tem natureza própria no ato lógico: nunca é fundida com o original.
+        Decisões manuais e resoluções da gerência sobre vigência prevalecem."""
+        novos = 0
+        for chave in sorted(c for c in chaves if c):
+            instancias = self.con.execute(
+                "SELECT a.id, a.sha256, COALESCE(f.guardado_em, '') AS guardado_em, "
+                "(SELECT MIN(revisado_em) FROM decisao d WHERE d.ato_id = a.id AND d.validacao <> 'PENDENTE') AS revisado_em "
+                "FROM ato a LEFT JOIN arquivo f ON f.sha256 = a.sha256 WHERE a.chave_logica = ?", (chave,)).fetchall()
+            ids = [i["id"] for i in instancias]
+            if not ids:
+                continue
+            marcas = ",".join("?" * len(ids))
+            if len(instancias) == 1:
+                self.con.execute(f"UPDATE decisao SET vigente = 1, representada_por = NULL WHERE ato_id IN ({marcas}) "
+                                 "AND representada_por IS NOT NULL", ids)
+                self._aplicar_resolucoes(ids)
+                continue
+            revisadas = [i for i in instancias if i["revisado_em"]]
+            principal = (min(revisadas, key=lambda i: (i["revisado_em"], i["id"])) if revisadas
+                         else max(instancias, key=lambda i: (i["guardado_em"], i["id"])))
+            base = self.con.execute("SELECT * FROM decisao WHERE ato_id = ? ORDER BY rowid", (principal["id"],)).fetchall()
+            self.con.execute("UPDATE decisao SET vigente = 1, representada_por = NULL WHERE ato_id = ?", (principal["id"],))
+            por_processo, por_matricula = {}, {}
+            for b in base:
+                if _normalizar_chave(b["processo"]):
+                    por_processo.setdefault(_normalizar_chave(b["processo"]), []).append(b)
+                if _normalizar_chave(b["matricula"]):
+                    por_matricula.setdefault(_normalizar_chave(b["matricula"]), []).append(b)
+            for outra in instancias:
+                if outra["id"] == principal["id"]:
+                    continue
+                mais_nova = (outra["guardado_em"], outra["id"]) >= (principal["guardado_em"], principal["id"])
+                encontradas = set()
+                for d in self.con.execute("SELECT * FROM decisao WHERE ato_id = ? ORDER BY rowid", (outra["id"],)).fetchall():
+                    proc, mat = _normalizar_chave(d["processo"]), _normalizar_chave(d["matricula"])
+                    candidatas = por_processo.get(proc, []) if proc else por_matricula.get(mat, []) if mat else []
+                    if len(candidatas) > 1 and mat:
+                        # O mesmo processo para mais de uma pessoa no ato: a matrícula desfaz a dúvida, se for única.
+                        candidatas = [b for b in candidatas if _normalizar_chave(b["matricula"]) == mat] or candidatas
+                    if proc and not candidatas and mat:
+                        candidatas = por_matricula.get(mat, [])          # processo alterado: mesma pessoa pela matrícula
+                    alvo = candidatas[0] if len(candidatas) == 1 else None
+                    ambigua = (not proc and not mat) or len(candidatas) > 1 or (
+                        alvo is not None and _normalizar_chave(alvo["matricula"]) and mat and _normalizar_chave(alvo["matricula"]) != mat)
+                    if ambigua:
+                        self.con.execute("UPDATE decisao SET vigente = 0, representada_por = NULL WHERE id = ?", (d["id"],))
+                        self._conflito("decisao", d["id"], "vigencia", "fora dos indicadores",
+                                       f"decisão distinta das da representação {principal['id']}", "CORRESPONDENCIA_AMBIGUA", principal["id"])
+                        novos += 1
+                        continue
+                    if alvo is None:
+                        if mais_nova:
+                            self.con.execute("UPDATE decisao SET vigente = 1, representada_por = NULL WHERE id = ?", (d["id"],))
+                        else:
+                            self.con.execute("UPDATE decisao SET vigente = 0, representada_por = NULL WHERE id = ?", (d["id"],))
+                            self._conflito("decisao", d["id"], "vigencia", "fora dos indicadores",
+                                           "decisão só existe em versão anterior do documento", "AUSENTE_NA_VERSAO_PRINCIPAL", principal["id"])
+                            novos += 1
+                        continue
+                    encontradas.add(alvo["id"])
+                    self.con.execute("UPDATE decisao SET vigente = 0, representada_por = ? WHERE id = ?", (alvo["id"], d["id"]))
+                    detalhe_alvo, detalhe_d = json.loads(alvo["detalhe"] or "{}"), json.loads(d["detalhe"] or "{}")
+                    for campo in self.CAMPOS_DECISAO + self.CAMPOS_DETALHE:
+                        va = detalhe_alvo.get(campo) if campo in self.CAMPOS_DETALHE else alvo[campo]
+                        vd = detalhe_d.get(campo) if campo in self.CAMPOS_DETALHE else d[campo]
+                        if normalizar_texto(vd) and normalizar_texto(va) != normalizar_texto(vd) and \
+                                normalizar_texto(self._extraido_original("decisao", alvo["id"], campo, va)) != normalizar_texto(vd):
+                            self._conflito("decisao", alvo["id"], campo, va, vd, "VERSAO_DO_DOCUMENTO", d["id"])
+                            novos += 1
+                if mais_nova:
+                    for b in base:
+                        if b["id"] not in encontradas and b["origem"] != "MANUAL":
+                            self._conflito("decisao", b["id"], "presenca", "presente", f"ausente na versão {outra['sha256'][:12]}",
+                                           "AUSENTE_EM_VERSAO_MAIS_NOVA", outra["id"])
+                            novos += 1
+            self._aplicar_resolucoes(ids)
+        return novos
+
+    def _aplicar_resolucoes(self, atos) -> None:
+        """Decisões da gerência sobre vigência prevalecem sobre a reconciliação automática."""
+        marcas = ",".join("?" * len(atos))
+        for c in self.con.execute(
+                f"SELECT c.* FROM conflito c JOIN decisao d ON d.id = c.alvo_id WHERE c.alvo_tipo = 'decisao' AND d.ato_id IN ({marcas}) "
+                "AND c.campo IN ('vigencia', 'presenca') AND c.estado IN ('ACEITO', 'MANTIDO') ORDER BY c.id", list(atos)).fetchall():
+            if c["campo"] == "vigencia" and c["estado"] == "ACEITO":
+                self.con.execute("UPDATE decisao SET vigente = 1, representada_por = NULL WHERE id = ?", (c["alvo_id"],))
+            elif c["campo"] == "presenca" and c["estado"] == "ACEITO":
+                self.con.execute("UPDATE decisao SET vigente = 0 WHERE id = ?", (c["alvo_id"],))
+
+    def vinculos_orfaos(self) -> list[dict]:
+        """Diagnóstico (sem alterar nada) de eventos cujo ato modificador, original ou sugerido não existe, ou cujo
+        original não é um ato ORIGINAL da mesma gerência. Chaves estrangeiras não são impostas a bancos históricos:
+        os problemas são apontados para a gerência."""
+        atos = {a["id"]: a for a in self.con.execute("SELECT id, gerencia, natureza FROM ato")}
+        saida = []
+        for e in self.con.execute("SELECT * FROM evento ORDER BY id"):
+            for campo in ("ato_id", "ato_original_id", "ato_sugerido_id"):
+                alvo = e[campo]
+                if alvo is None:
+                    continue
+                if alvo not in atos:
+                    saida.append({"evento": e["id"], "campo": campo, "problema": "ATO_INEXISTENTE", "ato": alvo})
+                elif campo == "ato_original_id" and (atos[alvo]["natureza"] != "ORIGINAL" or atos[alvo]["gerencia"] != e["gerencia"]):
+                    saida.append({"evento": e["id"], "campo": campo, "problema": "ALVO_INCOMPATIVEL", "ato": alvo})
+        return saida
+
+    @contextlib.contextmanager
+    def instantaneo(self):
+        """Leitura consistente: todas as consultas do bloco veem o banco num mesmo momento (transação de leitura),
+        mesmo que outro processo grave durante o cálculo dos indicadores."""
+        abriu = not self.con.in_transaction
+        if abriu:
+            self.con.execute("BEGIN")
+        try:
+            yield self
+        finally:
+            if abriu and self.con.in_transaction:
+                self.con.execute("COMMIT")
 
     def auditar(self, autor: str, acao: str, alvo_tipo: str, alvo_id: str, anterior, posterior, justificativa: str | None) -> None:
         """Chamado dentro da transação de quem altera o registro."""

@@ -296,7 +296,11 @@ def processar(banco: Banco, acervo: Acervo, limite: int | None = None, refazer_p
         inconsistencias = conferir_com_a_origem(resultado, banco.origens(sha))
         pendencia = inconsistencias or any(p["qualidade"] not in ("OK", "VAZIA") for p in resultado["paginas"])
         situacao = "LIDA_COM_PENDENCIAS" if pendencia else "LIDA"
-        banco.registrar_leitura(sha, situacao, VERSAO, resultado["paginas"], resultado["numero_edicao"],
+        comparacao = banco.registrar_leitura(sha, situacao, VERSAO, resultado["paginas"], resultado["numero_edicao"],
                                 resultado["data_edicao"], None, inconsistencias)
+        if comparacao == "PERDA_DE_CONTEUDO":
+            # A tentativa perdeu páginas ou qualidade: a leitura válida anterior foi mantida (Etapa 05.3.3).
+            contagem["RELEITURA_RECUSADA"] = contagem.get("RELEITURA_RECUSADA", 0) + 1
+            continue
         contagem[situacao] += 1
     return contagem

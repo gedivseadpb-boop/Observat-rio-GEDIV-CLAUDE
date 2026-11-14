@@ -22,7 +22,7 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
     else:
         fila = [l["sha256"] for l in banco.arquivos_sem_classificacao(GERENCIA, C.VERSAO_REGRAS)]
     resumo = {"arquivos": 0, "atos": 0, "decisoes": 0, "eventos": 0, "outras": 0, "fora_escopo": 0, "descartados": 0,
-              "preservadas_por_revisao": 0, "com_erro": 0, "erros": []}
+              "preservadas_por_revisao": 0, "conflitos": 0, "com_erro": 0, "erros": []}
     for sha in fila:
         try:
             paginas = banco.paginas(sha)

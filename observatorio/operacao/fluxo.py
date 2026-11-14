@@ -46,6 +46,11 @@ def avaliar(importacao: list[dict], leitura: dict, classificacao: dict, erros_de
         falhas.append(f"{anteriores} arquivo(s) com erro de leitura de execuções anteriores, ainda não refeitos")
     if classificacao.get("com_erro"):
         falhas.append(f"{classificacao['com_erro']} arquivo(s) que a classificação não conseguiu processar")
+    if leitura.get("RELEITURA_RECUSADA"):
+        pendencias.append(f"{leitura['RELEITURA_RECUSADA']} releitura(s) recusada(s) por perda de conteúdo; a leitura válida "
+                          "anterior foi mantida")
+    if classificacao.get("conflitos"):
+        pendencias.append(f"{classificacao['conflitos']} conflito(s) entre a nova extração e dados revisados, para a gerência")
     if leitura.get("LIDA_COM_PENDENCIAS"):
         pendencias.append(f"{leitura['LIDA_COM_PENDENCIAS']} arquivo(s) lido(s) com páginas pendentes")
     if leitura.get("na_fila"):
@@ -53,7 +58,7 @@ def avaliar(importacao: list[dict], leitura: dict, classificacao: dict, erros_de
     if fila_de_classificacao:
         pendencias.append(f"{fila_de_classificacao} arquivo(s) ainda na fila de classificação")
     retomada = {"leituras_com_erro": erros_de_leitura_na_base, "fila_de_classificacao": fila_de_classificacao}
-    if erros_de_leitura_na_base or leitura.get("LIDA_COM_PENDENCIAS"):
+    if erros_de_leitura_na_base or leitura.get("LIDA_COM_PENDENCIAS") or leitura.get("RELEITURA_RECUSADA"):
         retomada["comando"] = RETOMADA
     if falhas:
         return resultado(saida.FALHA, falhas + pendencias, retomada)
