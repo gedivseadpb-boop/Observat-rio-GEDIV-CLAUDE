@@ -59,10 +59,15 @@ def descobrir_mes(fonte, banco: B.Banco, politica: rede.Politica, ano: int, mes:
         return {"fonte": fonte.sigla, "ano": ano, "mes": mes, "erro": str(e)}
     parcial = bool([p for p in fila if p not in vistas])
     novas = sem_data = 0
+    # Todas as edições DO MÊS lido são registradas, mesmo fora do período pedido: a varredura do mês é gravada como
+    # completa, e a cobertura só pode afirmar "sem publicação" num dia se tudo o que a listagem mostrou para o mês
+    # estiver no banco (achado real de 14/11/2026: após coletar-dia 07/11, os dias 04–06/11 apareciam como
+    # SEM_PUBLICACAO_LISTADA). O período restringe os DOWNLOADS (baixar_pendentes). Edições de OUTROS meses que
+    # apareçam na listagem continuam fora, salvo se estiverem no período pedido.
     for item in itens.values():
         if item.data is None:
             sem_data += 1
-        elif (inicio and item.data < inicio) or (fim and item.data > fim):
+        elif (item.data.year, item.data.month) != (ano, mes) and ((inicio and item.data < inicio) or (fim and item.data > fim)):
             continue
         novas += banco.registrar_descoberta(item.fonte, item.url, item.data.isoformat() if item.data else None,
                                             item.tipo, item.ordem, item.rotulo)
@@ -307,7 +312,7 @@ def coletar(fontes, banco: B.Banco, acervo: Acervo, inicio: date, fim: date, pol
                 continue
         for ano, mes in meses(inicio, fim):
             parte["varreduras"].append(descobrir_mes(fonte, banco, p, ano, mes, inicio, fim))
-        parte["downloads"] = baixar_pendentes(fonte, banco, acervo, p, limite, reverificar=reverificar)
+        parte["downloads"] = baixar_pendentes(fonte, banco, acervo, p, limite, reverificar=reverificar, inicio=inicio, fim=fim)
     banco.concluir_execucao(execucao, resumo)
     return resumo
 

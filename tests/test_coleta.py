@@ -154,9 +154,16 @@ class TesteColeta(unittest.TestCase):
         self.assertEqual(resumo["fontes"]["auniao"]["downloads"], {"NOVO": 2, "ADIADA": 3})
         self.assertTrue(coletor.houve_pendencia(resumo))
 
-    def test_periodo_restringe_o_que_e_registrado(self):
+    def test_periodo_restringe_os_downloads_e_o_mes_lido_e_registrado_inteiro(self):
+        # Antes (Etapa 1) o período também restringia o REGISTRO; isso fazia a cobertura declarar "sem publicação" dias
+        # que a listagem lida mostrava (achado real em 14/11/2026, integração 05.1). O contrato passa a ser: o mês lido é
+        # registrado por inteiro e só o período é baixado.
         coletor.coletar([self.auniao], self.banco, self.acervo, date(2026, 1, 8), date(2026, 1, 9), politica=self.s.politica())
-        self.assertEqual(sorted({p["data_publicacao"] for p in self.banco.publicacoes()}), ["2026-01-08", "2026-01-09"])
+        baixadas = sorted({p["data_publicacao"] for p in self.banco.publicacoes() if p["estado"] == "BAIXADA"})
+        self.assertEqual(baixadas, ["2026-01-08", "2026-01-09"])
+        registradas = {p["data_publicacao"] for p in self.banco.publicacoes()}
+        self.assertTrue(registradas > {"2026-01-08", "2026-01-09"})
+        self.assertTrue(all(d.startswith("2026-01") for d in registradas))
 
     def test_conteudo_trocado_no_mesmo_endereco_preserva_original(self):
         self.coletar()

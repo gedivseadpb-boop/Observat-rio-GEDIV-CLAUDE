@@ -9,6 +9,7 @@ import importlib.util
 import unittest
 from datetime import date
 
+from observatorio.coleta import inventario
 from observatorio.gerencias.gediv import processo
 from observatorio.leitura import leitor
 from observatorio.nucleo import banco as B
@@ -103,6 +104,27 @@ class TesteColetaLeituraClassificacao(Base):
         contar = lambda t: self.banco.con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         self.assertEqual((contar("arquivo"), contar("leitura"), contar("ato"), contar("decisao")), (1, 1, 1, 3))
         self.assertEqual(len([d for d in self.banco.downloads() if d["resultado"] == "NOVO"]), 1)
+
+
+class TesteCoberturaDoPeriodoParcial(Base):
+    """Achado real de 14/11/2026: depois de `coletar-dia 2026-11-07`, a cobertura de 04 a 08/11 dava 04, 05 e 06/11 como
+    SEM_PUBLICACAO_LISTADA, embora a listagem lida na mesma execução trouxesse essas edições."""
+
+    def test_dia_listado_fora_do_periodo_coletado_e_lacuna_e_nao_dia_sem_edicao(self):
+        self.coletar(date(2026, 11, 7), date(2026, 11, 7))
+        dias = {d["data"]: d["situacao"] for d in inventario.cobertura(self.banco, date(2026, 11, 4), date(2026, 11, 8), ["auniao"])}
+        self.assertEqual(dias["2026-11-07"], "COMPLETO")
+        for dia in ("2026-11-04", "2026-11-05", "2026-11-06"):
+            with self.subTest(dia=dia):
+                self.assertEqual(dias[dia], "PENDENTE")                 # listado e não baixado: lacuna explícita
+        self.assertEqual(dias["2026-11-08"], "SEM_PUBLICACAO_LISTADA")  # domingo: não há edição listada
+        self.assertEqual(len(self.arquivos_no_acervo()), 1)              # só o dia pedido foi baixado
+
+    def test_mes_registrado_por_inteiro_continua_afirmando_dia_sem_edicao(self):
+        self.coletar(date(2026, 11, 1), date(2026, 11, 14))
+        dias = {d["data"]: d["situacao"] for d in inventario.cobertura(self.banco, date(2026, 11, 7), date(2026, 11, 9), ["auniao"])}
+        self.assertEqual((dias["2026-11-07"], dias["2026-11-08"], dias["2026-11-09"]),
+                         ("COMPLETO", "SEM_PUBLICACAO_LISTADA", "SEM_PUBLICACAO_LISTADA"))
 
 
 if __name__ == "__main__":
