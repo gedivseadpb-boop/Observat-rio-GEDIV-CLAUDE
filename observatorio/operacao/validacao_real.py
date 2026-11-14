@@ -26,7 +26,7 @@ from ..nucleo import pdf
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
 from ..painel import indicadores, projecao
-from . import fluxo
+from . import fluxo, saida
 
 REFERENCIAS = Path(__file__).resolve().parents[2] / "docs" / "validacao" / "referencias.json"
 
@@ -50,6 +50,7 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
             "paginas_esperadas": referencia.get("paginas")}
     if not laudo.valido:
         relatorio["resultado"] = "ARQUIVO_RECUSADO"
+        relatorio["codigo_de_saida"] = saida.FALHA
         return relatorio
 
     inicio = time.monotonic()
@@ -115,6 +116,8 @@ def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str 
                                "indicadores_conferidos": conferido["indicadores"],
                                "observacao": "Nenhum registro foi conferido automaticamente; os indicadores oficiais só mudam após revisão humana."}
         relatorio["resultado"] = "FLUXO_EXECUTADO"
+        relatorio["codigo_de_saida"] = relatorio["fluxo"]["resultado"]["codigo"]
+        relatorio["situacao_da_execucao"] = relatorio["fluxo"]["resultado"]["situacao"]
         relatorio["conferencia_humana"] = "PENDENTE — comparar a amostra privada com o PDF e registrar o resultado"
         if amostra:
             _gravar_amostra(Path(amostra), arquivo.name, atos, por_ato, banco, sha)

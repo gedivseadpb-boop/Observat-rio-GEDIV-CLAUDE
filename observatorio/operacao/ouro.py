@@ -20,6 +20,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import saida as codigos
+
 MANIFESTO_PADRAO = Path(__file__).resolve().parents[2] / "docs" / "validacao" / "conjunto_ouro.json"
 
 
@@ -70,8 +72,10 @@ def _executar_edicao(doc: dict, arquivo: Path) -> dict:
         comando = [sys.executable, "-m", "observatorio.operacao", "validar-real", str(arquivo), "--data", doc["data"],
                    "--url", doc["url"], "--dados", str(Path(pasta) / "dados"), "--saida", str(saida)]
         processo = subprocess.run(comando, capture_output=True, text=True, cwd=Path(__file__).resolve().parents[2])
-        if processo.returncode != 0 or not saida.exists():
-            return {"resultado": "ERRO_DE_EXECUCAO", "erro": (processo.stderr or processo.stdout)[-800:]}
+        # validar-real sai com 3 quando a edição foi lida com páginas pendentes: a execução é válida e a comparação
+        # com o esperado decide. Só o código é registrado — a saída de erro poderia trazer trechos do documento.
+        if processo.returncode not in (codigos.SUCESSO, codigos.CONCLUIDO_COM_PENDENCIAS) or not saida.exists():
+            return {"resultado": "ERRO_DE_EXECUCAO", "erro": f"validar-real terminou com código {processo.returncode}"}
         return json.loads(saida.read_text(encoding="utf-8"))
 
 
@@ -104,7 +108,12 @@ def executar(pasta_pdfs: str | Path, manifesto: str | Path = MANIFESTO_PADRAO) -
 
 
 def codigo_de_saida(resultado: dict) -> int:
+    """0 só quando TODAS as edições do manifesto foram executadas e conferem. Manifesto sem edições ou nenhum PDF
+    encontrado: 4 (nada avaliado). Divergência, ou parte das edições sem PDF: 1 (antes era 2, o código de erro de uso,
+    e um manifesto vazio saía com 0)."""
     situacoes = [e["situacao"] for e in resultado["edicoes"]]
-    if "DIVERGE" in situacoes:
-        return 1
-    return 2 if "PDF_AUSENTE" in situacoes else 0
+    if not situacoes or all(s == "PDF_AUSENTE" for s in situacoes):
+        return codigos.NAO_EXECUTADO
+    if "DIVERGE" in situacoes or "PDF_AUSENTE" in situacoes:
+        return codigos.FALHA
+    return codigos.SUCESSO

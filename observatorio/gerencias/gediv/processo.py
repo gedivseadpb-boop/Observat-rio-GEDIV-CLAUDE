@@ -22,17 +22,25 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
     else:
         fila = [l["sha256"] for l in banco.arquivos_sem_classificacao(GERENCIA, C.VERSAO_REGRAS)]
     resumo = {"arquivos": 0, "atos": 0, "decisoes": 0, "eventos": 0, "outras": 0, "fora_escopo": 0, "descartados": 0,
-              "preservadas_por_revisao": 0}
+              "preservadas_por_revisao": 0, "com_erro": 0, "erros": []}
     for sha in fila:
-        paginas = banco.paginas(sha)
-        resultado = classificar([(p["numero"], p["texto"]) for p in paginas], sha)
-        ruins = [p["numero"] for p in paginas if p["qualidade"] not in ("OK", "VAZIA")]
-        if ruins:
-            resultado.pendencias.append(
-                f"páginas com leitura pendente ou de baixa confiança: {', '.join(map(str, ruins))}; pode haver atos não extraídos")
-        if any(p["metodo"] != "TEXTO" for p in paginas):
-            resultado.pendencias.append("há páginas lidas por OCR; conferir página e colunas no PDF")
-        parte = banco.gravar_classificacao(GERENCIA, sha, C.VERSAO_REGRAS, banco.data_do_arquivo(sha), resultado)
+        try:
+            paginas = banco.paginas(sha)
+            resultado = classificar([(p["numero"], p["texto"]) for p in paginas], sha)
+            ruins = [p["numero"] for p in paginas if p["qualidade"] not in ("OK", "VAZIA")]
+            if ruins:
+                resultado.pendencias.append(
+                    f"páginas com leitura pendente ou de baixa confiança: {', '.join(map(str, ruins))}; pode haver atos não extraídos")
+            if any(p["metodo"] != "TEXTO" for p in paginas):
+                resultado.pendencias.append("há páginas lidas por OCR; conferir página e colunas no PDF")
+            parte = banco.gravar_classificacao(GERENCIA, sha, C.VERSAO_REGRAS, banco.data_do_arquivo(sha), resultado)
+        except Exception as e:
+            # Um arquivo problemático não para a fila. Nada dele é gravado pela metade (gravar_classificacao é uma
+            # transação) e ele continua na fila de classificação para a próxima execução. Só o tipo do erro é
+            # registrado: a mensagem poderia trazer trechos do documento.
+            resumo["com_erro"] += 1
+            resumo["erros"].append({"sha256": sha[:12], "erro": type(e).__name__})
+            continue
         resumo["arquivos"] += 1
         for chave in parte:
             resumo[chave] += parte[chave]

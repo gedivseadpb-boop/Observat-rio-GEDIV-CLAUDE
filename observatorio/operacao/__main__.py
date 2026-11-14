@@ -26,7 +26,12 @@ Aquisição dos PDFs oficiais (Etapa 05):
         --contingencia MANIFESTO.json usa arquivos obtidos por outro meio (procedência registrada como contingência).
     python -m observatorio.operacao cobertura --inicio 2026-01-01 --fim 2026-11-12 [--saida cobertura.json]
         manifesto de cobertura dia a dia com lacunas explícitas e a procedência de cada arquivo.
-Códigos de saída da aquisição: 0 = concluído; 3 = concluído com pendências; 4 = fonte inacessível/bloqueado; 2 = erro de uso.
+Códigos de saída (observatorio/operacao/saida.py), para agendadores:
+    0 = sucesso integral; 1 = falha (erro ou divergência: exige intervenção); 2 = erro de uso;
+    3 = concluído com pendências (dados gravados; retomar ou revisar); 4 = não executado / fonte inacessível.
+    executar e validar-real: 1 se houver importação recusada, leitura em ERRO (também de execuções anteriores ainda
+    não refeitas) ou arquivo que a classificação não processou; 3 se houver páginas pendentes ou fila.
+    Retomada: python -m observatorio.operacao executar --refazer-pendentes
 
 Depois: python -m observatorio.web --dados PASTA
 """
@@ -37,7 +42,7 @@ import json
 import sys
 from datetime import date
 
-from . import fluxo
+from . import fluxo, saida
 
 
 def main(argv=None) -> int:
@@ -52,6 +57,8 @@ def main(argv=None) -> int:
     ap.add_argument("--amostra", help="validar-real: arquivo de texto PRIVADO para a conferência humana")
     ap.add_argument("--pdfs", help="ouro: pasta com os PDFs oficiais (fora do repositório)")
     ap.add_argument("--manifesto", help="ouro: manifesto do conjunto-ouro")
+    ap.add_argument("--refazer-pendentes", action="store_true",
+                    help="executar: relê os arquivos com leitura em ERRO ou com páginas pendentes (retomada)")
     ap.add_argument("--esperado-privado", help="corpus: arquivo PRIVADO com os valores esperados por campo")
     ap.add_argument("--fonte", action="append", choices=["auniao", "cge"], help="aquisição: fonte(s); padrão auniao")
     ap.add_argument("--inicio", type=date.fromisoformat)
@@ -120,18 +127,24 @@ def main(argv=None) -> int:
         from . import validacao_real
         if not a.origem or not a.data:
             ap.error("validar-real exige ARQUIVO.pdf e --data")
+        from pathlib import Path
+        if not Path(a.origem).is_file():
+            print(json.dumps({"resultado": "ARQUIVO_AUSENTE", "codigo_de_saida": saida.NAO_EXECUTADO,
+                              "arquivo": Path(a.origem).name}, ensure_ascii=False, indent=2))
+            return saida.NAO_EXECUTADO
         resumo = validacao_real.executar(a.origem, a.data, a.url, a.dados, a.amostra)
         if a.saida:
             with open(a.saida, "w", encoding="utf-8") as destino:
                 json.dump(resumo, destino, ensure_ascii=False, indent=2)
-        resumo = {k: v for k, v in resumo.items() if k != "fluxo"}
-    elif a.comando == "demonstracao":
+        print(json.dumps({k: v for k, v in resumo.items() if k != "fluxo"}, ensure_ascii=False, indent=2))
+        return resumo["codigo_de_saida"]
+    if a.comando == "demonstracao":
         from . import demonstracao
-        resumo = demonstracao.criar(a.dados)
-    else:
-        resumo = fluxo.executar(a.dados, a.origem, a.data, a.url)
+        print(json.dumps(demonstracao.criar(a.dados), ensure_ascii=False, indent=2))
+        return saida.SUCESSO
+    resumo = fluxo.executar(a.dados, a.origem, a.data, a.url, a.refazer_pendentes)
     print(json.dumps(resumo, ensure_ascii=False, indent=2))
-    return 0
+    return resumo["resultado"]["codigo"]
 
 
 if __name__ == "__main__":

@@ -2,6 +2,16 @@
 
 A obtenção automática nas fontes oficiais é feita por `observatorio.coleta` (lotes). Este fluxo
 serve tanto para PDFs baixados quanto para PDFs fornecidos manualmente — o caminho é o mesmo.
+
+Resultado (Etapa 05.3.1 — antes o comando saía com 0 mesmo com leitura em ERRO): o retorno traz
+`resultado = {codigo, situacao, motivos, retomada}`, com os códigos de `saida.py`:
+- FALHA (1): importação recusada, leitura em ERRO (nesta execução OU de execuções anteriores ainda não refeitas),
+  arquivo que a classificação não conseguiu processar;
+- CONCLUIDO_COM_PENDENCIAS (3): leitura com páginas pendentes nesta execução, arquivos ainda na fila;
+- NAO_EXECUTADO (4): a origem informada não existe ou não tem PDF;
+- SUCESSO (0): nada disso.
+Tudo o que foi gravado continua gravado: a retomada (`--refazer-pendentes`) relê os arquivos em ERRO ou com
+páginas pendentes, e a fila de classificação é retomada sozinha na próxima execução.
 """
 from __future__ import annotations
 
@@ -14,24 +24,72 @@ from ..gerencias.gediv import processo
 from ..leitura import leitor
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
+from . import saida
+
+RETOMADA = "python -m observatorio.operacao executar --refazer-pendentes"
 
 
-def executar(pasta_dados: str | Path, origem: str | Path | None = None, data: date | None = None, url: str | None = None) -> dict:
+def resultado(codigo: int, motivos: list[str], retomada: dict | None = None) -> dict:
+    return {"codigo": codigo, "situacao": saida.NOMES[codigo], "motivos": motivos, "retomada": retomada or {}}
+
+
+def avaliar(importacao: list[dict], leitura: dict, classificacao: dict, erros_de_leitura_na_base: int,
+            fila_de_classificacao: int) -> dict:
+    falhas, pendencias = [], []
+    recusados = [i for i in importacao if not i.get("aceito")]
+    if recusados:
+        falhas.append(f"{len(recusados)} arquivo(s) recusado(s) na importação")
+    if leitura.get("ERRO"):
+        falhas.append(f"{leitura['ERRO']} arquivo(s) com erro de leitura nesta execução")
+    anteriores = erros_de_leitura_na_base - leitura.get("ERRO", 0)
+    if anteriores > 0:
+        falhas.append(f"{anteriores} arquivo(s) com erro de leitura de execuções anteriores, ainda não refeitos")
+    if classificacao.get("com_erro"):
+        falhas.append(f"{classificacao['com_erro']} arquivo(s) que a classificação não conseguiu processar")
+    if leitura.get("LIDA_COM_PENDENCIAS"):
+        pendencias.append(f"{leitura['LIDA_COM_PENDENCIAS']} arquivo(s) lido(s) com páginas pendentes")
+    if leitura.get("na_fila"):
+        pendencias.append(f"{leitura['na_fila']} arquivo(s) ainda na fila de leitura")
+    if fila_de_classificacao:
+        pendencias.append(f"{fila_de_classificacao} arquivo(s) ainda na fila de classificação")
+    retomada = {"leituras_com_erro": erros_de_leitura_na_base, "fila_de_classificacao": fila_de_classificacao}
+    if erros_de_leitura_na_base or leitura.get("LIDA_COM_PENDENCIAS"):
+        retomada["comando"] = RETOMADA
+    if falhas:
+        return resultado(saida.FALHA, falhas + pendencias, retomada)
+    if pendencias:
+        return resultado(saida.CONCLUIDO_COM_PENDENCIAS, pendencias, retomada)
+    return resultado(saida.SUCESSO, [], retomada)
+
+
+def executar(pasta_dados: str | Path, origem: str | Path | None = None, data: date | None = None, url: str | None = None,
+             refazer_pendentes: bool = False) -> dict:
+    arquivos: list[Path] = []
+    if origem is not None:
+        origem = Path(origem)
+        if not origem.exists():
+            return {"importacao": [], "resultado": resultado(saida.NAO_EXECUTADO, [f"origem não encontrada: {origem.name}"])}
+        arquivos = sorted(origem.glob("*.pdf")) if origem.is_dir() else [origem]
+        if not arquivos:
+            return {"importacao": [], "resultado": resultado(saida.NAO_EXECUTADO, [f"nenhum PDF em {origem.name}"])}
     pasta = Path(pasta_dados)
     banco, acervo = Banco(pasta / "observatorio.sqlite3"), Acervo(pasta / "acervo")
     try:
         importados = []
-        if origem is not None:
-            origem = Path(origem)
-            for arquivo in (sorted(origem.glob("*.pdf")) if origem.is_dir() else [origem]):
-                quando = data or data_do_nome(arquivo.name)
-                if quando is None:
-                    importados.append({"arquivo": arquivo.name, "aceito": False, "motivo": "DATA_NAO_INFORMADA_NEM_NO_NOME"})
-                    continue
-                importados.append({"arquivo": arquivo.name, "data": quando.isoformat(),
-                                   **coletor.importar_manual(banco, acervo, arquivo.read_bytes(), quando,
-                                                             url or f"manual:{arquivo.name}", arquivo.name)})
-        return {"importacao": importados, "leitura": leitor.processar(banco, acervo),
-                "classificacao": processo.classificar_pendentes(banco), "situacao": processo.situacao(banco)}
+        for arquivo in arquivos:
+            quando = data or data_do_nome(arquivo.name)
+            if quando is None:
+                importados.append({"arquivo": arquivo.name, "aceito": False, "motivo": "DATA_NAO_INFORMADA_NEM_NO_NOME"})
+                continue
+            importados.append({"arquivo": arquivo.name, "data": quando.isoformat(),
+                               **coletor.importar_manual(banco, acervo, arquivo.read_bytes(), quando,
+                                                         url or f"manual:{arquivo.name}", arquivo.name)})
+        leitura = leitor.processar(banco, acervo, refazer_pendentes=refazer_pendentes)
+        classificacao = processo.classificar_pendentes(banco)
+        situacao = processo.situacao(banco)
+        erros = banco.con.execute("SELECT COUNT(*) FROM leitura WHERE situacao = 'ERRO' AND versao_leitor = ?",
+                                  (leitor.VERSAO,)).fetchone()[0]
+        return {"importacao": importados, "leitura": leitura, "classificacao": classificacao, "situacao": situacao,
+                "resultado": avaliar(importados, leitura, classificacao, erros, situacao["na_fila"])}
     finally:
         banco.fechar()
