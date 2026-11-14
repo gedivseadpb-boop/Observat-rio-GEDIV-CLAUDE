@@ -15,6 +15,19 @@
     python -m observatorio.operacao demonstracao --dados dados-demo
         cria uma base de DEMONSTRAÇÃO com documentos SINTÉTICOS (pessoas e processos fictícios)
 
+Aquisição dos PDFs oficiais (Etapa 05):
+    python -m observatorio.operacao sonda --fonte auniao [--saida sonda.json]
+        descobre a edição mais recente na página oficial, baixa o PDF num diretório temporário VAZIO e verifica
+        integridade (Content-Length, %%EOF, startxref, páginas) e SHA-256. Saída 0 = download íntegro; 4 = bloqueado.
+    python -m observatorio.operacao coletar-dia --data 2026-11-07 [--dry-run] [--limite N]
+    python -m observatorio.operacao coletar-intervalo --inicio 2026-11-04 --fim 2026-11-12 [--dry-run] [--limite N]
+        descobre (edições recentes + listagens mensais) e baixa só o período; repetir não duplica nada.
+        Intervalos acima de 31 dias são recusados: a carga histórica é da Etapa 06.
+        --contingencia MANIFESTO.json usa arquivos obtidos por outro meio (procedência registrada como contingência).
+    python -m observatorio.operacao cobertura --inicio 2026-01-01 --fim 2026-11-12 [--saida cobertura.json]
+        manifesto de cobertura dia a dia com lacunas explícitas e a procedência de cada arquivo.
+Códigos de saída da aquisição: 0 = concluído; 3 = concluído com pendências; 4 = fonte inacessível/bloqueado; 2 = erro de uso.
+
 Depois: python -m observatorio.web --dados PASTA
 """
 from __future__ import annotations
@@ -29,7 +42,8 @@ from . import fluxo
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.operacao", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro", "corpus"])
+    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro", "corpus",
+                                        "sonda", "coletar-dia", "coletar-intervalo", "cobertura"])
     ap.add_argument("origem", nargs="?")
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--data", type=date.fromisoformat)
@@ -39,6 +53,16 @@ def main(argv=None) -> int:
     ap.add_argument("--pdfs", help="ouro: pasta com os PDFs oficiais (fora do repositório)")
     ap.add_argument("--manifesto", help="ouro: manifesto do conjunto-ouro")
     ap.add_argument("--esperado-privado", help="corpus: arquivo PRIVADO com os valores esperados por campo")
+    ap.add_argument("--fonte", action="append", choices=["auniao", "cge"], help="aquisição: fonte(s); padrão auniao")
+    ap.add_argument("--inicio", type=date.fromisoformat)
+    ap.add_argument("--fim", type=date.fromisoformat)
+    ap.add_argument("--limite", type=int, help="aquisição: máximo de downloads nesta execução")
+    ap.add_argument("--dry-run", action="store_true", help="aquisição: só descobre e lista o que seria baixado")
+    ap.add_argument("--reverificar", action="store_true", help="aquisição: consulta de novo publicações já baixadas")
+    ap.add_argument("--contingencia", help="aquisição: manifesto JSON de arquivos obtidos por outro meio")
+    ap.add_argument("--permitir-longo", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--hashes", help="sonda: JSON {url_oficial: sha256} com hashes históricos para comparação")
+    ap.add_argument("--guardar", help="sonda: pasta (fora do Git) onde copiar o PDF baixado")
     a = ap.parse_args(argv)
     if a.comando == "corpus":
         from . import corpus
@@ -50,6 +74,37 @@ def main(argv=None) -> int:
                 json.dump(resultado, destino, ensure_ascii=False, indent=2)
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
         return 0
+    if a.comando in ("sonda", "coletar-dia", "coletar-intervalo", "cobertura"):
+        from . import aquisicao
+        siglas = a.fonte or ["auniao"]
+        if a.comando == "sonda":
+            hashes = json.loads(open(a.hashes, encoding="utf-8").read()) if a.hashes else None
+            relatorio = aquisicao.sonda(siglas[0], hashes, guardar_em=a.guardar)
+            aquisicao.gravar(relatorio, a.saida)
+            return 0 if relatorio["situacao"] == "DOWNLOAD_INTEGRO" else 4
+        if a.comando == "cobertura":
+            if not a.inicio:
+                ap.error("cobertura exige --inicio")
+            aquisicao.gravar(aquisicao.cobertura(a.dados, siglas, a.inicio, a.fim or date.today()), a.saida)
+            return 0
+        if a.comando == "coletar-dia":
+            if not a.data:
+                ap.error("coletar-dia exige --data")
+            inicio = fim = a.data
+        else:
+            if not a.inicio or not a.fim:
+                ap.error("coletar-intervalo exige --inicio e --fim")
+            inicio, fim = a.inicio, a.fim
+        from ..coleta.coletor import IntervaloInvalido
+        try:
+            resumo = aquisicao.coletar(a.dados, siglas, inicio, fim, a.limite, a.dry_run, a.reverificar, a.contingencia,
+                                       a.permitir_longo)
+        except IntervaloInvalido as erro:
+            ap.error(str(erro))
+        aquisicao.gravar(resumo, a.saida)
+        if resumo["fontes"] and all(aquisicao.fonte_bloqueada(p) for p in resumo["fontes"].values()):
+            return 4
+        return 3 if resumo["pendencias"] else 0
     if a.comando == "ouro":
         from . import ouro
         if not a.pdfs:

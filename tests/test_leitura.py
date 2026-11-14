@@ -261,8 +261,8 @@ class TesteLeitorComPdf(BaseLeitor):
 
     def test_arquivo_ilegivel_vira_erro_e_nao_para_a_fila(self):
         from observatorio.leitura import leitor
-        from tests.apoio import pdf_sintetico
-        self.guardar(pdf_sintetico("estrutura minima, sem paginas"), "ruim")
+        from tests.apoio import pdf_sem_paginas
+        self.guardar(pdf_sem_paginas("estrutura minima, sem paginas"), "ruim")
         self.guardar(self.dados, "bom")
         contagem = leitor.processar(self.banco, self.acervo)
         self.assertEqual((contagem["ERRO"], contagem["LIDA_COM_PENDENCIAS"]), (1, 1))
