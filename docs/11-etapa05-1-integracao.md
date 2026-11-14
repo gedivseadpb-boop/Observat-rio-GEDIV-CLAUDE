@@ -52,16 +52,37 @@ trouxesse essas edições.
 - **Verificação com dados reais:** 04–06/11 `PENDENTE`, 07/11 `COMPLETO`, 08/11 `SEM_PUBLICACAO_LISTADA`, um
   único download.
 
-## Validação
+## Achado real corrigido: OCR travava com leituras simultâneas
 
-| Verificação | Resultado |
+Seis edições lidas ao mesmo tempo (um processo por edição, 4 núcleos) ficaram 24 minutos presas numa única chamada
+ao Tesseract.
+
+| Medição (6 edições de novembro) | Resultado |
 |---|---|
-| Suíte completa, sem dados reais | 262 testes: 260 OK, 2 pulados |
-| Suíte completa com PDFs oficiais e esperado privado | 262 testes: **262 OK, 0 pulados, 0 falhos** |
-| Conjunto-ouro (01, 02, 03, 06/10 e 04/11) | 5/5 |
-| Corpus por campo | 100% (63 linhas de desenvolvimento, 36 de validação cega) |
-| Edições de novembro (05 a 12/11) | Idênticas à Etapa 04, ato por ato |
-| Cadeia real: `sonda` → `coletar-dia` 07/11 → leitura 0.6 → classificação | 579 (20) e 580 (22) e demais atos idênticos à Etapa 04 |
+| Uma edição sozinha | 16 s, com ou sem limite de threads |
+| 6 em paralelo, Tesseract no padrão (várias threads OpenMP por chamada) | **6/6 estouraram 240 s** |
+| 6 em paralelo, `OMP_THREAD_LIMIT=1` | 6/6 em 44 s |
+| 6 em paralelo, código corrigido, sem nenhuma variável definida à mão | 6/6 em 39 s, resultados idênticos aos da Etapa 04 |
+
+Correção (`observatorio/leitura/ocr.py`):
+- todas as chamadas ao Tesseract passam por um único módulo;
+- uma thread por chamada, por padrão; o valor definido pelo operador prevalece;
+- limite de tempo por chamada (`GEDIV_OCR_TEMPO_MAXIMO`, padrão 120 s);
+- a página cujo OCR estoura fica com o texto nativo e qualidade `OCR_ESGOTADO`; a edição vai para
+  `LIDA_COM_PENDENCIAS` e é refeita por `refazer_pendentes`;
+- o robô não trava, e nada é aceito sem leitura.
+
+## Validação (HEAD final)
+
+| Verificação | Tipo | Resultado |
+|---|---|---|
+| Suíte completa, sem dados reais | Sintética | 270 executados: 268 OK, 2 pulados, 0 falhas |
+| Suíte completa com `GEDIV_PDFS_OURO` e `GEDIV_CORPUS_PRIVADO` | 268 sintéticos + 1 com PDFs oficiais + 1 com PDFs oficiais e valores privados | **270 executados: 270 OK, 0 pulados, 0 falhas** |
+| Conjunto-ouro (01, 02, 03, 06/10 e 04/11) | PDFs oficiais; **regressão** (usado no desenvolvimento) | 5/5 `CONFERE` |
+| Corpus por campo, desenvolvimento | PDFs oficiais + valores privados; **regressão** | 63/63 linhas |
+| Corpus por campo, "validação cega" | Idem | 36/36 linhas hoje. **Não é medida independente:** a única medição independente foi a 1ª passagem da Etapa 04 (176/198 = 88,9% estrito; 196/198 = 99,0% só o valor). As duas correções que ela revelou fizeram o conjunto deixar de ser cego. |
+| Edições oficiais de novembro (05, 06, 07, 10, 11, 12/11) | PDFs oficiais; **regressão** contra a Etapa 04 | Idênticas em todas as colunas de `ato`, `decisao`, `evento`, `pagina`, `leitura`, `fora_escopo`, `outra_publicacao` e `classificacao` |
+| Cadeia real: `sonda` → `coletar-dia` 07/11 → leitura 0.6 → classificação | Rede real + PDF oficial | Atos idênticos aos da Etapa 04 |
 
 O ruído `BrokenPipeError` na saída dos testes vem do servidor local de `tests/apoio.py` quando o cliente encerra a
 conexão de propósito (testes de truncamento). Já existia na Etapa 05 e não é falha.
