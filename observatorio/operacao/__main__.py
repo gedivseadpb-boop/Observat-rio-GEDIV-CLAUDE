@@ -73,7 +73,7 @@ def main(argv=None) -> int:
             with open(a.saida, "w", encoding="utf-8") as destino:
                 json.dump(resultado, destino, ensure_ascii=False, indent=2)
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
-        return 0
+        return resultado["codigo_de_saida"]       # 0 só com o contrato inteiro avaliado e conferido
     if a.comando in ("sonda", "coletar-dia", "coletar-intervalo", "cobertura"):
         from . import aquisicao
         siglas = a.fonte or ["auniao"]

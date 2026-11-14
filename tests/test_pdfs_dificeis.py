@@ -284,9 +284,13 @@ class TesteCorpusPorCampo(unittest.TestCase):
         import os
         from observatorio.operacao import corpus
         r = corpus.executar(os.environ["GEDIV_PDFS_OURO"], os.environ["GEDIV_CORPUS_PRIVADO"])
-        for conjunto, dados in r.items():
+        # Antes: percorria os conjuntos devolvidos — um resultado vazio passava sem avaliar nada.
+        self.assertEqual(r["situacao"], corpus.APROVADO, r["motivo"])
+        self.assertEqual(set(r["conjuntos"]), {"desenvolvimento", "validacao_cega"})
+        for conjunto, dados in r["conjuntos"].items():
             with self.subTest(conjunto=conjunto):
-                self.assertEqual(dados["total"]["linhas_encontradas"], dados["total"]["linhas_esperadas"])
+                self.assertEqual(dados["por_situacao"], {corpus.CONFERE: len(dados["casos"])})
+                self.assertEqual(dados["total"]["linhas_pareadas"], dados["total"]["linhas_esperadas"])
                 self.assertEqual(dados["total"]["precisao_todos_os_campos"], 100.0)
 
 
