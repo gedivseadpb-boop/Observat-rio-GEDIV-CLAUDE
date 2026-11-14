@@ -174,17 +174,50 @@ vazio devolve `{}`).
 Esses resultados com PDFs oficiais são **regressão**: são as mesmas edições usadas no desenvolvimento, não uma
 validação independente.
 
-## 10. Resultado do CI
+## 10. Resultado do CI (GitHub Actions, workflow "Testes")
 
-Registrado após o push, em commit próprio. Esperado: 4 jobs aprovados (Linux e Windows × Python 3.11 e 3.13).
+Execução 27 (`43645553863`), sobre o commit `2e7a3cb3be6f2fabc70cb21577894bbb8eb9217c`, disparada pelo push da branch.
+O workflow da sonda de rede não foi disparado, porque nenhum arquivo em `observatorio/sonda/` mudou.
 
-Referência anterior, no CI de `964ce4d`: Linux aprovado nas duas versões; Windows reprovado nas duas, com 5 erros cada,
-todos em `tests/test_migracoes.py` (`PermissionError: WinError 32` ao apagar o SQLite temporário).
+| Ambiente | Job | Executados | Aprovados | Pulados | Falhos | Resultado |
+|---|---|---|---|---|---|---|
+| Linux (ubuntu-24.04), Python 3.11 | `132602395226` | 320 | 317 | 3 | 0 | **sucesso** |
+| Linux (ubuntu-24.04), Python 3.13 | `132602395187` | 320 | 317 | 3 | 0 | **sucesso** |
+| Windows (windows-latest), Python 3.11 | `132602395271` | 320 | 310 | 10 | 0 | **sucesso** |
+| Windows (windows-latest), Python 3.13 | `132602394968` | 320 | 310 | 10 | 0 | **sucesso** |
+
+Antes, no CI de `964ce4d`, os dois jobs Windows falhavam com 5 erros cada, todos em `tests/test_migracoes.py`
+(`PermissionError: WinError 32`). Agora os 11 testes de migração e os 8 de conexões rodam e passam no Windows; nenhum
+deles é pulado.
+
+**Testes pulados no CI.** Os mesmos conjuntos foram reproduzidos localmente, simulando a ausência de cada dependência;
+as contagens bateram (3 e 10).
+
+| Teste | Linux | Windows | Motivo |
+|---|---|---|---|
+| `test_conjunto_ouro_com_os_pdfs_oficiais` | pulado | pulado | PDFs oficiais ficam fora do repositório |
+| `test_corpus_real_por_campo` | pulado | pulado | Esperado privado fica fora do repositório |
+| `test_planilha_abre_em_leitor_independente` | pulado | pulado | `openpyxl` não está em `requirements*.txt` |
+| 7 testes de OCR | executado | pulado | O workflow instala o Tesseract só no Linux |
+
+Os 7 testes de OCR são:
+- `test_estouro_real_do_tesseract`;
+- `test_pagina_digitalizada_e_lida_por_ocr_respeitando_as_colunas`;
+- `test_risco013_pagina_mista_com_ocr_recupera_o_corpo_digitalizado`;
+- `test_trecho_em_fonte_sem_mapeamento_e_recuperado_por_ocr_so_naquele_trecho`;
+- `test_vale_o_que_esta_impresso_visivel`;
+- `test_cada_linha_da_tabela_sai_inteira_e_na_ordem_das_colunas`;
+- `test_grade_maior_que_o_trecho_ilegivel_nao_e_usada`.
+
+**Diferença entre ambientes:** o Windows não exercita o OCR. Essa limitação já existia em `964ce4d`, que também pulava
+10 testes no Windows, e não foi introduzida por esta etapa.
 
 ## 11. Riscos residuais
 
-- O Windows só foi exercitado pelo CI. As provas locais de fechamento são independentes do sistema operacional
-  (conexões registradas).
+- O Windows só foi exercitado pelo CI, onde passou nas duas versões do Python. As provas locais de fechamento valem
+  em qualquer sistema operacional, porque verificam cada conexão registrada.
+- No CI, o OCR não é testado no Windows, e a planilha não é conferida por leitor independente em nenhum ambiente
+  (`openpyxl` ausente). Essas lacunas são anteriores a esta etapa.
 - `outra_publicacao.titulo` é público. Ele é gerado pelo classificador ("Resenha nº…", "Portaria nº…"), não por
   texto livre, mas a origem precisa continuar assim.
 - O código 3 é frequente com PDFs reais (uma página de baixa confiança basta). Um agendador deve tratá-lo como
