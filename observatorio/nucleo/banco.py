@@ -33,6 +33,8 @@ BAIXADA = "BAIXADA"
 FALHA_DOWNLOAD = "FALHA_DOWNLOAD"
 INVALIDA = "INVALIDA"
 QUARENTENA = "QUARENTENA"  # bytes aparentemente completos, estrutura não confirmada; retidos à parte
+MAX_TENTATIVAS = 5         # falhas por publicação antes de ela ficar ESGOTADA (só volta por reabertura auditada)
+INTEGRIDADES_ACEITAS = frozenset({"ESTRUTURA_VERIFICADA", "ESTRUTURA_VERIFICADA_COM_ALERTA"})
 
 _ESQUEMA = """
 CREATE TABLE arquivo (
@@ -487,11 +489,123 @@ class Banco:
         return self.con.execute(sql + " ORDER BY data_publicacao, ordem, id", parametros).fetchall()
 
     def registrar_falha(self, publicacao_id: int, estado: str, erro: str) -> None:
+        """Registra uma tentativa malsucedida. Uma publicação que já tem arquivo íntegro (BAIXADA) CONTINUA BAIXADA:
+        a falha de uma reverificação não apaga a versão válida nem a tira da cobertura; só o erro fica registrado."""
         with self.con:
             self.con.execute(
-                "UPDATE publicacao SET estado = ?, ultimo_erro = ?, tentativas = tentativas + 1, atualizada_em = ? WHERE id = ?",
-                (estado, erro, agora(), publicacao_id),
+                "UPDATE publicacao SET estado = CASE WHEN estado = ? AND sha256 IS NOT NULL THEN estado ELSE ? END, "
+                "ultimo_erro = ?, tentativas = tentativas + 1, atualizada_em = ? WHERE id = ?",
+                (BAIXADA, estado, erro, agora(), publicacao_id),
             )
+
+    def registrar_obtencao(self, publicacao_id: int, sha256: str, tamanho: int, caminho: str, paginas: int | None,
+                           integridade: str, **download) -> str:
+        """Registra, numa ÚNICA transação, tudo o que comprova um download íntegro: arquivo, versão, verificação
+        estrutural, linha do manifesto de downloads e o estado BAIXADA da publicação. Ou tudo fica gravado, ou nada.
+        O arquivo já deve estar no acervo (gravação atômica feita antes): uma queda entre as duas etapas deixa só um
+        arquivo sem registro, que a reconciliação aponta, e a publicação continua pendente — nunca falsamente baixada.
+
+        Devolve NOVO, DUPLICADO (conteúdo que já pertencia a outra publicação), IGUAL ou ALTERADO."""
+        if integridade not in INTEGRIDADES_ACEITAS:
+            raise ValueError(f"integridade {integridade!r} não comprova um arquivo íntegro")
+        desconhecidas = set(download) - _COLUNAS_DOWNLOAD
+        if desconhecidas:
+            raise ValueError(f"colunas inexistentes no manifesto: {sorted(desconhecidas)}")
+        momento = agora()
+        with self.con:
+            ja_existia = self.con.execute("SELECT 1 FROM arquivo WHERE sha256 = ?", (sha256,)).fetchone() is not None
+            de_outra = self.con.execute("SELECT 1 FROM publicacao WHERE sha256 = ? AND id <> ? LIMIT 1",
+                                        (sha256, publicacao_id)).fetchone() is not None
+            anterior = self.con.execute("SELECT sha256 FROM publicacao WHERE id = ?", (publicacao_id,)).fetchone()[0]
+            self.con.execute(
+                "INSERT INTO arquivo (sha256, tamanho, caminho, guardado_em) VALUES (?,?,?,?) ON CONFLICT (sha256) DO NOTHING",
+                (sha256, tamanho, caminho, momento))
+            self.con.execute(
+                "INSERT INTO versao (publicacao_id, sha256, observada_em) VALUES (?,?,?) ON CONFLICT (publicacao_id, sha256) DO NOTHING",
+                (publicacao_id, sha256, momento))
+            self.con.execute(
+                "INSERT INTO verificacao_arquivo (sha256, paginas, integridade, verificado_em) VALUES (?,?,?,?) "
+                "ON CONFLICT (sha256) DO UPDATE SET paginas = excluded.paginas, integridade = excluded.integridade, "
+                "verificado_em = excluded.verificado_em", (sha256, paginas, integridade, momento))
+            self.con.execute(
+                "UPDATE publicacao SET estado = ?, sha256 = ?, ultimo_erro = NULL, tentativas = tentativas + 1, atualizada_em = ? WHERE id = ?",
+                (BAIXADA, sha256, momento, publicacao_id))
+            if anterior is None:
+                resultado = "DUPLICADO" if ja_existia and de_outra else "NOVO"
+            else:
+                resultado = "IGUAL" if anterior == sha256 else "ALTERADO"
+            colunas = ["publicacao_id", "sha256", "bytes", "paginas", "integridade", "resultado", *download]
+            self.con.execute(f"INSERT INTO download ({', '.join(colunas)}) VALUES ({', '.join('?' * len(colunas))})",
+                             (publicacao_id, sha256, tamanho, paginas, integridade, resultado, *download.values()))
+        return resultado
+
+    def marcar_para_reobter(self, publicacao_id: int, motivo: str) -> None:
+        """Reconciliação: a publicação estava BAIXADA, mas falta a prova (arquivo no acervo ou verificação). Volta à fila
+        sem perder o histórico de versões. O contador de falhas recomeça, porque as tentativas anteriores tiveram êxito."""
+        with self.con:
+            self.con.execute("UPDATE publicacao SET estado = ?, ultimo_erro = ?, tentativas = 0, atualizada_em = ? WHERE id = ?",
+                             (FALHA_DOWNLOAD, f"RECONCILIACAO: {motivo}", agora(), publicacao_id))
+            self.auditar("robô (reconciliação da coleta)", "REOBTER", "publicacao", str(publicacao_id), {"estado": BAIXADA},
+                         {"estado": FALHA_DOWNLOAD, "motivo": motivo}, motivo)
+
+    def esgotadas(self, fonte: str | None = None):
+        sql = (f"SELECT * FROM publicacao WHERE estado IN ({','.join('?' * len(PENDENTES))}) AND tentativas >= ?")
+        parametros = [*PENDENTES, MAX_TENTATIVAS]
+        if fonte:
+            sql += " AND fonte = ?"
+            parametros.append(fonte)
+        return self.con.execute(sql + " ORDER BY data_publicacao, ordem, id", parametros).fetchall()
+
+    def reabrir_publicacoes(self, ids, autor: str, justificativa: str) -> int:
+        """Reabertura CONTROLADA de publicações com tentativas esgotadas: zera o contador e registra autor e motivo na
+        trilha de auditoria. Não age sozinha num ciclo automático — exige quem decida e por quê."""
+        autor, justificativa = (autor or "").strip(), (justificativa or "").strip()
+        if not autor or len(justificativa) < 5:
+            raise ValueError("reabertura exige responsável e justificativa")
+        reabertas = 0
+        with self.con:
+            for pid in ids:
+                linha = self.con.execute("SELECT * FROM publicacao WHERE id = ?", (pid,)).fetchone()
+                if linha is None or linha["estado"] not in PENDENTES or linha["tentativas"] < MAX_TENTATIVAS:
+                    continue
+                self.con.execute("UPDATE publicacao SET tentativas = 0, atualizada_em = ? WHERE id = ?", (agora(), pid))
+                self.auditar(autor[:120], "REABRIR_TENTATIVAS", "publicacao", str(pid),
+                             {"tentativas": linha["tentativas"], "ultimo_erro": linha["ultimo_erro"]}, {"tentativas": 0},
+                             justificativa[:1000])
+                reabertas += 1
+        return reabertas
+
+    # --- suspensão de fontes (recusa 403/429, robots, bloqueio) -----------------------------------------------
+    # Registrada na trilha de auditoria (sem mudança de esquema): a última ação SUSPENDER_FONTE/LIBERAR_FONTE vale.
+    def suspender_fonte(self, fonte: str, categoria: str, detalhe: str, ate: str | None) -> None:
+        with self.con:
+            self.auditar("robô (coleta)", "SUSPENDER_FONTE", "fonte", fonte, None,
+                         {"categoria": categoria, "ate": ate}, detalhe[:300])
+
+    def liberar_fonte(self, fonte: str, autor: str, justificativa: str) -> bool:
+        autor, justificativa = (autor or "").strip(), (justificativa or "").strip()
+        if not autor or len(justificativa) < 5:
+            raise ValueError("liberação exige responsável e justificativa")
+        vigente = self.suspensao_vigente(fonte)
+        if vigente is None:
+            return False
+        with self.con:
+            self.auditar(autor[:120], "LIBERAR_FONTE", "fonte", fonte, vigente, None, justificativa[:1000])
+        return True
+
+    def suspensao_vigente(self, fonte: str, momento: str | None = None) -> dict | None:
+        """{categoria, ate, desde, detalhe} da suspensão em vigor, ou None. `ate` None não ocorre hoje: toda suspensão
+        automática tem prazo; antes dele, só uma liberação auditada a encerra."""
+        ultima = self.con.execute(
+            "SELECT * FROM auditoria WHERE alvo_tipo = 'fonte' AND alvo_id = ? AND acao IN ('SUSPENDER_FONTE', 'LIBERAR_FONTE') "
+            "ORDER BY id DESC LIMIT 1", (fonte,)).fetchone()
+        if ultima is None or ultima["acao"] != "SUSPENDER_FONTE":
+            return None
+        dados = json.loads(ultima["posterior"] or "{}")
+        if dados.get("ate") and dados["ate"] <= (momento or agora()):
+            return None
+        return {"categoria": dados.get("categoria"), "ate": dados.get("ate"), "desde": ultima["momento"],
+                "detalhe": ultima["justificativa"]}
 
     def registrar_arquivo(self, publicacao_id: int, sha256: str, tamanho: int, caminho: str) -> str:
         """Associa o arquivo à publicação preservando o histórico.
