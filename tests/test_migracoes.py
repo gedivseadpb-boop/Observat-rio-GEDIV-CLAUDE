@@ -1,9 +1,8 @@
 """Migrações do banco (Etapa 05.1): decisão pela ESTRUTURA presente, transação única, cópia de segurança.
 
-Prepara a integração com a coleta da Etapa 05, cuja migração também foi numerada "v6" em outra linha de
-desenvolvimento: um banco com user_version = 6 e esquema diferente precisa ser completado sem perda.
-Os nomes `download` e `verificacao_arquivo` abaixo apenas SIMULAM tabelas de outra linha (colunas mínimas
-inventadas para o teste); não reproduzem o código da Etapa 05.
+Integração 05.1: a migração da coleta (Etapa 05) foi numerada "v6" na sua linha de desenvolvimento, como a
+de eventos da Etapa 04. Na integração ela é a v7; um banco marcado v6 por qualquer das duas linhas é levado à
+v7 pela estrutura efetivamente presente, sem perda. Os testes usam o esquema REAL das duas linhas.
 """
 import sqlite3
 import tempfile
@@ -80,24 +79,59 @@ class TesteMigracoes(unittest.TestCase):
         self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
         self.assertEqual(_estrutura(banco.con)["evento"].count("publicacoes_citadas"), 1)
 
-    def test_v6_de_outra_linha_com_esquema_diferente_e_completado_sem_perda(self):
-        # Mesmo número de versão (6), outra estrutura: tabelas extras e SEM a coluna de eventos desta linha.
-        extras = ("CREATE TABLE download (id INTEGER PRIMARY KEY, url TEXT NOT NULL, resultado TEXT);"
-                  "CREATE TABLE verificacao_arquivo (id INTEGER PRIMARY KEY, sha256 TEXT, situacao TEXT);"
-                  "INSERT INTO download (url, resultado) VALUES ('https://auniao.pb.gov.br/x.pdf', 'NOVO');"
-                  "INSERT INTO verificacao_arquivo (sha256, situacao) VALUES ('abc', 'QUARENTENA');")
-        _criar_ate(self.caminho, 5, extras)
+    def _v6_da_etapa05(self):
+        """Banco como a linha da Etapa 05 o deixava: versões 1–5, as tabelas de download (hoje v7) e user_version 6,
+        SEM a coluna de eventos da v6 da Etapa 04. Com um download e uma verificação registrados."""
+        _criar_ate(self.caminho, 5, B._ESQUEMA_V7)
         con = sqlite3.connect(self.caminho)
         con.execute("PRAGMA user_version = 6")
+        con.execute("INSERT INTO publicacao (id, fonte, url, tipo, estado, descoberta_em, atualizada_em) "
+                    "VALUES (1, 'auniao', 'https://auniao.pb.gov.br/x.pdf', 'normal', 'BAIXADA', 'x', 'x')")
+        con.execute("INSERT INTO arquivo VALUES ('sha-x', 10, 'x', 'agora')")
+        con.execute("INSERT INTO verificacao_arquivo VALUES ('sha-x', 3, 'OK', 'agora')")
+        con.execute("INSERT INTO download (publicacao_id, url_pedida, transporte, resultado, versao_coletor, iniciado_em) "
+                    "VALUES (1, 'https://auniao.pb.gov.br/x.pdf', 'direto', 'NOVO', '0.5', 'agora')")
+        con.commit()
+        con.close()
+
+    def test_v6_da_etapa05_vira_v7_ganhando_so_a_coluna_de_eventos(self):
+        self._v6_da_etapa05()
+        antes = _estrutura(sqlite3.connect(self.caminho))
+        banco = self.abrir()
+        depois = _estrutura(banco.con)
+        self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
+        self.assertEqual(depois["evento"], antes["evento"] + ["publicacoes_citadas"])
+        self.assertEqual({t: c for t, c in depois.items() if t != "evento"}, {t: c for t, c in antes.items() if t != "evento"})
+        self.assertEqual(banco.con.execute("SELECT resultado, versao_coletor FROM download").fetchone()[:], ("NOVO", "0.5"))
+        self.assertEqual(banco.con.execute("SELECT integridade FROM verificacao_arquivo").fetchone()[0], "OK")
+        self.assertEqual(B.estruturas_pendentes(banco.con), {})
+
+    def test_v6_da_etapa04_vira_v7_ganhando_as_tabelas_de_download(self):
+        _criar_ate(self.caminho, 6)
+        con = sqlite3.connect(self.caminho)
+        con.execute("INSERT INTO arquivo VALUES ('sha-y', 10, 'x', 'agora')")
         con.commit()
         con.close()
         banco = self.abrir()
         estrutura = _estrutura(banco.con)
-        self.assertIn("publicacoes_citadas", estrutura["evento"])                  # completado
-        self.assertEqual(estrutura["download"], ["id", "url", "resultado"])          # estrutura alheia intacta
-        self.assertEqual(banco.con.execute("SELECT url, resultado FROM download").fetchone()[:], ("https://auniao.pb.gov.br/x.pdf", "NOVO"))
-        self.assertEqual(banco.con.execute("SELECT situacao FROM verificacao_arquivo").fetchone()[0], "QUARENTENA")
-        self.assertIsNotNone(banco.backup_da_migracao)
+        self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
+        self.assertIn("publicacoes_citadas", estrutura["evento"])
+        self.assertIn("tentativas_rede", estrutura["download"])
+        self.assertIn("integridade", estrutura["verificacao_arquivo"])
+        self.assertEqual(banco.con.execute("SELECT sha256 FROM arquivo").fetchone()[0], "sha-y")
+
+    def test_tabela_homonima_incompativel_falha_sem_alterar_nada(self):
+        # Uma tabela "download" com outra estrutura não é "completada" às cegas: a migração falha inteira.
+        _criar_ate(self.caminho, 6, "CREATE TABLE download (id INTEGER PRIMARY KEY, url TEXT);")
+        antes = _estrutura(sqlite3.connect(self.caminho))
+        with self.assertRaises(sqlite3.OperationalError):
+            B.Banco(self.caminho)
+        con = sqlite3.connect(self.caminho)
+        try:
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 6)
+            self.assertEqual(_estrutura(con), antes)
+        finally:
+            con.close()
 
     def test_falha_no_meio_desfaz_tudo_e_mantem_a_copia(self):
         _criar_ate(self.caminho, 4)
