@@ -185,7 +185,8 @@ class TesteColeta(unittest.TestCase):
         self.coletar([self.auniao, self.cge])
         self.assertEqual(len(self.banco.publicacoes()), 7)
         self.assertEqual(len(self.banco.arquivos()), 6)
-        linhas = {l["data"]: l for l in inventario.cobertura(self.banco, self.INICIO, self.FIM, ["auniao", "cge"])}
+        # Etapa 05.3.2: COMPLETO exige o arquivo presente no acervo; com o banco em memória, o acervo é informado.
+        linhas = {l["data"]: l for l in inventario.cobertura(self.banco, self.INICIO, self.FIM, ["auniao", "cge"], self.acervo)}
         self.assertEqual((linhas["2026-01-07"]["listadas"], linhas["2026-01-07"]["arquivos_distintos"]), (2, 1))
         self.assertEqual(linhas["2026-01-07"]["situacao"], "COMPLETO")
         self.assertTrue(linhas["2026-01-10"]["so_em_uma_fonte"])

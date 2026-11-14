@@ -32,7 +32,7 @@ class Parametros:
     tamanho: int = 10            # publicações por lote
     pausa: float = 8.0           # segundos entre downloads
     max_falhas_seguidas: int = 3 # encerra o lote ao atingir
-    max_tentativas: int = 5      # por publicação, somando todos os lotes
+    max_tentativas: int = B.MAX_TENTATIVAS  # por publicação, somando todos os lotes
 
 
 PARAMETROS_PILOTO = Parametros(tamanho=5, pausa=10.0, max_falhas_seguidas=2)
@@ -128,10 +128,15 @@ def executar_lote(fonte, banco: B.Banco, acervo: Acervo, tipo: str, parametros: 
             # Depois de uma recusa da fonte, só um novo piloto aprovado reabre a carga histórica.
             return {"executado": False, "motivo": "FONTE_SUSPENSA_APOS_RECUSA", "fonte": fonte.sigla}
     p = replace(coletor.politica_da(fonte, politica), pausa=min((politica or rede.Politica(frozenset())).pausa, 1.0))
+    # A mesma guarda da coleta por dia/intervalo: suspensão vigente (Retry-After, 403, robots, bloqueio) impede o lote.
+    guarda = coletor.Guarda(banco, fonte.sigla)
+    if guarda.suspensa:
+        return {"executado": False, "motivo": "FONTE_SUSPENSA", "detalhe": guarda.motivo, "fonte": fonte.sigla}
+    reconciliacao = coletor.reconciliar(banco, acervo)
     if respeitar_robots:
         endereco = fonte.url_mes(2026, 1)
-        situacao, regras = rede.consultar_robots(endereco, p)
-        if regras is not None and not regras.can_fetch(p.agente, endereco):
+        situacao, _ = guarda.robots(endereco, p)
+        if situacao == "RESTRINGE_A_COLETA":
             return {"executado": False, "motivo": "ROBOTS_RESTRINGE_A_COLETA"}
         if situacao == "RECUSADO":
             # A própria consulta ao robots.txt foi negada (403/429): não se presume permissão.
@@ -149,7 +154,10 @@ def executar_lote(fonte, banco: B.Banco, acervo: Acervo, tipo: str, parametros: 
             if indice:
                 dormir(parametros.pausa)
             inicio = time.monotonic()
-            d = coletor.baixar_publicacao(fonte, banco, acervo, p, linha)
+            d = coletor.baixar_publicacao(fonte, banco, acervo, p, linha, guarda=guarda)
+            if d.resultado == "SUSPENSA":
+                estado = "INTERROMPIDO_RECUSA_DA_FONTE"
+                break
             banco.registrar_item_lote(lote_id, linha["id"], d.resultado, d.sha256, d.tamanho,
                                       round(time.monotonic() - inicio, 2), d.erro)
             contagem[d.resultado] = contagem.get(d.resultado, 0) + 1
@@ -174,7 +182,7 @@ def executar_lote(fonte, banco: B.Banco, acervo: Acervo, tipo: str, parametros: 
         aprovado = estado == "CONCLUIDO" and sucessos == len(itens) and sucessos >= MINIMO_PILOTO
     observacao = None if feitos == len(itens) else f"{len(itens) - feitos} item(ns) não tentado(s) continuam pendentes"
     banco.concluir_lote(lote_id, estado, aprovado, observacao)
-    return {"executado": True, "lote": lote_id, "fonte": fonte.sigla, "tipo": tipo, "estado": estado,
+    return {"executado": True, "lote": lote_id, "fonte": fonte.sigla, "tipo": tipo, "estado": estado, "reconciliacao": reconciliacao,
             "aprovado": aprovado, "selecionados": len(itens), "tentados": feitos, "resultados": contagem,
             "mes": itens[0]["data_publicacao"][:7] if tipo == HISTORICO else None}
 

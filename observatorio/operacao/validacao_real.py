@@ -34,7 +34,7 @@ REFERENCIAS = Path(__file__).resolve().parents[2] / "docs" / "validacao" / "refe
 def executar(arquivo: str | Path, data: date, url: str | None, pasta_dados: str | Path, amostra: str | Path | None = None) -> dict:
     arquivo = Path(arquivo)
     dados = arquivo.read_bytes()
-    laudo = pdf.examinar(dados)
+    laudo = pdf.verificar(dados, len(dados))      # a mesma verificação estrutural da coleta e da importação
     relatorio = {
         "sistema": NOME, "versao": __version__, "versao_leitor": leitor.VERSAO, "versao_regras": C.VERSAO_REGRAS,
         "executado_em_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -372,7 +372,10 @@ class TesteCobertura(Base):
         e = m["edicoes"][0]
         self.assertEqual(set(e), {"fonte", "url_oficial", "data", "tipo", "ordem", "estado", "sha256", "bytes", "paginas",
                                   "integridade", "versoes", "tentativas", "ultimo_erro", "coletado_em", "transporte",
-                                  "versao_coletor"})
+                                  "versao_coletor",
+                                  # Etapa 05.3.2 (acréscimos, sem dados pessoais): tentativas esgotadas, data da última
+                                  # tentativa e relação com outros documentos (substituído, mesma cópia, distinto).
+                                  "esgotada", "ultima_tentativa_em", "relacao"})
         self.assertEqual((e["integridade"], e["paginas"], e["transporte"]), ("ESTRUTURA_VERIFICADA", 2, "direto"))
         self.assertFalse([l for l in m["lacunas"] if l["situacao"] in ("COMPLETO", "SEM_PUBLICACAO_LISTADA")])
         json.dumps(m)                                                                    # serializável

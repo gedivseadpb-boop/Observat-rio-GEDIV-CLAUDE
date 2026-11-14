@@ -32,7 +32,7 @@ from .. import NOME
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
 from . import coletor, inventario, lotes
-from .fontes import FONTES, data_do_nome
+from .fontes import FONTES, data_do_nome, selecionar
 
 COMANDOS = ["descobrir", "piloto", "lote", "progresso", "inventario", "importar", "conferir"]
 
@@ -62,7 +62,7 @@ def main(argv=None) -> int:
 
     pasta = Path(a.dados)
     banco, acervo = Banco(pasta / "observatorio.sqlite3"), Acervo(pasta / "acervo")
-    siglas = a.fonte or sorted(FONTES)
+    siglas = selecionar(a.fonte)      # padrão único (coleta.fontes.PADRAO); antes: todas, divergindo da operação
     try:
         if a.comando == "descobrir":
             resultado = {}
@@ -96,11 +96,12 @@ def main(argv=None) -> int:
 
         if a.comando == "progresso":
             fontes = lotes.situacao_das_fontes(banco, sorted(FONTES))
-            linhas = inventario.cobertura(banco, a.inicio, a.fim, sorted(FONTES))
+            linhas = inventario.cobertura(banco, a.inicio, a.fim, siglas, acervo)
             _mostrar({
                 "sistema": NOME,
                 "fontes": fontes,
-                "cobertura": inventario.parecer(linhas, fontes),
+                "cobertura": inventario.parecer(linhas, {s: fontes[s] for s in siglas}),
+                "escopo": inventario.escopo(siglas),
                 "por_mes": [dict(linha) for linha in banco.progresso()],
                 "varreduras_com_erro": [dict(v) for v in banco.varreduras() if v["erro"]],
                 "lotes": [{k: l[k] for k in ("id", "fonte", "tipo", "estado", "aprovado", "iniciado_em", "concluido_em",
@@ -109,9 +110,9 @@ def main(argv=None) -> int:
             return 0
 
         if a.comando == "inventario":
-            linhas = inventario.cobertura(banco, a.inicio, a.fim, siglas)
+            linhas = inventario.cobertura(banco, a.inicio, a.fim, siglas, acervo)
             fontes = lotes.situacao_das_fontes(banco, siglas)
-            _mostrar({"sistema": NOME, "cobertura": inventario.parecer(linhas, fontes),
+            _mostrar({"sistema": NOME, "cobertura": inventario.parecer(linhas, fontes), "escopo": inventario.escopo(siglas),
                       "totais": inventario.totais(linhas), "dias": linhas})
             return 0
 

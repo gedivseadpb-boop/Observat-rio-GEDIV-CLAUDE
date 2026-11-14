@@ -25,7 +25,11 @@ Aquisição dos PDFs oficiais (Etapa 05):
         Intervalos acima de 31 dias são recusados: a carga histórica é da Etapa 06.
         --contingencia MANIFESTO.json usa arquivos obtidos por outro meio (procedência registrada como contingência).
     python -m observatorio.operacao cobertura --inicio 2026-01-01 --fim 2026-11-12 [--saida cobertura.json]
-        manifesto de cobertura dia a dia com lacunas explícitas e a procedência de cada arquivo.
+        manifesto de cobertura dia a dia com lacunas explícitas, o escopo de fontes e a procedência de cada arquivo.
+    python -m observatorio.operacao reabrir --fonte auniao --inicio 2026-01-01 --fim 2026-11-12 --responsavel NOME --justificativa TEXTO
+        reabre (auditado) publicações com tentativas esgotadas; nada é reaberto automaticamente.
+    python -m observatorio.operacao liberar-fonte --fonte auniao --responsavel NOME --justificativa TEXTO
+        encerra (auditado) uma suspensão da fonte por recusa (403/429, robots, bloqueio) antes do prazo.
 Códigos de saída (observatorio/operacao/saida.py), para agendadores:
     0 = sucesso integral; 1 = falha (erro ou divergência: exige intervenção); 2 = erro de uso;
     3 = concluído com pendências (dados gravados; retomar ou revisar); 4 = não executado / fonte inacessível.
@@ -48,7 +52,7 @@ from . import fluxo, saida
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.operacao", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro", "corpus",
-                                        "sonda", "coletar-dia", "coletar-intervalo", "cobertura"])
+                                        "sonda", "coletar-dia", "coletar-intervalo", "cobertura", "reabrir", "liberar-fonte"])
     ap.add_argument("origem", nargs="?")
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--data", type=date.fromisoformat)
@@ -60,7 +64,10 @@ def main(argv=None) -> int:
     ap.add_argument("--refazer-pendentes", action="store_true",
                     help="executar: relê os arquivos com leitura em ERRO ou com páginas pendentes (retomada)")
     ap.add_argument("--esperado-privado", help="corpus: arquivo PRIVADO com os valores esperados por campo")
-    ap.add_argument("--fonte", action="append", choices=["auniao", "cge"], help="aquisição: fonte(s); padrão auniao")
+    ap.add_argument("--fonte", action="append", choices=["auniao", "cge"],
+                    help="aquisição e cobertura: fonte(s); padrão único em coleta.fontes.PADRAO (auniao)")
+    ap.add_argument("--responsavel", help="reabrir / liberar-fonte: quem decide (fica na trilha de auditoria)")
+    ap.add_argument("--justificativa", help="reabrir / liberar-fonte: por quê (fica na trilha de auditoria)")
     ap.add_argument("--inicio", type=date.fromisoformat)
     ap.add_argument("--fim", type=date.fromisoformat)
     ap.add_argument("--limite", type=int, help="aquisição: máximo de downloads nesta execução")
@@ -81,9 +88,21 @@ def main(argv=None) -> int:
                 json.dump(resultado, destino, ensure_ascii=False, indent=2)
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
         return resultado["codigo_de_saida"]       # 0 só com o contrato inteiro avaliado e conferido
-    if a.comando in ("sonda", "coletar-dia", "coletar-intervalo", "cobertura"):
+    if a.comando in ("sonda", "coletar-dia", "coletar-intervalo", "cobertura", "reabrir", "liberar-fonte"):
         from . import aquisicao
-        siglas = a.fonte or ["auniao"]
+        from ..coleta.fontes import selecionar
+        siglas = selecionar(a.fonte)
+        if a.comando in ("reabrir", "liberar-fonte"):
+            if len(siglas) != 1 or not a.responsavel or not a.justificativa:
+                ap.error(f"{a.comando} exige exatamente uma --fonte, --responsavel e --justificativa")
+            if a.comando == "liberar-fonte":
+                resultado = aquisicao.liberar_fonte(a.dados, siglas[0], a.responsavel, a.justificativa)
+            else:
+                if not a.inicio or not a.fim:
+                    ap.error("reabrir exige --inicio e --fim")
+                resultado = aquisicao.reabrir(a.dados, siglas[0], a.inicio, a.fim, a.responsavel, a.justificativa)
+            aquisicao.gravar(resultado, a.saida)
+            return saida.SUCESSO
         if a.comando == "sonda":
             hashes = json.loads(open(a.hashes, encoding="utf-8").read()) if a.hashes else None
             relatorio = aquisicao.sonda(siglas[0], hashes, guardar_em=a.guardar)
@@ -92,8 +111,10 @@ def main(argv=None) -> int:
         if a.comando == "cobertura":
             if not a.inicio:
                 ap.error("cobertura exige --inicio")
-            aquisicao.gravar(aquisicao.cobertura(a.dados, siglas, a.inicio, a.fim or date.today()), a.saida)
-            return 0
+            manifesto = aquisicao.cobertura(a.dados, siglas, a.inicio, a.fim or date.today())
+            aquisicao.gravar(manifesto, a.saida)
+            # 0 só sem lacunas conhecidas no escopo declarado; lacunas são pendência (3), não sucesso integral.
+            return saida.SUCESSO if not manifesto["lacunas"] and not manifesto["sem_data_identificada"] else saida.CONCLUIDO_COM_PENDENCIAS
         if a.comando == "coletar-dia":
             if not a.data:
                 ap.error("coletar-dia exige --data")

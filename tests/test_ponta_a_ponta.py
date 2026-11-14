@@ -167,16 +167,19 @@ class TesteFechamentoDaAuditoria(unittest.TestCase):
         self.assertTrue(pdf.examinar(corrompido).valido)                # os marcadores sozinhos não detectam o defeito
         banco, acervo = B.Banco(self.pasta / "b.sqlite3"), Acervo(self.pasta / "acervo")
         self.addCleanup(banco.fechar)
-        coletor.importar_manual(banco, acervo, corrompido, date(2026, 10, 2), "manual:corrompido", "c.pdf")
+        importacao = coletor.importar_manual(banco, acervo, corrompido, date(2026, 10, 2), "manual:corrompido", "c.pdf")
+        # Etapa 05.3.2: a importação usa a mesma verificação estrutural da coleta. O PDF corrompido é RECUSADO e retido
+        # na quarentena — antes, entrava no acervo e só a leitura o reprovava. Continua nunca sendo dado como lido.
+        self.assertEqual((importacao["aceito"], importacao["quarentena"]), (False, True))
+        self.assertEqual(banco.arquivos(), [])
         contagem = leitor.processar(banco, acervo)
-        self.assertEqual((contagem["LIDA"], contagem["LIDA_COM_PENDENCIAS"], contagem["ERRO"]), (0, 0, 1))
-        leitura = banco.leituras()[0]
-        self.assertEqual(leitura["situacao"], "ERRO")
-        self.assertTrue(leitura["erro"])
+        self.assertEqual((contagem["LIDA"], contagem["LIDA_COM_PENDENCIAS"], contagem["ERRO"]), (0, 0, 0))
+        self.assertEqual(banco.leituras(), [])
         self.assertEqual(processo.classificar_pendentes(banco)["arquivos"], 0)       # nada é classificado a partir dele
         from observatorio.painel import indicadores
         cobertura = indicadores.cobertura(banco)
-        self.assertEqual((cobertura["edicoes_no_acervo"], cobertura["edicoes_lidas"], cobertura["edicoes_com_pendencia_de_leitura"]), (1, 0, 1))
+        # Recusado na entrada: não chega ao acervo (antes: 1 no acervo, 0 lidas, 1 com pendência de leitura).
+        self.assertEqual((cobertura["edicoes_no_acervo"], cobertura["edicoes_lidas"], cobertura["edicoes_com_pendencia_de_leitura"]), (0, 0, 0))
 
     def test_relatorio_de_validacao_real_nao_contem_dados_pessoais_e_nada_e_conferido(self):
         from observatorio.operacao import sintetico as S
@@ -297,7 +300,10 @@ class TesteRegressoesDaAuditoria(unittest.TestCase):
         self.assertEqual(len(self.banco.arquivos_sem_leitura("v1", refazer_pendentes=True)), 1)
 
     def test_bug017_pdf_manual_nao_torna_o_dia_completo(self):
-        self._arquivo_lido()
+        # Etapa 05.3.2: o arquivo agora é um PDF REAL importado (antes, um registro fictício sem arquivo nem
+        # verificação, que a cobertura corrigida corretamente não aceita como COMPLETO). A intenção é a mesma:
+        # PDF manual sem varredura não completa o dia.
+        coletor.importar_manual(self.banco, self.acervo, pdf_sintetico("manual-07"), date(2026, 1, 7), "manual:x", "x.pdf")
         dia = inventario.cobertura(self.banco, date(2026, 1, 7), date(2026, 1, 7), ["auniao", "cge"])[0]
         self.assertEqual(dia["situacao"], "BAIXADO_SEM_VARREDURA_COMPLETA")
         for fonte in ("auniao", "cge"):

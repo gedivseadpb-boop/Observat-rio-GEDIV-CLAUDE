@@ -147,9 +147,26 @@ def fonte_bloqueada(parte: dict) -> bool:
 
 
 def cobertura(dados: str, siglas: list[str], inicio: date, fim: date) -> dict:
+    banco, acervo = abrir(dados)
+    try:
+        return inventario.manifesto(banco, inicio, fim, siglas, acervo)
+    finally:
+        banco.fechar()
+
+
+def reabrir(dados: str, sigla: str, inicio: date, fim: date, autor: str, justificativa: str) -> dict:
     banco, _ = abrir(dados)
     try:
-        return inventario.manifesto(banco, inicio, fim, siglas)
+        return coletor.reabrir_esgotadas(banco, sigla, inicio, fim, autor, justificativa)
+    finally:
+        banco.fechar()
+
+
+def liberar_fonte(dados: str, sigla: str, autor: str, justificativa: str) -> dict:
+    banco, _ = abrir(dados)
+    try:
+        vigente = banco.suspensao_vigente(sigla)
+        return {"fonte": sigla, "suspensao": vigente, "liberada": banco.liberar_fonte(sigla, autor, justificativa)}
     finally:
         banco.fechar()
 

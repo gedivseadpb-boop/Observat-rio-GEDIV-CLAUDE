@@ -169,3 +169,57 @@ class CGE:
 
 
 FONTES = {"auniao": AUniao, "cge": CGE}
+
+# Padrão ÚNICO de fontes para coletar e medir cobertura quando o operador não escolhe: a A União, fonte principal.
+# A CGE é complementar e entra quando pedida (--fonte cge). Todo relatório de cobertura declara as fontes
+# consideradas e se elas são TODAS as configuradas — cobertura de uma fonte nunca é apresentada como geral.
+PADRAO = ("auniao",)
+CONFIGURADAS = tuple(sorted(FONTES))
+
+
+def selecionar(siglas=None) -> list[str]:
+    """As fontes escolhidas explicitamente pelo operador, ou o padrão único."""
+    escolhidas = list(dict.fromkeys(siglas or PADRAO))
+    desconhecidas = [s for s in escolhidas if s not in FONTES]
+    if desconhecidas:
+        raise ValueError(f"fonte(s) desconhecida(s): {desconhecidas}")
+    return escolhidas
+
+
+# --- validação do CONTEÚDO da listagem ------------------------------------------------------------------------
+# HTTP 200, sozinho, não prova que a página é a listagem: pode ser manutenção, desafio anti-robô, erro ou um HTML
+# novo que o leitor de links não reconhece. Sem itens, o mês só é dado como vazio diante de uma mensagem EXPLÍCITA
+# de pasta vazia; em qualquer outro caso, a ausência de links é falha de descoberta, nunca ausência de publicação.
+VALIDA, VAZIA_COMPROVADA = "VALIDA", "VAZIA_COMPROVADA"
+MANUTENCAO, BLOQUEIO, ERRO_NA_PAGINA, FORMATO_DESCONHECIDO = "MANUTENCAO", "BLOQUEIO", "ERRO_NA_PAGINA", "FORMATO_DESCONHECIDO"
+_BLOQUEIO = re.compile(r"captcha|cf-chl|cf_chl|just a moment|attention required|access denied|acesso negado|"
+                       r"are you a (?:human|robot)|verifica[cç][aã]o de seguran[cç]a|request (?:was )?blocked|"
+                       r"acesso bloqueado|too many requests|muitas requisi[cç][oõ]es", re.I)
+_MANUTENCAO = re.compile(r"em manuten[cç][aã]o|under maintenance|maintenance mode|temporariamente indispon[ií]vel|"
+                         r"service (?:temporarily )?unavailable|site em atualiza[cç][aã]o", re.I)
+_ERRO = re.compile(r"p[aá]gina n[aã]o encontrada|page not found|404 not found|erro interno|internal server error|"
+                   r"ocorreu um erro|an error (?:has )?occurred|error 5\d\d|exception", re.I)
+_VAZIA = re.compile(r"n[aã]o h[aá] (?:itens|documentos|arquivos) nesta pasta|there are currently no items in this folder|"
+                    r"esta pasta (?:est[aá] )?vazia|nenhum (?:item|documento|arquivo) (?:foi )?encontrado|"
+                    r"nenhuma edi[cç][aã]o (?:foi )?(?:publicada|encontrada)", re.I)
+_TAGS = re.compile(r"<(script|style)\b.*?</\1>|<[^>]+>", re.I | re.S)
+
+
+def classificar_listagem(html: str, itens: list[Item]) -> str:
+    if itens:
+        return VALIDA
+    if _BLOQUEIO.search(html):              # o desafio costuma estar em scripts; procura no HTML inteiro
+        return BLOQUEIO
+    texto = " ".join(_TAGS.sub(" ", html).split())
+    if _MANUTENCAO.search(texto):
+        return MANUTENCAO
+    if _ERRO.search(texto):
+        return ERRO_NA_PAGINA
+    if _VAZIA.search(texto):
+        return VAZIA_COMPROVADA
+    return FORMATO_DESCONHECIDO
+
+
+def e_pagina_de_bloqueio(corpo: bytes) -> bool:
+    """HTML de desafio/recusa recebido no lugar de um PDF."""
+    return bool(_BLOQUEIO.search(corpo[:65536].decode("utf-8", "replace")))
