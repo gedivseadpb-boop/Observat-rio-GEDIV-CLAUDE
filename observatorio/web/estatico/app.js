@@ -310,7 +310,8 @@
         + linhaDL('Lotação', esc(l.lotacao || 'não informada')) + linhaDL('Cargo', esc(l.cargo || 'não informado')) + linhaDL('Classe / nível', detalheTexto(l.detalhe))
         + linhaDL('Resultado', esc(NOMES.resultado[l.resultado])) + linhaDL('Validação', esc(l.validacao) + (l.revisor ? ` · ${esc(l.revisor)} em ${esc(l.revisado_em)}` : '')) + '</dl>'
         + `<blockquote>${esc(l.trecho)}</blockquote><div class="acoes-detalhe">${fonteHTML(l)}`
-        + (l.validacao === 'PENDENTE' ? '<button type="button" class="botao primario" data-rev="decisao:CONFERIR">Conferir…</button><button type="button" class="botao perigo" data-rev="decisao:REJEITAR">Rejeitar…</button>' : '<button type="button" class="botao" data-rev="decisao:REABRIR">Reabrir…</button>') + '</div>';
+        + (l.validacao === 'PENDENTE' ? '<button type="button" class="botao primario" data-rev="decisao:CONFERIR">Conferir…</button><button type="button" class="botao perigo" data-rev="decisao:REJEITAR">Rejeitar…</button>' : '<button type="button" class="botao" data-rev="decisao:REABRIR">Reabrir…</button>')
+        + '<button type="button" class="botao" data-rev="decisao:CORRIGIR">Corrigir campos…</button></div>';
       caixa.innerHTML = html; return ligarAcoes(caixa, it);
     }
     const r = it.r;
@@ -325,15 +326,21 @@
         + '<table><thead><tr><th>Processo</th><th>Servidor</th><th>Matrícula</th><th>Classe / nível</th><th>Resultado</th><th>Validação</th></tr></thead><tbody>'
         + d.decisoes.map(x => `<tr><td>${esc(x.processo || '—')}</td><td>${esc(x.servidor || 'não identificado')}</td><td>${esc(x.matricula || '—')}</td><td>${detalheTexto(JSON.parse(x.detalhe || '{}'))}</td><td>${esc(NOMES.resultado[x.resultado])}</td><td>${esc(x.validacao)}</td></tr>`).join('')
         + `</tbody></table><b>Texto do ato (como lido)</b><blockquote>${esc(d.ato.texto)}</blockquote><div class="acoes-detalhe">${fonteHTML(d.ato)}`
-        + (pendentes ? `<button type="button" class="botao primario" data-rev="ato:CONFERIR">Conferir as ${pendentes} pendente(s)…</button><button type="button" class="botao perigo" data-rev="ato:REJEITAR">Rejeitar as pendentes…</button>` : '<button type="button" class="botao" data-rev="ato:REABRIR">Reabrir revisão…</button>') + '</div>'
+        + (pendentes ? `<button type="button" class="botao primario" data-rev="ato:CONFERIR">Conferir as ${pendentes} pendente(s)…</button><button type="button" class="botao perigo" data-rev="ato:REJEITAR">Rejeitar as pendentes…</button>` : '<button type="button" class="botao" data-rev="ato:REABRIR">Reabrir revisão…</button>')
+        + '<button type="button" class="botao" data-rev="ato:CORRIGIR">Corrigir classificação…</button><button type="button" class="botao" data-rev="ato:OMITIDA">Registrar decisão omitida…</button></div>'
+        + (d.conflitos.length ? '<b>Conflitos para decidir</b><table><thead><tr><th>Campo</th><th>Valor vigente</th><th>Proposta</th><th>Origem</th><th></th></tr></thead><tbody>'
+          + d.conflitos.map(c => `<tr><td>${esc(c.campo)}</td><td>${esc(JSON.parse(c.valor_vigente))}</td><td>${esc(JSON.parse(c.valor_proposto))}</td><td>${esc(c.origem)}</td>`
+            + `<td><button type="button" class="botao" data-conf="${c.id}:ACEITAR">Aceitar…</button><button type="button" class="botao" data-conf="${c.id}:MANTER">Manter…</button></td></tr>`).join('') + '</tbody></table>' : '')
+        + (d.correcoes.length ? '<b>Correções registradas</b><table><tbody>' + d.correcoes.slice(-8).map(c => `<tr><td>${esc(c.momento)}</td><td>${esc(c.autor)}</td><td>${esc(c.campo)}: ${esc(JSON.parse(c.valor_anterior))} → ${esc(JSON.parse(c.valor_corrigido))}</td></tr>`).join('') + '</tbody></table>' : '')
         + (d.trilha.length ? '<b>Trilha de auditoria</b><table><tbody>' + d.trilha.slice(0, 8).map(t => `<tr><td>${esc(t.momento)}</td><td>${esc(t.autor)}</td><td>${esc(t.acao)}</td><td>${esc(t.justificativa || '')}</td></tr>`).join('') + '</tbody></table>' : '');
-      caixa.innerHTML = html; ligarAcoes(caixa, it);
+      caixa.innerHTML = html; it.ato = d.ato; it.decisoesDoAto = d.decisoes; ligarAcoes(caixa, it);
     } catch (e) { caixa.innerHTML = html + `<p class="erro">${esc(e.message)}</p>`; }
   }
 
   function ligarAcoes(caixa, it) {
     caixa.querySelectorAll('[data-pdf]').forEach(b => { b.onclick = () => abrirPdf(b.dataset.pdf); });
     caixa.querySelectorAll('[data-rev]').forEach(b => { b.onclick = () => abrirRevisao(it, b.dataset.rev.split(':')[1]); });
+    caixa.querySelectorAll('[data-conf]').forEach(b => { const [id, dec] = b.dataset.conf.split(':'); b.onclick = () => abrirRevisao({ tipo: 'conflito', id }, dec); });
   }
 
   async function abrirPdf(caminho) {
@@ -346,13 +353,47 @@
 
   /* ---------- revisão ---------- */
   let revisaoAtual = null;
+  /* Campos de correção: listas fechadas do catálogo (dois eixos, 16 grupos, 7 assuntos); nada fora do domínio. */
+  const opcoes = (lista, atual, vazio) => `<option value="">${esc(vazio)}</option>` + lista.map(o => `<option value="${esc(o.codigo)}"${o.codigo === atual ? ' selected' : ''}>${esc(o.nome)}</option>`).join('');
+  const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F'].map(c => ({ codigo: c, nome: c }));
+  const campoTexto = (id, rotulo, valor) => `<label for="${id}">${esc(rotulo)}</label><input id="${id}" data-campo="${id.slice(3)}" type="text" maxlength="160" value="${esc(valor || '')}">`;
+  const campoLista = (id, rotulo, lista, atual, vazio) => `<label for="${id}">${esc(rotulo)}</label><select id="${id}" data-campo="${id.slice(3)}">${opcoes(lista, atual, vazio)}</select>`;
+  function camposDecisao(l, omitida) {
+    const d = typeof l.detalhe === 'string' ? JSON.parse(l.detalhe || '{}') : (l.detalhe || {});
+    return (omitida ? '<label for="rc_pagina">Página do PDF</label><input id="rc_pagina" type="number" min="1" value="' + esc(l.pagina || '') + '">'
+        + '<label for="rc_trecho">Trecho literal do documento (como consta do PDF)</label><textarea id="rc_trecho" rows="3" maxlength="1500"></textarea>' : '')
+      + campoTexto('rc_processo', 'Processo', l.processo) + campoTexto('rc_servidor', 'Servidor(a)', l.servidor) + campoTexto('rc_matricula', 'Matrícula', l.matricula)
+      + campoTexto('rc_cargo', 'Cargo', l.cargo) + campoTexto('rc_lotacao', 'Lotação', l.lotacao)
+      + campoLista('rc_resultado', 'Resultado', Object.entries(NOMES.resultado).map(([codigo, nome]) => ({ codigo, nome })), l.resultado, '—')
+      + campoLista('rc_classe_anterior', 'Classe anterior', CLASSES, d.classe_anterior, 'não se aplica') + campoLista('rc_classe_posterior', 'Classe posterior', CLASSES, d.classe_posterior, 'não se aplica')
+      + campoTexto('rc_nivel_anterior', 'Nível anterior (como publicado, ex.: III ou NIVEL 3)', d.nivel_anterior) + campoTexto('rc_nivel_atual', 'Nível atual (como publicado)', d.nivel_atual);
+  }
+  function camposAto(a) {
+    return campoLista('rc_eixo', 'Eixo', catalogo.eixos, a.eixo, '—') + campoLista('rc_modalidade', 'Modalidade (Progressão)', catalogo.modalidades, a.modalidade, 'não informada')
+      + campoLista('rc_condicao', 'Condição (Progressão)', catalogo.condicoes, a.condicao, 'não informada')
+      + campoLista('rc_grupo', 'Grupo do PCCR (Progressão)', catalogo.grupos.map(g => ({ codigo: g.codigo, nome: g.codigo + ' · ' + g.nome })), a.grupo, 'não informado')
+      + campoLista('rc_subcategoria', 'Assunto (Tempo de Serviço)', catalogo.subcategorias, a.subcategoria, 'não se aplica');
+  }
+  function lerCampos(original) {
+    const saida = {};
+    $('#revCampos').querySelectorAll('[data-campo]').forEach(c => { const v = c.value.trim(); if (v !== String(original[c.dataset.campo] ?? '')) saida[c.dataset.campo] = v || null; });
+    return saida;
+  }
+
   function abrirRevisao(it, decisao) {
     revisaoAtual = { it, decisao };
-    const base = it.tipo === 'ato' ? it.r : it.tipo === 'decisao' ? it.l : it.e;
-    const verbo = { CONFERIR: 'Conferir', REJEITAR: 'Rejeitar', REABRIR: 'Reabrir', VINCULAR: 'Validar vínculo de' }[decisao];
-    $('#revTitulo').textContent = `${verbo} ${it.tipo === 'ato' ? 'resenha ' + (base.resenha || '') : it.tipo === 'decisao' ? 'processo ' + (base.processo || '') : 'evento'}`;
-    $('#revResumo').textContent = decisao === 'CONFERIR' ? 'Ao conferir, os registros passam a contar nos indicadores. A decisão fica registrada na trilha de auditoria.' : 'A decisão fica registrada na trilha de auditoria e pode ser reaberta.';
-    const precisaFonte = decisao === 'CONFERIR' || decisao === 'VINCULAR';
+    const base = it.tipo === 'ato' ? it.r : it.tipo === 'decisao' ? it.l : it.tipo === 'evento' ? it.e : {};
+    const verbo = { CONFERIR: 'Conferir', REJEITAR: 'Rejeitar', REABRIR: 'Reabrir', VINCULAR: 'Validar vínculo de', CORRIGIR: 'Corrigir', OMITIDA: 'Registrar decisão omitida em',
+      ACEITAR: 'Aceitar a proposta do', MANTER: 'Manter o valor vigente no' }[decisao];
+    $('#revTitulo').textContent = `${verbo} ${it.tipo === 'ato' ? 'resenha ' + (base.resenha || '') : it.tipo === 'decisao' ? 'processo ' + (base.processo || '') : it.tipo === 'conflito' ? 'conflito ' + it.id : 'evento'}`;
+    $('#revResumo').textContent = decisao === 'CONFERIR' ? 'Ao conferir, os registros passam a contar nos indicadores. A decisão fica registrada na trilha de auditoria.'
+      : ['CORRIGIR', 'OMITIDA'].includes(decisao) ? 'Valor extraído, valor anterior, valor corrigido, responsável e justificativa ficam registrados. A justificativa não é publicada.'
+      : 'A decisão fica registrada na trilha de auditoria e pode ser reaberta.';
+    const corrige = decisao === 'CORRIGIR' || decisao === 'OMITIDA';
+    $('#revCampos').hidden = !corrige;
+    revisaoAtual.original = decisao === 'CORRIGIR' ? (it.tipo === 'ato' ? (it.ato || base) : { ...base, ...(typeof base.detalhe === 'object' ? base.detalhe : JSON.parse(base.detalhe || '{}')) }) : {};
+    $('#revCampos').innerHTML = !corrige ? '' : decisao === 'OMITIDA' ? camposDecisao({ pagina: base.pagina }, true) : it.tipo === 'ato' ? camposAto(it.ato || base) : camposDecisao(base, false);
+    const precisaFonte = ['CONFERIR', 'VINCULAR', 'CORRIGIR', 'OMITIDA', 'ACEITAR'].includes(decisao);
     $('#revFonteLinha').hidden = !precisaFonte; $('#revFonte').checked = false;
     $('#revVinculoLinha').hidden = !(decisao === 'CONFERIR' && base.vinculo !== 'EXPRESSO'); $('#revVinculo').checked = false;
     const vinc = decisao === 'VINCULAR'; $('#revAtoLinha').hidden = $('#revAto').hidden = !vinc; $('#revAto').value = vinc ? (base.ato_original_id || base.ato_sugerido_id || '') : '';
@@ -362,8 +403,15 @@
   }
 
   async function confirmarRevisao() {
-    const { it, decisao } = revisaoAtual, corpo = { alvo: it.tipo, id: it.id, decisao, responsavel: $('#revResponsavel').value, justificativa: $('#revJustificativa').value,
+    const { it, decisao, original } = revisaoAtual, corpo = { alvo: it.tipo, id: it.id, decisao, responsavel: $('#revResponsavel').value, justificativa: $('#revJustificativa').value,
       confirma_fonte: $('#revFonte').checked, confirma_vinculo: $('#revVinculo').checked, ato_original_id: $('#revAto').value.trim() || null };
+    if (decisao === 'CORRIGIR' && it.tipo === 'ato') Object.assign(corpo, { alvo: 'ato_classificacao', correcoes: lerCampos(original) });
+    if (decisao === 'CORRIGIR' && it.tipo === 'decisao') {
+      // A correção mantém o estado da revisão: pendente continua pendente, conferida continua conferida.
+      Object.assign(corpo, { decisao: { PENDENTE: 'REABRIR', CONFERIDO: 'CONFERIR', REJEITADO: 'REJEITAR' }[it.l.validacao] || 'REABRIR',
+        correcoes: lerCampos(original), confirma_vinculo: true });
+    }
+    if (decisao === 'OMITIDA') Object.assign(corpo, { alvo: 'decisao_omitida', id: it.r.ato_id, pagina: $('#rc_pagina').value, trecho: $('#rc_trecho').value, correcoes: lerCampos({}) });
     try {
       await api('/api/revisao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
       try { sessionStorage.setItem('gediv_responsavel', corpo.responsavel); } catch (e) { /* sem armazenamento */ }

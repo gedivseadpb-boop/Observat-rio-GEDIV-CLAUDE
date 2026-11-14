@@ -146,7 +146,13 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                 decisoes = [dict(d) for d in banco.con.execute("SELECT * FROM decisao WHERE ato_id = ? ORDER BY rowid", (ato["id"],))]
                 trilha = [dict(t) for d in decisoes for t in banco.trilha("decisao", d["id"], 20)]
                 url_oficial = banco.url_oficial(ato["sha256"])
-                return self._json({"ato": {**dict(ato), "pendencias": json.loads(ato["pendencias"] or "[]"),
+                ids_decisoes = [d["id"] for d in decisoes]
+                conflitos = [dict(c) for c in banco.conflitos("ABERTO", "ato", [ato["id"]])] + \
+                            [dict(c) for c in banco.conflitos("ABERTO", "decisao", ids_decisoes)]
+                correcoes = [dict(c) for c in banco.correcoes("ato", ato["id"])] + \
+                            [dict(c) for i in ids_decisoes for c in banco.correcoes("decisao", i)]
+                return self._json({"conflitos": conflitos, "correcoes": correcoes,
+                                   "ato": {**dict(ato), "pendencias": json.loads(ato["pendencias"] or "[]"),
                                            "url_oficial": f"{url_oficial}#page={ato['pagina']}" if url_oficial else None,
                                            "pdf_no_acervo": f"/api/pdf/{ato['sha256']}#page={ato['pagina']}"},
                                    "decisoes": decisoes, "trilha": sorted(trilha, key=lambda t: t["id"], reverse=True)})
@@ -157,6 +163,11 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                     raise Erro(404, "arquivo ausente do acervo")
                 return self._enviar(200, acervo.caminho(achado.group(1)).read_bytes(), "application/pdf",
                                     {"Cache-Control": "no-store", "Content-Disposition": "inline"})
+            if rota == "/api/conflitos":
+                self._exigir_gerencia()
+                return self._json({"conflitos": [dict(c) for c in banco.conflitos("ABERTO")],
+                                   "vinculos_orfaos": banco.vinculos_orfaos(),
+                                   "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV")})
             if rota == "/api/auditoria":
                 self._exigir_gerencia()
                 return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})
@@ -186,6 +197,23 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                                              bool(p.get("confirma_vinculo")), p.get("correcoes") if isinstance(p.get("correcoes"), dict) else None)
             elif alvo == "evento":
                 r = servico.revisar_evento(banco, str(p.get("id", "")), *comuns, p.get("ato_original_id") or None, bool(p.get("confirma_fonte")))
+            elif alvo == "ato_classificacao":
+                r = servico.corrigir_ato(banco, str(p.get("id", "")), p.get("correcoes") if isinstance(p.get("correcoes"), dict) else {},
+                                         comuns[1], comuns[2], bool(p.get("confirma_fonte")))
+            elif alvo == "decisao_omitida":
+                try:
+                    pagina = int(p.get("pagina"))
+                except (TypeError, ValueError):
+                    raise Erro(400, "página inválida")
+                r = servico.registrar_decisao_omitida(banco, str(p.get("id", "")), pagina, str(p.get("trecho", "")),
+                                                      p.get("correcoes") if isinstance(p.get("correcoes"), dict) else {},
+                                                      comuns[1], comuns[2], bool(p.get("confirma_fonte")))
+            elif alvo == "conflito":
+                try:
+                    conflito = int(p.get("id"))
+                except (TypeError, ValueError):
+                    raise Erro(400, "conflito inválido")
+                r = servico.resolver_conflito(banco, conflito, *comuns, bool(p.get("confirma_fonte")))
             else:
                 raise Erro(400, "alvo inválido")
             self._json(r)
