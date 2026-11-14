@@ -357,11 +357,29 @@ class Banco:
         if str(caminho) != ":memory:":
             Path(caminho).parent.mkdir(parents=True, exist_ok=True)
         self.caminho = caminho
-        self.con = sqlite3.connect(str(caminho))
-        self.con.row_factory = sqlite3.Row
-        self.con.execute("PRAGMA foreign_keys = ON")
         self.backup_da_migracao: Path | None = None
-        self._migrar(backup_antes_de_migrar)
+        self.con = sqlite3.connect(str(caminho))
+        try:
+            self.con.row_factory = sqlite3.Row
+            self.con.execute("PRAGMA foreign_keys = ON")
+            self._migrar(backup_antes_de_migrar)
+        except BaseException:
+            # Quem chamou não recebe o objeto e não teria como fechar a conexão: no Windows o arquivo ficava
+            # preso (não podia ser apagado nem renomeado). Fecha aqui e propaga o erro ORIGINAL.
+            self._fechar_sem_mascarar()
+            raise
+
+    def __enter__(self) -> "Banco":
+        return self
+
+    def __exit__(self, *_) -> None:
+        self.fechar()
+
+    def _fechar_sem_mascarar(self) -> None:
+        try:
+            self.con.close()
+        except Exception:      # o erro que importa é o que já está sendo propagado
+            pass
 
     def _migrar(self, backup: bool) -> None:
         """Leva o banco à versão VERSAO_ESQUEMA.
@@ -400,12 +418,17 @@ class Banco:
                 self.con.execute(f"PRAGMA user_version = {VERSAO_ESQUEMA}")
                 self.con.execute("COMMIT")
             except BaseException:
-                self.con.execute("ROLLBACK")
+                try:
+                    self.con.execute("ROLLBACK")
+                except Exception:
+                    pass       # uma falha no ROLLBACK não pode esconder o erro original da migração
                 raise
         finally:
             self.con.isolation_level = nivel
 
     def fechar(self) -> None:
+        """Encerra a conexão. Pode ser chamado mais de uma vez. (`with sqlite3.connect(...)` controla a transação,
+        não fecha a conexão; use `with Banco(...)` ou `fechar()`.)"""
         self.con.close()
 
     # --- execuções -------------------------------------------------------
