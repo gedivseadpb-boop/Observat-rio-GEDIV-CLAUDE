@@ -300,6 +300,22 @@ def _linhas_pela_grade(linhas, colunas_de, faixas, reguas) -> list[list[int]] | 
     return saida
 
 
+def _fragmento_alinhado(fragmento: dict, ancora: dict, faixas) -> bool:
+    for coluna, palavras in fragmento.items():
+        if coluna == -1:
+            return False
+        x0, x1 = palavras[0].x0, palavras[-1].x1
+        if coluna in ancora:
+            # a célula pode começar por um traço da grade lido como caractere ("|"): a referência é a 1ª palavra de texto
+            texto = [p for p in ancora[coluna] if any(c.isalnum() for c in p.texto)] or ancora[coluna]
+            r0, r1 = texto[0].x0, texto[-1].x1
+        else:
+            r0, r1 = faixas[coluna]
+        if min(abs(x0 - r0), abs(x1 - r1), abs((x0 + x1) / 2 - (r0 + r1) / 2)) > TOLERANCIA_ALINHAMENTO:
+            return False
+    return True
+
+
 def _linhas_da_tabela(linhas, celulas, faixas, reguas) -> tuple[list[str], int, int]:
     colunas_de = []
     for cel in celulas:
@@ -352,6 +368,15 @@ def _linhas_da_tabela(linhas, celulas, faixas, reguas) -> tuple[list[str], int, 
             destino[k] = None                       # indícios contraditórios: não se atribui
         else:
             destino[k] = cima                       # células alinhadas no alto (padrão do DOE): continua a de cima
+    # Etapa 05.3.5 — DEPOIS da última linha da tabela, o fragmento só continua uma célula se estiver ALINHADO a ela
+    # (pela esquerda, pela direita ou pelo centro). Um título centrado logo abaixo da tabela cabe na faixa de uma
+    # coluna larga, mas não se alinha à célula da última linha: deixa de ser absorvido e sai como linha comum.
+    # No MEIO da tabela a regra não se aplica: ali o fragmento está entre duas linhas da própria tabela, e em tabelas
+    # lidas por OCR a posição das palavras é aproximada (resenha 570/2026, 07/11/2026) — exigir alinhamento marcaria
+    # como ambíguas continuações legítimas.
+    for k, a in list(destino.items()):
+        if a is not None and a != -1 and k > ancoras[-1] and not _fragmento_alinhado(colunas_de[k], colunas_de[a], faixas):
+            destino[k] = -1
     saida, reconstruidas, ambiguas = [], 0, 0
     pendentes = [k for k, d in destino.items() if d is None]
     anteriores = [k for k in range(len(linhas)) if k < ancoras[0] and destino.get(k) is None]

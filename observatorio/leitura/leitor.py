@@ -44,9 +44,11 @@ from ..nucleo.banco import Banco
 from . import ocr, tabela_ocr
 from .pagina import Palavra, identificar_edicao, ler_pagina
 
-VERSAO = "0.7"           # 0.4: cache liberado por página; 0.5: OCR de tabela pela grade vetorial;
+VERSAO = "0.8"           # 0.4: cache liberado por página; 0.5: OCR de tabela pela grade vetorial;
                          # 0.6: tolerância proporcional ao corpo da letra; leitura de caracteres sobrepostos
                          # 0.7 (Etapa 05.3.4): linhas de tabela pela geometria, regiões da página, completude do OCR
+                         # 0.8 (Etapa 05.3.5): alinhamento do fragmento à célula; conferência dos trechos relidos;
+                         #      aviso de texto em contorno e de imagem não examinada
 MIN_CARACTERES = 20       # abaixo disso a página é tratada como sem texto nativo
 RESOLUCAO_OCR = 300       # pontos por polegada
 RESOLUCAO_OCR_TRECHO = 400  # trechos com fonte ilegível costumam ser tabelas em corpo 4: mais resolução
@@ -139,23 +141,105 @@ def _imagens_sem_texto(pagina, brutas: list[dict]) -> list[tuple[float, float, f
     return regioes
 
 
-def _ler_regioes_sem_texto(pagina, brutas: list[dict]) -> tuple[list[Palavra], list[float]]:
+def _ler_regioes_sem_texto(pagina, brutas: list[dict], regioes=None) -> tuple[list[Palavra], list[float], int]:
     """OCR só das imagens sem texto. Uma figura (brasão, foto) não devolve palavras e é ignorada.
     Numa figura com pouco texto (faixa de anúncio com logotipo) ficam só as palavras lidas com confiança: o ruído do
     desenho não entra no texto nem derruba a qualidade da página (12/11/2026, p. 55). Numa região DENSA de texto
-    (tabela digitalizada) mal lida, tudo é guardado e a confiança baixa deixa a página pendente."""
-    palavras, confiancas = [], []
-    for regiao in _imagens_sem_texto(pagina, brutas):
-        lidas, conf = _ocr_bruto(pagina.crop(regiao), RESOLUCAO_OCR, (regiao[0], regiao[1]))
+    (tabela digitalizada) tudo é guardado, a confiança baixa deixa a página pendente e — Etapa 05.3.5 — as linhas com
+    tinta que o OCR não leu são relidas e contadas: devolve também quantas continuaram sem leitura."""
+    palavras, confiancas, sem_leitura = [], [], 0
+    for regiao in (_imagens_sem_texto(pagina, brutas) if regioes is None else regioes):
+        lidas, conf, faltam = _ocr_com_conferencia(pagina.crop(regiao), RESOLUCAO_OCR, (regiao[0], regiao[1]))
         com_texto = [(p, c) for p, c in zip(lidas, conf) if sum(ch.isalnum() for ch in p.texto) >= 2]
         boas = [(p, c) for p, c in com_texto if c >= CONFIANCA_MINIMA]
         if len(boas) < MIN_PALAVRAS_REGIAO:
             continue
-        if len(com_texto) >= MIN_PALAVRAS_REGIAO_DENSA and len(boas) < 0.6 * len(com_texto):
-            boas = list(zip(lidas, conf))               # região de texto mal lida: fica tudo, e a página, pendente
+        if len(com_texto) >= MIN_PALAVRAS_REGIAO_DENSA:
+            sem_leitura += faltam                       # só em região de texto: num anúncio, tinta sem palavra é desenho
+            if len(boas) < 0.6 * len(com_texto):
+                boas = list(zip(lidas, conf))           # região de texto mal lida: fica tudo, e a página, pendente
         palavras += [p for p, _ in boas]
         confiancas += [c for _, c in boas]
-    return palavras, confiancas
+    return palavras, confiancas, sem_leitura
+
+
+# Etapa 05.3.5 — texto desenhado como CONTORNO vetorial (sem caracteres e sem imagem): o PDF traz cada letra como uma
+# curva e a extração não devolve nada. Caso real: DOE de 07/11/2026, p. 6 — uma resenha inteira da GEDIV em contorno,
+# que o robô nunca tinha lido; e 12/11/2026, p. 55 — uma página inteira de balanço de empresa.
+# Tratamento: as curvas do tamanho de uma letra que não estão sob nenhuma palavra são agrupadas em regiões. Região sem
+# nenhuma palavra nativa dentro é lida por OCR, como uma imagem sem texto (mesmo caminho, mesmas salvaguardas). Região
+# que envolve palavras nativas não é lida (o OCR duplicaria o texto vizinho): fica o AVISO, e o arquivo, "lido com
+# pendências". Sem Tesseract, toda região vira aviso.
+MIN_CONTORNOS = 40             # curvas do tamanho de letra numa região; menos que isso é ornamento
+CELULA_CONTORNO = 18.0         # pt da malha usada para agrupar curvas vizinhas
+AVISO_CONTORNO = "POSSIVEL_TEXTO_EM_CONTORNO"
+AVISO_IMAGEM = "IMAGEM_NAO_EXAMINADA"
+
+
+def _contornos_livres(curvas, brutas: list[dict]) -> list[dict]:
+    letras = [c for c in curvas if 2 <= c["bottom"] - c["top"] <= 22 and 0.5 <= c["x1"] - c["x0"] <= 30]
+    if len(letras) < MIN_CONTORNOS:
+        return []
+    # índice das palavras por faixa vertical, para não comparar cada curva com cada palavra
+    por_faixa: dict[int, list[dict]] = {}
+    for w in brutas:
+        for f in range(int((w["top"] - 2) // 20), int((w["bottom"] + 2) // 20) + 1):
+            por_faixa.setdefault(f, []).append(w)
+    livres = []
+    for c in letras:
+        cx, cy = (c["x0"] + c["x1"]) / 2, (c["top"] + c["bottom"]) / 2
+        if not any(w["x0"] - 2 <= cx <= w["x1"] + 2 and w["top"] - 2 <= cy <= w["bottom"] + 2 for w in por_faixa.get(int(cy // 20), [])):
+            livres.append(c)
+    return livres
+
+
+def contornos_sem_texto(curvas, brutas: list[dict]) -> int:
+    """Quantas curvas do tamanho de uma letra (2–22 pt de altura, até 30 pt de largura) não estão sob nenhuma palavra."""
+    return len(_contornos_livres(curvas, brutas))
+
+
+def regioes_de_contorno(curvas, brutas: list[dict]) -> list[tuple[float, float, float, float, bool]]:
+    """Regiões (x0, topo, x1, base, tem_palavra_nativa_dentro) formadas por MIN_CONTORNOS ou mais curvas vizinhas do
+    tamanho de letra, fora de palavras. Vizinhas: em células adjacentes de uma malha de CELULA_CONTORNO pt."""
+    livres = _contornos_livres(curvas, brutas)
+    celulas: dict[tuple[int, int], list[dict]] = {}
+    for c in livres:
+        celulas.setdefault((int((c["x0"] + c["x1"]) / 2 // CELULA_CONTORNO), int((c["top"] + c["bottom"]) / 2 // CELULA_CONTORNO)), []).append(c)
+    regioes, vistas = [], set()
+    for inicio in celulas:
+        if inicio in vistas:
+            continue
+        pilha, grupo = [inicio], []
+        vistas.add(inicio)
+        while pilha:
+            i, j = pilha.pop()
+            grupo += celulas[(i, j)]
+            for vizinha in ((i + di, j + dj) for di in (-1, 0, 1) for dj in (-1, 0, 1)):
+                if vizinha in celulas and vizinha not in vistas:
+                    vistas.add(vizinha)
+                    pilha.append(vizinha)
+        if len(grupo) < MIN_CONTORNOS:
+            continue
+        x0, topo = min(c["x0"] for c in grupo) - 3, min(c["top"] for c in grupo) - 3
+        x1, base = max(c["x1"] for c in grupo) + 3, max(c["bottom"] for c in grupo) + 3
+        # palavra nativa LEGÍVEL dentro da região; uma palavra em fonte sem mapeamento ("(cid:N)") não conta: ela é
+        # parte do que não foi lido e sai junto quando a região vai ao OCR
+        dentro = any(x0 <= (w["x0"] + w["x1"]) / 2 <= x1 and topo <= (w["top"] + w["bottom"]) / 2 <= base
+                     and not _CORROMPIDO.search(w["text"]) for w in brutas)
+        regioes.append((max(0.0, x0), max(0.0, topo), x1, base, dentro))
+    return sorted(regioes, key=lambda r: (r[1], r[0]))
+
+
+def _avisos(pagina, brutas: list[dict], contornos) -> list[str]:
+    """O que a leitura NÃO examinou nesta página e pode esconder texto. Não muda a qualidade da página; vai para as
+    inconsistências do arquivo, que fica "lido com pendências"."""
+    avisos = []
+    sem_ocr = not ocr_disponivel()[0]
+    if any(dentro or sem_ocr for *_, dentro in contornos):
+        avisos.append(AVISO_CONTORNO)                   # região que não pôde ser lida com segurança
+    if sem_ocr and _imagens_sem_texto(pagina, brutas):
+        avisos.append(AVISO_IMAGEM)                     # sem Tesseract, a imagem pequena não pôde ser lida
+    return avisos
 
 
 def faixas_sem_leitura(imagem, caixas) -> list[tuple[int, int, int, int]]:
@@ -217,17 +301,17 @@ def _ocr(pagina, resolucao: int = RESOLUCAO_OCR, origem: tuple[float, float] = (
     return palavras, (round(sum(confiancas) / len(confiancas), 1) if confiancas else None)
 
 
-def _ocr_completo(pagina, resolucao: int = RESOLUCAO_OCR) -> tuple[list[Palavra], float | None, int]:
-    """OCR da página inteira com conferência de COMPLETUDE: faixas com tinta de texto e sem palavra reconhecida são
-    relidas uma a uma (linha isolada, `--psm 7`). Devolve (palavras, confiança média, linhas que continuaram sem
-    leitura)."""
+def _ocr_com_conferencia(pagina, resolucao: int, origem: tuple[float, float] = (0.0, 0.0)) -> tuple[list[Palavra], list[float], int]:
+    """OCR de uma página ou de um recorte dela, com conferência de COMPLETUDE: faixas com tinta de texto e sem palavra
+    reconhecida são relidas uma a uma (linha isolada, `--psm 7`). Devolve (palavras, confianças, linhas que continuaram
+    sem leitura). `origem`: canto do recorte na página, em pontos."""
     imagem = pagina.to_image(resolution=resolucao).original
     dados = ocr.dados(imagem)
     escala = 72.0 / resolucao
     palavras, confiancas, caixas = [], [], []
     for texto, conf, x, y, w, h in zip(dados["text"], dados["conf"], dados["left"], dados["top"], dados["width"], dados["height"]):
         if texto.strip() and float(conf) >= 0:
-            palavras.append(Palavra(x * escala, (x + w) * escala, (y + h / 2) * escala, texto.strip()))
+            palavras.append(Palavra(origem[0] + x * escala, origem[0] + (x + w) * escala, origem[1] + (y + h / 2) * escala, texto.strip()))
             confiancas.append(float(conf))
             caixas.append((x, y, x + w, y + h))
     sem_leitura = 0
@@ -239,10 +323,16 @@ def _ocr_completo(pagina, resolucao: int = RESOLUCAO_OCR) -> tuple[list[Palavra]
         for texto, conf, x, y, w, h in zip(relido["text"], relido["conf"], relido["left"], relido["top"], relido["width"], relido["height"]):
             if texto.strip() and float(conf) >= 0 and sum(c.isalnum() for c in texto) >= 1:
                 gx, gy = max(0, x0 - margem) + x, max(0, y0 - margem) + y
-                palavras.append(Palavra(gx * escala, (gx + w) * escala, (gy + h / 2) * escala, texto.strip()))
+                palavras.append(Palavra(origem[0] + gx * escala, origem[0] + (gx + w) * escala, origem[1] + (gy + h / 2) * escala, texto.strip()))
                 confiancas.append(float(conf))
                 achou = True
         sem_leitura += not achou
+    return palavras, confiancas, sem_leitura
+
+
+def _ocr_completo(pagina, resolucao: int = RESOLUCAO_OCR) -> tuple[list[Palavra], float | None, int]:
+    """OCR da página inteira com conferência de completude: (palavras, confiança média, linhas sem leitura)."""
+    palavras, confiancas, sem_leitura = _ocr_com_conferencia(pagina, resolucao)
     return palavras, (round(sum(confiancas) / len(confiancas), 1) if confiancas else None), sem_leitura
 
 
@@ -295,14 +385,15 @@ def _blocos_ilegiveis(brutas: list[dict], largura: float, altura: float) -> list
             for b, n in zip(blocos, contagem) if n >= MIN_SINAIS_ILEGIVEIS]
 
 
-def _reler_trechos_ilegiveis(numero: int, pagina, brutas: list[dict]) -> dict | None:
-    """Substitui por OCR somente os trechos em fonte ilegível. None quando não há o que reler."""
+def _reler_trechos_ilegiveis(numero: int, pagina, brutas: list[dict], regioes=()) -> dict | None:
+    """Substitui por OCR somente os trechos em fonte ilegível. None quando não há o que reler.
+    `regioes`: regiões de texto em contorno da mesma página, lidas na mesma passada (Etapa 05.3.5)."""
     largura, altura = float(pagina.width), float(pagina.height)
     blocos = _blocos_ilegiveis(brutas, largura, altura)
     if not blocos:
         return None
     dentro = lambda w, b: b[0] <= (w["x0"] + w["x1"]) / 2 <= b[2] and b[1] <= (w["top"] + w["bottom"]) / 2 <= b[3]
-    lidas_por_bloco, confiancas, areas = [], [], []
+    lidas_por_bloco, confiancas, areas, sem_leitura = [], [], [], 0
     for b in blocos:
         centro = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
         if any(a[0] <= centro[0] <= a[2] and a[1] <= centro[1] <= a[3] for a in areas):
@@ -312,7 +403,10 @@ def _reler_trechos_ilegiveis(numero: int, pagina, brutas: list[dict]) -> dict | 
         if tabela:
             lidas, conf, area = tabela
         else:
-            (lidas, conf), area = _ocr_bruto(pagina.crop(b), RESOLUCAO_OCR_TRECHO, (b[0], b[1])), b
+            # Etapa 05.3.5: o trecho relido também é conferido — linha com tinta e sem palavra não passa em silêncio.
+            lidas, conf, faltam = _ocr_com_conferencia(pagina.crop(b), RESOLUCAO_OCR_TRECHO, (b[0], b[1]))
+            sem_leitura += faltam
+            area = b
         lidas_por_bloco += lidas
         confiancas += conf
         areas.append(area)
@@ -321,10 +415,16 @@ def _reler_trechos_ilegiveis(numero: int, pagina, brutas: list[dict]) -> dict | 
     palavras += lidas_por_bloco
     if not confiancas:
         return None
+    if regioes:
+        extras, confiancas_das_regioes, faltam = _ler_regioes_sem_texto(pagina, brutas, list(regioes))
+        palavras += extras
+        confiancas += confiancas_das_regioes
+        sem_leitura += faltam
     confianca = round(sum(confiancas) / len(confiancas), 1)
     texto, colunas = ler_pagina(palavras, largura)
+    qualidade = "LEITURA_INCOMPLETA" if sem_leitura else "OK" if confianca >= CONFIANCA_BOA else "BAIXA_CONFIANCA"
     return {"numero": numero, "metodo": "TEXTO+OCR", "colunas": colunas, "texto": texto, "palavras": len(palavras),
-            "qualidade": "OK" if confianca >= CONFIANCA_BOA else "BAIXA_CONFIANCA", "confianca": confianca}
+            "qualidade": qualidade, "confianca": confianca}
 
 
 def _fracao_coberta_por_imagens(pagina) -> float:
@@ -388,6 +488,14 @@ def _ler_uma_pagina(numero: int, pagina) -> dict:
     largura = float(pagina.width)
     brutas = pagina.extract_words(x_tolerance_ratio=TOLERANCIA_X_PROPORCIONAL)
     _marcar_fontes_suspeitas(pagina, brutas)
+    # Etapa 05.3.5: regiões de texto em contorno. As que não têm texto nativo legível dentro vão ao OCR; as palavras
+    # ilegíveis ("(cid:N)") que estiverem dentro delas saem já aqui, para não desviarem a página para a releitura de
+    # trecho ilegível (que leria só um pedaço — 07/11/2026, p. 6).
+    contornos = regioes_de_contorno(pagina.curves, brutas)
+    legiveis = [(x0, topo, min(largura, x1), min(float(pagina.height), base)) for x0, topo, x1, base, dentro in contornos if not dentro]
+    if legiveis and ocr_disponivel()[0]:
+        brutas = [w for w in brutas if not (_CORROMPIDO.search(w["text"]) and any(
+            x0 <= (w["x0"] + w["x1"]) / 2 <= x1 and topo <= (w["top"] + w["bottom"]) / 2 <= base for x0, topo, x1, base in legiveis))]
     sobrepostas = _ler_sobreposicoes(pagina, brutas) if ocr_disponivel()[0] else 0
     palavras = [Palavra(float(w["x0"]), float(w["x1"]), float(w["top"]), w["text"]) for w in brutas]
     texto, colunas = ler_pagina(palavras, largura, _reguas(pagina))
@@ -395,22 +503,24 @@ def _ler_uma_pagina(numero: int, pagina) -> dict:
     if len(re.sub(r"\s", "", texto)) >= MIN_CARACTERES:
         corrompidos = len(_CORROMPIDO.findall(texto))
         qualidade = "INCONSISTENTE" if corrompidos > max(3, 0.02 * len(palavras)) or corrompidos >= MIN_SINAIS_ILEGIVEIS else "OK"
+        avisos = _avisos(pagina, brutas, contornos)
         nativo = {**base, "metodo": "TEXTO+OCR" if sobrepostas else "TEXTO", "colunas": colunas, "texto": texto,
-                  "palavras": len(palavras), "qualidade": qualidade}
+                  "palavras": len(palavras), "qualidade": qualidade, "avisos": avisos}
         if corrompidos and ocr_disponivel()[0]:
-            relida = _reler_trechos_ilegiveis(numero, pagina, brutas)
+            relida = _reler_trechos_ilegiveis(numero, pagina, brutas, legiveis)
             if relida:
-                return relida
+                return {**relida, "avisos": avisos}
         if _fracao_coberta_por_imagens(pagina) < FRACAO_IMAGEM_MISTA:
-            if ocr_disponivel()[0] and pagina.images:
-                # Imagem pequena sem palavras por cima (tabela colada como figura): só a região é lida.
-                extras, confiancas = _ler_regioes_sem_texto(pagina, brutas)
+            if ocr_disponivel()[0] and (pagina.images or legiveis):
+                # Imagem pequena sem palavras por cima (tabela colada como figura) e região de texto em contorno sem
+                # texto nativo dentro: só a região é lida.
+                extras, confiancas, sem_leitura = _ler_regioes_sem_texto(pagina, brutas, _imagens_sem_texto(pagina, brutas) + legiveis)
                 if extras:
                     confianca = round(sum(confiancas) / len(confiancas), 1)
                     texto, colunas = ler_pagina(palavras + extras, largura, _reguas(pagina))
+                    da_regiao = "LEITURA_INCOMPLETA" if sem_leitura else "OK" if confianca >= CONFIANCA_BOA else "BAIXA_CONFIANCA"
                     return {**nativo, "metodo": "TEXTO+OCR", "colunas": colunas, "texto": texto, "palavras": len(palavras) + len(extras),
-                            "qualidade": qualidade if qualidade != "OK" else ("OK" if confianca >= CONFIANCA_BOA else "BAIXA_CONFIANCA"),
-                            "confianca": confianca}
+                            "qualidade": qualidade if qualidade != "OK" else da_regiao, "confianca": confianca}
             return nativo
         # Página mista: cabeçalho em texto e corpo digitalizado, por exemplo. O texto nativo sozinho pode ser só uma parte.
         if not ocr_disponivel()[0]:
@@ -475,6 +585,15 @@ def conferir_com_a_origem(resultado: dict, origens) -> list[str]:
     return achados
 
 
+def avisos_do_arquivo(paginas: list[dict]) -> list[str]:
+    """Avisos das páginas (texto em contorno, imagem não examinada) como inconsistências do arquivo, com as páginas."""
+    por_aviso: dict[str, list[int]] = {}
+    for p in paginas:
+        for aviso in p.get("avisos") or []:
+            por_aviso.setdefault(aviso, []).append(p["numero"])
+    return [f"{aviso}: página(s) {', '.join(map(str, numeros))}" for aviso, numeros in sorted(por_aviso.items())]
+
+
 def processar(banco: Banco, acervo: Acervo, limite: int | None = None, refazer_pendentes: bool = False) -> dict:
     """Lê os arquivos do acervo ainda não lidos por esta versão do leitor (de qualquer origem).
     Com `refazer_pendentes`, tenta de novo os que terminaram em erro ou com páginas pendentes."""
@@ -493,7 +612,7 @@ def processar(banco: Banco, acervo: Acervo, limite: int | None = None, refazer_p
             banco.registrar_leitura(sha, "ERRO", VERSAO, [], None, None, f"{type(e).__name__}: {e}"[:300])
             contagem["ERRO"] += 1
             continue
-        inconsistencias = conferir_com_a_origem(resultado, banco.origens(sha))
+        inconsistencias = conferir_com_a_origem(resultado, banco.origens(sha)) + avisos_do_arquivo(resultado["paginas"])
         pendencia = inconsistencias or any(p["qualidade"] not in ("OK", "VAZIA") for p in resultado["paginas"])
         situacao = "LIDA_COM_PENDENCIAS" if pendencia else "LIDA"
         comparacao = banco.registrar_leitura(sha, situacao, VERSAO, resultado["paginas"], resultado["numero_edicao"],
