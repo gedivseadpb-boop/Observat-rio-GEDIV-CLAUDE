@@ -167,9 +167,9 @@ def _ler_regioes_sem_texto(pagina, brutas: list[dict], regioes=None) -> tuple[li
 # curva e a extração não devolve nada. Caso real: DOE de 07/11/2026, p. 6 — uma resenha inteira da GEDIV em contorno,
 # que o robô nunca tinha lido; e 12/11/2026, p. 55 — uma página inteira de balanço de empresa.
 # Tratamento: as curvas do tamanho de uma letra que não estão sob nenhuma palavra são agrupadas em regiões. Região sem
-# nenhuma palavra nativa dentro é lida por OCR, como uma imagem sem texto (mesmo caminho, mesmas salvaguardas). Região
-# que envolve palavras nativas não é lida (o OCR duplicaria o texto vizinho): fica o AVISO, e o arquivo, "lido com
-# pendências". Sem Tesseract, toda região vira aviso.
+# nenhuma palavra nativa dentro é lida por OCR, como uma imagem sem texto. Região com palavras nativas não é relida
+# para não duplicá-las. Toda região detectada mantém aviso: mesmo com confiança alta, ler algumas palavras não prova
+# que todas foram reconhecidas.
 MIN_CONTORNOS = 40             # curvas do tamanho de letra numa região; menos que isso é ornamento
 CELULA_CONTORNO = 18.0         # pt da malha usada para agrupar curvas vizinhas
 AVISO_CONTORNO = "POSSIVEL_TEXTO_EM_CONTORNO"
@@ -235,8 +235,8 @@ def _avisos(pagina, brutas: list[dict], contornos) -> list[str]:
     inconsistências do arquivo, que fica "lido com pendências"."""
     avisos = []
     sem_ocr = not ocr_disponivel()[0]
-    if any(dentro or sem_ocr for *_, dentro in contornos):
-        avisos.append(AVISO_CONTORNO)                   # região que não pôde ser lida com segurança
+    if contornos:
+        avisos.append(AVISO_CONTORNO)                   # conferir mesmo quando o OCR leu parte da região
     if sem_ocr and _imagens_sem_texto(pagina, brutas):
         avisos.append(AVISO_IMAGEM)                     # sem Tesseract, a imagem pequena não pôde ser lida
     return avisos

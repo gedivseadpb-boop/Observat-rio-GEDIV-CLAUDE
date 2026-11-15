@@ -373,8 +373,8 @@ class TesteSinalizacaoNaCadeia(unittest.TestCase):
 
     def test_regiao_em_contorno_sem_texto_nativo_dentro_e_lida_por_ocr_so_ali(self):
         # Caso real (07/11/2026, p. 6): uma resenha inteira da GEDIV desenhada em contorno. Aqui os contornos são
-        # sintéticos e o Tesseract é simulado (o que se confere é o caminho: a região certa vai ao OCR, as palavras
-        # voltam para a posição certa da página e o aviso deixa de ser necessário).
+        # sintéticos e o Tesseract é simulado (o que se confere é o caminho: a região certa vai ao OCR e as palavras
+        # voltam para a posição certa). A extração de algumas palavras não prova a completude: o aviso permanece.
         recortes = []
         original_crop = None
 
@@ -393,7 +393,7 @@ class TesteSinalizacaoNaCadeia(unittest.TestCase):
             with mock.patch.object(leitor, "ocr_disponivel", return_value=(True, "simulado")), mock.patch.object(leitor.ocr, "dados", dados), \
                     mock.patch.object(leitor, "_ler_sobreposicoes", return_value=0):
                 lida = leitor._ler_uma_pagina(1, pagina)
-        self.assertEqual((lida["metodo"], lida["qualidade"], lida["avisos"]), ("TEXTO+OCR", "OK", []))
+        self.assertEqual((lida["metodo"], lida["qualidade"], lida["avisos"]), ("TEXTO+OCR", "OK", [leitor.AVISO_CONTORNO]))
         self.assertIn("SAD-PSE-2026/90061 9000061 PESSOA FICTICIA SESSENTA", lida["texto"])
         self.assertIn("LICENÇA ESPECIAL", lida["texto"].upper())                   # o texto nativo fica
         self.assertLess(recortes[0][1], 600)                                       # foi ao OCR só a região, não a página

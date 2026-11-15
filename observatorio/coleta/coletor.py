@@ -402,7 +402,7 @@ def validar_intervalo(inicio: date, fim: date, permitir_longo: bool = False, hoj
 def reconciliar(banco: B.Banco, acervo: Acervo) -> dict:
     """Recuperação após interrupção, executada no início de toda coleta (sem acesso à rede).
 
-    - publicação BAIXADA cujo arquivo falta no acervo, tem tamanho diferente ou não tem registro: volta à fila
+    - publicação BAIXADA cujo arquivo falta, tem tamanho ou SHA divergente, ou não tem registro: volta à fila
       (FALHA_DOWNLOAD, motivo registrado na trilha), sem perder o histórico de versões;
     - arquivo presente, mas sem verificação estrutural registrada (queda entre gravações, importação antiga): é
       verificado agora a partir do acervo; se não confirmar a estrutura, a publicação volta à fila;
@@ -419,6 +419,14 @@ def reconciliar(banco: B.Banco, acervo: Acervo) -> dict:
         registro = arquivos.get(sha) if sha else None
         if registro is None or caminho is None or not caminho.is_file() or caminho.stat().st_size != registro["tamanho"]:
             banco.marcar_para_reobter(p["id"], "ARQUIVO_AUSENTE_NO_ACERVO" if registro else "ARQUIVO_SEM_REGISTRO")
+            resumo["reobter"] += 1
+            continue
+        try:
+            integro = acervo.conferir(sha)
+        except OSError:
+            integro = False
+        if not integro:
+            banco.marcar_para_reobter(p["id"], "SHA_DIVERGENTE_OU_NAO_VERIFICAVEL")
             resumo["reobter"] += 1
             continue
         if sha not in verificados:

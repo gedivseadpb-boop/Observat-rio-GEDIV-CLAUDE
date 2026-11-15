@@ -34,7 +34,8 @@ def resultado(codigo: int, motivos: list[str], retomada: dict | None = None) -> 
 
 
 def avaliar(importacao: list[dict], leitura: dict, classificacao: dict, erros_de_leitura_na_base: int,
-            fila_de_classificacao: int) -> dict:
+            fila_de_classificacao: int, pendencias_na_base: int = 0, conflitos_abertos: int = 0,
+            releituras_pendentes: int = 0) -> dict:
     falhas, pendencias = [], []
     recusados = [i for i in importacao if not i.get("aceito")]
     if recusados:
@@ -57,8 +58,16 @@ def avaliar(importacao: list[dict], leitura: dict, classificacao: dict, erros_de
         pendencias.append(f"{leitura['na_fila']} arquivo(s) ainda na fila de leitura")
     if fila_de_classificacao:
         pendencias.append(f"{fila_de_classificacao} arquivo(s) ainda na fila de classificação")
-    retomada = {"leituras_com_erro": erros_de_leitura_na_base, "fila_de_classificacao": fila_de_classificacao}
-    if erros_de_leitura_na_base or leitura.get("LIDA_COM_PENDENCIAS") or leitura.get("RELEITURA_RECUSADA"):
+    if pendencias_na_base:
+        pendencias.append(f"{pendencias_na_base} leitura(s) com pendências persistidas na base")
+    if conflitos_abertos:
+        pendencias.append(f"{conflitos_abertos} conflito(s) ainda aberto(s) para revisão")
+    if releituras_pendentes:
+        pendencias.append(f"{releituras_pendentes} releitura(s) com falha ou recusa ainda não resolvida")
+    retomada = {"leituras_com_erro": erros_de_leitura_na_base, "fila_de_classificacao": fila_de_classificacao,
+                "leituras_com_pendencias": pendencias_na_base, "conflitos_abertos": conflitos_abertos,
+                "releituras_pendentes": releituras_pendentes}
+    if erros_de_leitura_na_base or pendencias_na_base or releituras_pendentes or leitura.get("LIDA_COM_PENDENCIAS") or leitura.get("RELEITURA_RECUSADA"):
         retomada["comando"] = RETOMADA
     if falhas:
         return resultado(saida.FALHA, falhas + pendencias, retomada)
@@ -92,9 +101,19 @@ def executar(pasta_dados: str | Path, origem: str | Path | None = None, data: da
         leitura = leitor.processar(banco, acervo, refazer_pendentes=refazer_pendentes)
         classificacao = processo.classificar_pendentes(banco)
         situacao = processo.situacao(banco)
-        erros = banco.con.execute("SELECT COUNT(*) FROM leitura WHERE situacao = 'ERRO' AND versao_leitor = ?",
-                                  (leitor.VERSAO,)).fetchone()[0]
+        erros = banco.con.execute("SELECT COUNT(*) FROM leitura WHERE situacao = 'ERRO'").fetchone()[0]
+        pendencias = banco.con.execute(
+            "SELECT COUNT(*) FROM leitura WHERE situacao <> 'ERRO' AND (situacao = 'LIDA_COM_PENDENCIAS' "
+            "OR paginas_com_pendencia > 0 OR (inconsistencias IS NOT NULL AND inconsistencias NOT IN ('', '[]')))"
+        ).fetchone()[0]
+        releituras = banco.con.execute("SELECT COUNT(*) FROM leitura WHERE situacao <> 'ERRO' AND erro IS NOT NULL").fetchone()[0]
+        conflitos = banco.con.execute("SELECT COUNT(*) FROM conflito WHERE estado = 'ABERTO'").fetchone()[0]
+        fontes = [dict(l) for l in banco.con.execute(
+            "SELECT fonte, MIN(data_publicacao) AS inicio, MAX(data_publicacao) AS fim, COUNT(*) AS publicacoes "
+            "FROM publicacao GROUP BY fonte ORDER BY fonte")]
         return {"importacao": importados, "leitura": leitura, "classificacao": classificacao, "situacao": situacao,
-                "resultado": avaliar(importados, leitura, classificacao, erros, situacao["na_fila"])}
+                "escopo": {"fontes_e_periodos_da_base": fontes},
+                "resultado": avaliar(importados, leitura, classificacao, erros, situacao["na_fila"],
+                                     pendencias, conflitos, releituras)}
     finally:
         banco.fechar()

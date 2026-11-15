@@ -106,7 +106,8 @@
     $('#btnAcesso').textContent = m.dados_individuais ? 'Gerência (sair)' : 'Acesso da gerência';
     $('#rodape').textContent = `${cob.parecer} Regras ${m.versao_regras}.`;
     const pend = P.apoio.decisoes_pendentes;
-    if (m.preliminar) aviso('Dados PRELIMINARES, em conferência: ainda não foram homologados pela GEDIV e não devem ser divulgados como resultado oficial.', 'preliminar');
+    if (P.apoio.decisoes_excluidas_integridade || P.apoio.decisoes_conferidas_com_conflito) aviso(`${m.preliminar ? 'Dados PRELIMINARES, em conferência. ' : ''}${P.apoio.decisoes_excluidas_integridade} decisão(ões) conferida(s) fora dos indicadores por classificação desatualizada. ${P.apoio.decisoes_conferidas_com_conflito} decisão(ões) contadas têm conflito aberto. Aguardam reconciliação.`, 'preliminar');
+    else if (m.preliminar) aviso('Dados PRELIMINARES, em conferência: ainda não foram homologados pela GEDIV e não devem ser divulgados como resultado oficial.', 'preliminar');
     else if (!P.apoio.decisoes_conferidas) aviso(`Nenhuma decisão conferida até agora${pend ? ` — há ${pend} candidata(s) aguardando revisão humana` : ''}. Os indicadores só contam registros conferidos.`, 'preliminar');
     else aviso(`Indicadores calculados somente com decisões conferidas (${P.apoio.decisoes_conferidas}). ${pend ? pend + ' candidata(s) ainda aguardam revisão e não estão contadas.' : ''}`);
     $('#visaoPainel').hidden = S.visao === 'outras'; $('#visaoOutras').hidden = S.visao !== 'outras';

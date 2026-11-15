@@ -509,16 +509,17 @@ class Banco:
         versões já existentes. Idempotente: só toca linhas ainda sem valor."""
         sem_revisao = self.con.execute("SELECT sha256 FROM leitura WHERE revisao IS NULL AND situacao <> 'ERRO'").fetchall()
         atos_sem_chave = self.con.execute("SELECT * FROM ato WHERE chave_logica IS NULL AND numero IS NOT NULL").fetchall()
-        sem_ligacao = self.con.execute("SELECT 1 FROM classificacao WHERE revisao_leitura IS NULL LIMIT 1").fetchone()
-        if not (sem_revisao or atos_sem_chave or sem_ligacao):
+        if not (sem_revisao or atos_sem_chave):
             return
         with self.con:
             for linha in sem_revisao:
                 paginas = self.con.execute("SELECT numero, texto FROM pagina WHERE sha256 = ?", (linha["sha256"],)).fetchall()
                 self.con.execute("UPDATE leitura SET revisao = ? WHERE sha256 = ?",
                                  (revisao_de_paginas((p["numero"], p["texto"]) for p in paginas), linha["sha256"]))
-            self.con.execute("UPDATE classificacao SET revisao_leitura = (SELECT revisao FROM leitura l WHERE l.sha256 = "
-                             "classificacao.sha256) WHERE revisao_leitura IS NULL")
+                # Só a leitura que veio de esquema antigo é vinculada aqui. Uma classificação sem vínculo de uma
+                # leitura que já tinha revisão deve permanecer desatualizada até uma reclassificação real.
+                self.con.execute("UPDATE classificacao SET revisao_leitura = (SELECT revisao FROM leitura l WHERE l.sha256 = "
+                                 "classificacao.sha256) WHERE sha256 = ? AND revisao_leitura IS NULL", (linha["sha256"],))
             chaves = set()
             for a in atos_sem_chave:
                 chave = chave_ato(a["gerencia"], a["tipo"], a["numero"], a["sufixo"], a["natureza"])
@@ -904,7 +905,7 @@ class Banco:
         Antes (Etapa 05.3.3), a tentativa malsucedida gravava a versão nova e o arquivo saía da fila como se lido."""
         extra = ""
         if refazer_pendentes:
-            extra = (" OR l.situacao = 'ERRO' OR l.paginas_com_pendencia > 0 OR EXISTS (SELECT 1 FROM tentativa_leitura t "
+            extra = (" OR l.situacao IN ('ERRO', 'LIDA_COM_PENDENCIAS') OR l.paginas_com_pendencia > 0 OR EXISTS (SELECT 1 FROM tentativa_leitura t "
                      "WHERE t.sha256 = a.sha256 AND t.versao_leitor = :v AND t.aceita = 0 AND t.id = "
                      "(SELECT MAX(id) FROM tentativa_leitura u WHERE u.sha256 = a.sha256))")
         return self.con.execute(
@@ -948,10 +949,10 @@ class Banco:
                 self.con.execute("UPDATE leitura SET erro = ? WHERE sha256 = ?", (motivo[:1000], sha256))
                 return resultado
             if resultado == NEUTRA:
-                # Mesmo texto e mesma qualidade: só a versão do leitor e o momento mudam; a classificação continua válida.
-                self.con.execute("UPDATE leitura SET versao_leitor = ?, concluida_em = ?, erro = NULL, numero_edicao = ?, "
+                # O texto não mudou, mas a conferência da origem e os avisos podem ter mudado.
+                self.con.execute("UPDATE leitura SET situacao = ?, versao_leitor = ?, concluida_em = ?, erro = NULL, numero_edicao = ?, "
                                  "data_edicao = ?, inconsistencias = ? WHERE sha256 = ?",
-                                 (versao_leitor, momento, numero_edicao, data_edicao,
+                                 (situacao, versao_leitor, momento, numero_edicao, data_edicao,
                                   json.dumps(list(inconsistencias), ensure_ascii=False), sha256))
                 return resultado
             self.con.execute("DELETE FROM pagina WHERE sha256 = ?", (sha256,))
@@ -1020,10 +1021,11 @@ class Banco:
             "(l.revisao IS NOT NULL AND c.revisao_leitura IS NOT l.revisao)) ORDER BY l.sha256",
             (gerencia, versao_regras)).fetchall()
 
-    def classificacoes_desatualizadas(self, gerencia: str) -> int:
+    def classificacoes_desatualizadas(self, gerencia: str, versao_regras: str | None = None) -> int:
         return self.con.execute(
-            "SELECT COUNT(*) FROM classificacao c JOIN leitura l ON l.sha256 = c.sha256 WHERE c.gerencia = ? "
-            "AND l.revisao IS NOT NULL AND c.revisao_leitura IS NOT l.revisao", (gerencia,)).fetchone()[0]
+            "SELECT COUNT(*) FROM classificacao c LEFT JOIN leitura l ON l.sha256 = c.sha256 WHERE c.gerencia = ? "
+            "AND (l.sha256 IS NULL OR l.situacao = 'ERRO' OR (l.revisao IS NOT NULL AND c.revisao_leitura IS NOT l.revisao) "
+            "OR (? IS NOT NULL AND c.versao_regras <> ?))", (gerencia, versao_regras, versao_regras)).fetchone()[0]
 
     # Campos homologados por conferência/correção humana: uma nova extração não os sobrescreve; propõe (conflito).
     CAMPOS_ATO_HOMOLOGADOS = ("eixo", "modalidade", "condicao", "grupo", "subcategoria", "vinculo")
@@ -1084,14 +1086,20 @@ class Banco:
         revisao_leitura = (self.con.execute("SELECT revisao FROM leitura WHERE sha256 = ?", (sha256,)).fetchone() or [None])[0]
         with self.con:
             revisadas = {r["id"]: r for r in self.con.execute(
-                "SELECT * FROM decisao WHERE sha256 = ? AND validacao <> 'PENDENTE'", (sha256,))}
+                "SELECT d.* FROM decisao d WHERE d.sha256 = ? AND (d.validacao <> 'PENDENTE' "
+                "OR d.origem = 'MANUAL' OR d.revisado_em IS NOT NULL "
+                "OR EXISTS (SELECT 1 FROM correcao c WHERE c.alvo_tipo = 'decisao' AND c.alvo_id = d.id) "
+                "OR EXISTS (SELECT 1 FROM auditoria t WHERE t.alvo_tipo = 'decisao' AND t.alvo_id = d.id))", (sha256,))}
             eventos_revisados = {r["id"] for r in self.con.execute(
                 "SELECT id FROM evento WHERE sha256 = ? AND estado NOT IN ('PENDENTE_VINCULACAO', 'SUGERIDO')", (sha256,))}
             atos_homologados = {r["ato_id"] for r in revisadas.values()}
             atos_homologados |= {r[0] for r in self.con.execute("SELECT ato_original_id FROM evento WHERE ato_original_id IS NOT NULL")}
             atos_homologados |= {r[0] for r in self.con.execute("SELECT alvo_id FROM correcao WHERE alvo_tipo = 'ato'")}
             existentes = {r["id"]: r for r in self.con.execute("SELECT * FROM ato WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))}
-            self.con.execute("DELETE FROM decisao WHERE sha256 = ? AND validacao = 'PENDENTE'", (sha256,))
+            self.con.execute(
+                "DELETE FROM decisao WHERE sha256 = ? AND validacao = 'PENDENTE' AND origem <> 'MANUAL' "
+                "AND revisado_em IS NULL AND NOT EXISTS (SELECT 1 FROM correcao c WHERE c.alvo_tipo = 'decisao' AND c.alvo_id = decisao.id) "
+                "AND NOT EXISTS (SELECT 1 FROM auditoria t WHERE t.alvo_tipo = 'decisao' AND t.alvo_id = decisao.id)", (sha256,))
             self.con.execute("DELETE FROM evento WHERE sha256 = ? AND estado IN ('PENDENTE_VINCULACAO', 'SUGERIDO')", (sha256,))
             self.con.execute("DELETE FROM outra_publicacao WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))
             self.con.execute("DELETE FROM fora_escopo WHERE sha256 = ? AND gerencia = ?", (sha256, gerencia))

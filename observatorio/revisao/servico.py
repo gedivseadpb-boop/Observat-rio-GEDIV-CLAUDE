@@ -52,7 +52,8 @@ def _validar_detalhe(correcoes: dict) -> None:
 
 
 def _limpar(correcoes: dict | None) -> dict:
-    return {k: (str(v).strip().upper() if k in CAMPOS_DETALHE + CAMPOS_ATO + ("resultado",) else str(v).strip()) or None
+    return {k: (None if v is None else
+                (str(v).strip().upper() if k in CAMPOS_DETALHE + CAMPOS_ATO + ("resultado",) else str(v).strip()) or None)
             for k, v in (correcoes or {}).items()}
 
 

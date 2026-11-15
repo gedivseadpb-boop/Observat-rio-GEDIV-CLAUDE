@@ -65,11 +65,16 @@ def _linhas(banco: Banco) -> list[dict]:
         "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
         "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
         "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
-        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
+        "EXISTS (SELECT 1 FROM conflito x WHERE x.estado = 'ABERTO' AND "
+        "((x.alvo_tipo = 'decisao' AND x.alvo_id = d.id) OR (x.alvo_tipo = 'ato' AND x.alvo_id = a.id))) AS conflito_aberto "
+        "FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "JOIN leitura l ON l.sha256 = d.sha256 JOIN classificacao c ON c.sha256 = d.sha256 AND c.gerencia = a.gerencia "
         # Só a representação VIGENTE de cada decisão lógica (Etapa 05.3.3): cópias de outra versão do PDF, ou de uma
         # releitura, não contam duas vezes; correspondências ambíguas ficam fora até a gerência decidir.
-        "WHERE a.gerencia = 'GEDIV' AND d.vigente = 1 "
-        "ORDER BY a.data_publicacao DESC, a.pagina, d.rowid")
+        "WHERE a.gerencia = 'GEDIV' AND d.vigente = 1 AND l.situacao <> 'ERRO' AND c.versao_regras = ? "
+        "AND (l.revisao IS NULL OR c.revisao_leitura IS l.revisao) "
+        "ORDER BY a.data_publicacao DESC, a.pagina, d.rowid", (C.VERSAO_REGRAS,))
     linhas = []
     for l in consulta:
         linha = dict(l)
@@ -157,8 +162,12 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
     logico = {a["id"]: (a["chave_logica"] or a["id"]) for a in banco.con.execute("SELECT id, chave_logica FROM ato")}
     atos_dim = {logico.get(l["ato_id"], l["ato_id"]) for l in dim if l["natureza"] == C.ORIGINAL}
     eventos = [dict(e) for e in banco.con.execute("SELECT * FROM evento WHERE gerencia = 'GEDIV' ORDER BY data_publicacao, pagina")]
+    arquivos_vigentes = {r[0] for r in banco.con.execute(
+        "SELECT c.sha256 FROM classificacao c JOIN leitura l ON l.sha256 = c.sha256 "
+        "WHERE c.gerencia = 'GEDIV' AND c.versao_regras = ? AND l.situacao <> 'ERRO' "
+        "AND (l.revisao IS NULL OR c.revisao_leitura IS l.revisao)", (C.VERSAO_REGRAS,))}
     validos = [e for e in eventos if e["estado"] == "VALIDADO" and logico.get(e["ato_original_id"], e["ato_original_id"]) in atos_dim
-               and _no_periodo(e["data_publicacao"], f)]
+               and e["sha256"] in arquivos_vigentes and _no_periodo(e["data_publicacao"], f)]
     refeitos_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] in C.TIPOS_REFEITO}
     sem_efeito_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.SEM_EFEITO}
     refeitos = {l["ato_id"] for l in dim if logico.get(l["ato_id"], l["ato_id"]) in refeitos_logicos}
@@ -195,6 +204,18 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
     prog = [l for l in recorte if l["eixo"] == C.PROGRESSAO]
     tempo = [l for l in recorte if l["eixo"] == C.TEMPO]
     cob = cobertura(banco)
+    conferidas_vigentes = sum(l["validacao"] == "CONFERIDO" for l in todas)
+    conferidas_com_conflito = sum(l["validacao"] == "CONFERIDO" and l["conflito_aberto"] for l in todas)
+    conferidas_base = banco.con.execute(
+        "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "WHERE a.gerencia = 'GEDIV' AND d.validacao = 'CONFERIDO' AND d.vigente = 1").fetchone()[0]
+    excluidas_integridade = conferidas_base - conferidas_vigentes
+    if excluidas_integridade:
+        cob["parecer"] += (f" {excluidas_integridade} decisão(ões) conferida(s) estão fora dos indicadores por "
+                           "classificação desatualizada, até reconciliação.")
+    if conferidas_com_conflito:
+        cob["parecer"] += (f" {conferidas_com_conflito} decisão(ões) conferida(s) contadas têm conflito aberto "
+                           "e aguardam revisão.")
     series = {
         "por_assunto": [
             {"chave": "VERTICAL", "rotulo": "Progressão Vertical", **conta([l for l in prog if l["modalidade"] == C.VERTICAL])},
@@ -232,12 +253,13 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
             "ato_id": l["ato_id"], "resenha": l["resenha"], "sufixo": l["sufixo"], "data": l["data"], "pagina": l["pagina"],
             "eixo": l["eixo"], "modalidade": l["modalidade"], "condicao": l["condicao"], "grupo": l["grupo"],
             "subcategoria": l["subcategoria"], "vinculo": l["vinculo"], "natureza": l["natureza"], "decisoes": 0,
-            "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"],
+            "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"], "conflito_aberto": False,
             "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito,
             **_fonte(banco, cache, l["sha256"], l["pagina"])})
         r["decisoes"] += 1
         r["deferido"] += l["resultado"] == "DEFERIDO"
         r["indeferido"] += l["resultado"] == "INDEFERIDO"
+        r["conflito_aberto"] = r["conflito_aberto"] or bool(l["conflito_aberto"])
 
     um = lambda sql: banco.con.execute(sql).fetchone()[0]
     resposta = {
@@ -254,10 +276,12 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
             "eventos_por_tipo": {t: sum(e["tipo"] == t for e in validos) for t in C.ALTERACOES} if conferido else None,
             "eventos_sem_vinculo": sum(e["estado"] in ("PENDENTE_VINCULACAO", "SUGERIDO") for e in eventos),
             "decisoes_pendentes": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'PENDENTE' AND vigente = 1"),
-            "decisoes_conferidas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'CONFERIDO' AND vigente = 1"),
+            "decisoes_conferidas": conferidas_vigentes,
+            "decisoes_excluidas_integridade": excluidas_integridade,
+            "decisoes_conferidas_com_conflito": conferidas_com_conflito,
             "decisoes_rejeitadas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'REJEITADO'"),
             "conflitos_abertos": um("SELECT COUNT(*) FROM conflito WHERE estado = 'ABERTO'"),
-            "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV"),
+            "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV", C.VERSAO_REGRAS),
             "vinculo_nao_expresso_pendente": um(
                 "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id WHERE d.validacao = 'PENDENTE' AND a.vinculo <> 'EXPRESSO'"),
         },

@@ -167,7 +167,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                 self._exigir_gerencia()
                 return self._json({"conflitos": [dict(c) for c in banco.conflitos("ABERTO")],
                                    "vinculos_orfaos": banco.vinculos_orfaos(),
-                                   "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV")})
+                                   "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV", catalogo.VERSAO_REGRAS)})
             if rota == "/api/auditoria":
                 self._exigir_gerencia()
                 return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})

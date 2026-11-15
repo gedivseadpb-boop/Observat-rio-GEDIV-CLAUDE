@@ -8,7 +8,7 @@ Um dia só recebe COMPLETO ou SEM_PUBLICACAO_LISTADA com EVIDÊNCIA suficiente e
   do mês corrente não certifica os dias posteriores a ela, nem os recentes que ainda podem receber suplemento ou
   edição extra. Dias assim ficam NAO_VERIFICADO (sem edição listada) ou BAIXADO_SEM_VARREDURA_COMPLETA, com motivo;
 - para COMPLETO, cada edição listada do dia está BAIXADA, com arquivo registrado, verificação estrutural aceita e o
-  arquivo PRESENTE no acervo com o tamanho registrado.
+  arquivo PRESENTE no acervo com o tamanho e o SHA-256 registrados.
 
 Estados de um dia:
 - COMPLETO; SEM_PUBLICACAO_LISTADA (dia sem edição, comprovado);
@@ -72,7 +72,7 @@ def cobertura(banco: B.Banco, inicio: date, fim: date, fontes: list[str], acervo
     varreduras = {(v["fonte"], v["ano"], v["mes"]): v for v in banco.varreduras()}
     arquivos = {a["sha256"]: a for a in banco.arquivos()}
     verificacoes = {v["sha256"]: v["integridade"] for v in banco.con.execute("SELECT sha256, integridade FROM verificacao_arquivo")}
-    presenca: dict[str, bool] = {}
+    presenca: dict[str, str | None] = {}
 
     def prova(p) -> str | None:
         """None se a edição BAIXADA tem prova completa; senão, o que falta."""
@@ -83,8 +83,16 @@ def cobertura(banco: B.Banco, inicio: date, fim: date, fontes: list[str], acervo
             return "SEM_VERIFICACAO_ESTRUTURAL"
         if sha not in presenca:
             caminho = acervo.caminho(sha) if acervo else None
-            presenca[sha] = bool(caminho and caminho.is_file() and caminho.stat().st_size == arquivos[sha]["tamanho"])
-        return None if presenca[sha] else ("ACERVO_NAO_LOCALIZADO" if acervo is None else "ARQUIVO_AUSENTE_NO_ACERVO")
+            try:
+                if acervo is None:
+                    presenca[sha] = "ACERVO_NAO_LOCALIZADO"
+                elif not caminho.is_file() or caminho.stat().st_size != arquivos[sha]["tamanho"]:
+                    presenca[sha] = "ARQUIVO_AUSENTE_NO_ACERVO"
+                else:
+                    presenca[sha] = None if acervo.conferir(sha) else "SHA_DIVERGENTE"
+            except OSError:
+                presenca[sha] = "ACERVO_NAO_PODE_SER_VERIFICADO"
+        return presenca[sha]
 
     por_dia: dict[str, list] = {}
     for p in banco.publicacoes():

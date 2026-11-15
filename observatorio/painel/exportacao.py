@@ -98,7 +98,7 @@ def _detalhe(d: dict) -> str:
 CABECALHO_DECISOES = ["Data da publicação", "Resenha", "Página", "Eixo", "Modalidade", "Condição", "Grupo", "Subcategoria",
                       "Processo", "Servidor", "Matrícula", "Lotação", "Cargo", "Classe/nível e demais dados", "Resultado",
                       "Natureza", "Vínculo GEDIV", "Validação", "Revisor", "Revisado em", "Refeito", "Tornado sem efeito",
-                      "Fonte oficial", "Evidência (trecho)", "ID da decisão", "ID do ato"]
+                      "Fonte oficial", "Evidência (trecho)", "ID da decisão", "ID do ato", "Conflito aberto"]
 
 
 def linhas_decisoes(projecao: dict) -> list[list]:
@@ -111,7 +111,7 @@ def linhas_decisoes(projecao: dict) -> list[list]:
                       _nome(subs, l["subcategoria"]), l["processo"], l["servidor"], l["matricula"], l["lotacao"], l["cargo"],
                       _detalhe(l["detalhe"]), _nome(C.RESULTADOS, l["resultado"]), l["natureza"], l["vinculo"], l["validacao"],
                       l["revisor"], l["revisado_em"], "SIM" if l["refeito"] else "NÃO", "SIM" if l["sem_efeito"] else "NÃO",
-                      l["url_oficial"] or "não informado", l["trecho"], l["id"], l["ato_id"]])
+                      l["url_oficial"] or "não informado", l["trecho"], l["id"], l["ato_id"], "SIM" if l["conflito_aberto"] else "NÃO"])
     return saida
 
 

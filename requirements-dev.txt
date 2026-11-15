@@ -1,2 +1,3 @@
 -r requirements.txt
 reportlab>=4,<6
+fonttools>=4,<5

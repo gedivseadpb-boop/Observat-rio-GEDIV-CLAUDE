@@ -20,7 +20,7 @@ _PUBLICOS = {
     "evento": ("id", "tipo", "subtipo", "data_publicacao", "pagina", "modificador", "estado", "ato_original_id",
                "ato_sugerido_id", "vinculo", "resenhas_citadas", "url_oficial"),
     "resenha": ("ato_id", "resenha", "sufixo", "data", "pagina", "eixo", "modalidade", "condicao", "grupo", "subcategoria",
-                "vinculo", "natureza", "decisoes", "deferido", "indeferido", "refeito", "sem_efeito", "url_oficial"),
+                "vinculo", "natureza", "decisoes", "deferido", "indeferido", "refeito", "sem_efeito", "url_oficial", "conflito_aberto"),
     "outra_publicacao": ("id", "tipo", "nome_tipo", "data", "pagina", "titulo", "vinculo", "situacao", "url_oficial"),
     # Relatório `validar-real --saida`, documentado como "sem dados pessoais": mesma regra do perfil público.
     "evento_relatorio": ("tipo", "subtipo", "pagina", "modificador", "estado", "resenhas_citadas", "publicacoes_citadas"),
