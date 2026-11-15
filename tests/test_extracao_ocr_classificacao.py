@@ -209,6 +209,12 @@ class TesteFontesComMapeamentoErrado(unittest.TestCase):
         siglas = self.caracteres("SAD PSE GS", "Curta")                                   # pouca letra: não se julga
         self.assertEqual(leitor_fontes(normal + trocada + sinais + siglas), {"Trocada", "Sinais"})
 
+    def test_subconjunto_de_fonte_so_com_ligaduras_ou_acentos_nao_e_suspeito(self):
+        # Achado na regressão com PDFs oficiais: o DOE embute uma fonte só com a ligadura "ﬁ"; é texto, não defeito.
+        ligaduras = self.caracteres("ﬁ" * 60 + "ﬂ" * 20, "Ligaduras")
+        acentos = self.caracteres("ÇÃÕÁÉÍÓÚÂÊÔÀ" * 5, "Acentos")
+        self.assertEqual(leitor_fontes(ligaduras + acentos), set())
+
     @unittest.skipUnless(TEM_PDF, "requer pdfplumber")
     def test_palavras_da_fonte_suspeita_passam_a_ser_ilegiveis(self):
         class Pagina:

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import functools
 import re
+import unicodedata
 from pathlib import Path
 
 from ..nucleo.acervo import Acervo
@@ -91,8 +92,12 @@ def fontes_suspeitas(caracteres) -> set[str]:
         texto = "".join(sinais)
         if _CORROMPIDO.search(texto):
             continue                                   # já tratado pelo sinal explícito
+        # Ligaduras tipográficas ("ﬁ", "ﬂ") são letras: o DOE usa um subconjunto de fonte só com elas (06/10 e
+        # 12/11/2026). Decompostas, voltam a "fi"/"fl" e não contam como sinal estranho.
+        texto = unicodedata.normalize("NFKD", texto)
         letras = [c for c in texto if c.isalpha()]
-        estranhos = sum(1 for c in texto if not (c.isalnum() and ord(c) < 0x250) and c not in _COMUNS)
+        estranhos = sum(1 for c in texto if not (c.isalnum() and ord(c) < 0x250) and c not in _COMUNS
+                        and not unicodedata.combining(c))
         if len(texto) >= MIN_LETRAS_FONTE and estranhos / len(texto) > MAX_FRACAO_ESTRANHOS:
             suspeitas.add(fonte)
         elif len(letras) >= MIN_LETRAS_FONTE and sum(c in _VOGAIS for c in letras) / len(letras) < MIN_FRACAO_VOGAIS:
