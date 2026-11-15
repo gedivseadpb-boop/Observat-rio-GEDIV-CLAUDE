@@ -13,7 +13,9 @@ processos é gerada à parte, fica fora do repositório e é entregue só à res
 |---|---|
 | `amostra_conferencia.csv` | Uma linha por decisão sorteada: edição, página, resenha, o que o robô leu em cada campo, e três colunas em branco para a conferência |
 | `paginas_para_contagem.csv` | Uma linha por resenha da amostra: edição, página, quantas linhas o robô extraiu, e uma coluna em branco para a contagem feita no PDF |
-| `LEIA-ME.txt` | Estas mesmas instruções, resumidas |
+| `paginas_com_ressalva.csv` | Páginas com leitura duvidosa e sem ato da GEDIV: olhar se há resenha |
+| `atos_modificadores_e_outras_publicacoes.csv` | Retificações, republicações, atos tornados sem efeito e publicações relacionadas: conferir se são da GEDIV e a que ato se referem |
+| `LEIA-ME.txt` | Resumo destas instruções e a distribuição real da amostra |
 
 Os PDFs são os oficiais, baixados do portal de A União pela própria conferente (o nome do arquivo e o SHA-256 de
 cada edição estão na planilha, para garantir que é o mesmo documento).

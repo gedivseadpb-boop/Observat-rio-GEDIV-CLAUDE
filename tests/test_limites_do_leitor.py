@@ -95,6 +95,27 @@ class TesteTracoDaGradeLidoComoCaractere(unittest.TestCase):
                          [("PESSOA FICTICIA SESSENTA E UM", "PROFESSOR DE EDUCACAO BAS", "B"),
                           ("PESSOA FICTICIA SESSENTA E DOIS", "PROFESSOR DE EDUCACAO BAS", "C")])
 
+    def test_cargo_com_a_primeira_letra_cortada_pelo_ocr_e_separado_do_nome_e_sinalizado(self):
+        # DEFEITO (achado na regressão, mesma resenha): "ROFESSOR DE EDUCACAO BAS" não era reconhecido como cargo e ia
+        # inteiro para o campo do nome.
+        r = um(VERTICAL.format(n=961, grupo="MAG") + "Processo Matricula Nome Cargo Classe P/Classe\n"
+               "SAD-PSE-2026/90063 900063-3 | PESSOA FICTICIA SESSENTA E TRES ROFESSOR DE EDUCACAO BAS A B\n"
+               "SAD-PSE-2026/90064 900064-4 EDICARLOS FICTICIO DA SILVA ECNICO ADMINISTRATIVO B C\n"
+               "SAD-PSE-2026/90065 900065-5 PESSOA FICTICIA SESSENTA E CINCO PROFESSOR DE EDUCACAO BAS C D\nPUBLIQUE-SE")
+        d = r.decisoes
+        self.assertEqual([(x.servidor, x.cargo) for x in d], [
+            ("PESSOA FICTICIA SESSENTA E TRES", "ROFESSOR DE EDUCACAO BAS"),            # como lido: a letra não é reposta
+            ("EDICARLOS FICTICIO DA SILVA", "ECNICO ADMINISTRATIVO"),                   # "EDIC…" no começo do nome não é cargo
+            ("PESSOA FICTICIA SESSENTA E CINCO", "PROFESSOR DE EDUCACAO BAS")])
+        self.assertTrue(any("primeira letra faltando" in p for p in d[0].detalhe["pendencias"]))
+        self.assertTrue(any("primeira letra faltando" in p for p in d[1].detalhe["pendencias"]))
+        self.assertNotIn("pendencias", d[2].detalhe)
+
+    def test_nome_longo_sem_cargo_separado_e_sinalizado(self):
+        r = um(VERTICAL.format(n=962, grupo="MAG") + "SAD-PSE-2026/90066 900066-6 PESSOA FICTICIA COM NOME MUITO COMPRIDO E UM XARGO ILEGIVEL QUALQUER A B\nPUBLIQUE-SE")
+        self.assertIsNone(r.decisoes[0].cargo)
+        self.assertTrue(any("nenhum cargo separado" in p for p in r.decisoes[0].detalhe["pendencias"]))
+
     def test_continuacao_do_nome_alinha_ao_texto_e_nao_ao_traco(self):
         p = []
         for i in range(4):

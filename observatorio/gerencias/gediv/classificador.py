@@ -72,6 +72,12 @@ _CARGOS = (r"TECNIC|PROFESSOR|POLICIAL|FISCAL|AUDITOR|AGENTE|ANALISTA|AUXILIAR|A
            r"ODONTOLOG|BIOQUIMIC|ATENDENTE|ENGENHEIR|ADVOGAD|CONTADOR|ADMINISTRADOR|ARQUIVISTA|BIBLIOTECARI|"
            r"PEDAGOG|REGENTE|SUPERVISOR|ORIENTADOR|INSPETOR|VIGILANTE|DIGITADOR|PROGRAMADOR|GESTOR|ESPECIALISTA|"
            r"INVESTIGADOR|PAPILOSCOPIST|COMISSARI|NECROTOMIST")
+# Etapa 05.3.5 — cargo com a PRIMEIRA LETRA faltando ("ROFESSOR"): o OCR de tabela corta a letra encostada na borda da
+# célula (resenha 570/2026, 07/11/2026). Só é procurado quando nenhum cargo foi reconhecido, nunca nas duas primeiras
+# palavras (que são do nome), e a decisão fica sinalizada. O texto é guardado como lido: a letra não é reposta.
+PAT_CARGO_SEM_INICIAL = re.compile(r"(?<=\s)(?:" + "|".join(sorted({t[1:] for t in _CARGOS.replace("MEDIC[OA]", "MEDICO|MEDICA").split("|")
+                                                                       if len(t) >= 6}, key=len, reverse=True)) + r")[A-Z]*\b")
+MAX_PALAVRAS_NOME = 8          # acima disto, sem cargo separado, o "nome" provavelmente traz o cargo junto
 PAT_NOME = re.compile(r"^([A-Z][A-Z .'-]{4,80}?)\s*(?=\*|\d|$|\s(?:" + _CARGOS + r"|SEC\.|SECRETARIA\b))")
 
 MAX_LINHAS_RESENHA = 600
@@ -476,7 +482,7 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         lotacao = antes if 3 <= len(antes) <= 60 and not PAT_MERITO.search(antes) and "PROCESSO" not in antes else None
 
         # A linha do processo é lida primeiro; as linhas de continuação (células quebradas) só completam o que faltar.
-        matricula = servidor = cargo = None
+        matricula = servidor = cargo = separacao_duvidosa = None
         detalhe: dict = {}
         resto = primeira if primeira else " ".join(continuacao)
         usou_continuacao = not primeira and bool(continuacao)
@@ -497,6 +503,13 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
                 lotacao = lot.group(1).strip()
             else:
                 cargo = cauda or None
+            if cargo is None and not lot:
+                sem_inicial = next((m for m in PAT_CARGO_SEM_INICIAL.finditer(servidor) if len(servidor[:m.start()].split()) >= 2), None)
+                if sem_inicial:
+                    servidor, cargo = servidor[:sem_inicial.start()].strip(" .-"), servidor[sem_inicial.start():].strip()
+                    separacao_duvidosa = "cargo reconhecido com a primeira letra faltando na leitura; guardado como lido, conferir no PDF"
+                elif len(servidor.split()) > MAX_PALAVRAS_NOME:
+                    separacao_duvidosa = f"nome com {len(servidor.split())} palavras e nenhum cargo separado; o cargo pode estar junto, conferir no PDF"
         if continuacao and not usou_continuacao:
             if not detalhe:                               # classe, nível ou dias podem ter ficado na linha seguinte
                 _, detalhe = _evolucao(" ".join([resto] + continuacao), ato.eixo, ato.modalidade, ato.subcategoria)
@@ -519,6 +532,8 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         if achado.processo is None:
             pendencias.append("processo não reconhecido na linha; registrado como ausente, sem número presumido"
                               + (f" (grafia publicada: {achado.lido})" if achado.lido else ""))
+        if separacao_duvidosa:
+            pendencias.append(separacao_duvidosa)
         if ambigua or acima_ambigua:
             pendencias.append("linha de tabela vizinha sem atribuição segura; nome, cargo ou evolução podem estar incompletos")
         texto_da_linha = " ".join([primeira] + continuacao)
