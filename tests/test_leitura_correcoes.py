@@ -69,7 +69,7 @@ class TesteAssuntoComTextoReconstituido(unittest.TestCase):
 
     def test_compactacao_preserva_os_padroes_das_sete_subcategorias(self):
         casos = {"ANOTACAODETEMPODESERVICO": "TS-01", "DESAVERBACAODETEMPO": "TS-02",
-                 "LICENCAPARATRATARDEINTERESSESPARTICULARES": "TS-03", "DESISTENCIADALICENCAPARATRATAR": "TS-04",
+                 "LICENCAPARATRATARDEINTERESSESPARTICULARES": "TS-03", "DESISTENCIADALICENCAPARATRATARDEINTERESSESPARTICULARES": "TS-04",   # 05.3.4: TS-04 exige a licença de interesses particulares
                  "LICENCAESPECIAL": "TS-05", "CONVERSAODELICENCAESPECIALEMTEMPODESERVICO": "TS-06", "CONVERSAODEFERIAS": "TS-07"}
         for texto, esperado in casos.items():
             with self.subTest(texto=texto):

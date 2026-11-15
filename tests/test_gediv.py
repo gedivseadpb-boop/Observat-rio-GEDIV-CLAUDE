@@ -148,7 +148,13 @@ class TesteClassificador(unittest.TestCase):
         linhas = T.HORIZONTAL_GAJ.split("\n")
         r = classificar([(3, "\n".join(linhas[:8])), (4, T.CABECALHO_PAGINA.replace("Nº 18.690 ", "") + "\n" + "\n".join(linhas[8:]))], "x")
         self.assertEqual([d.pagina for d in r.decisoes], [3, 4, 4])
-        self.assertTrue(any("continua até a página 4" in p for p in r.atos[0].pendencias))
+        # Etapa 05.3.4: a pendência de continuidade só existe quando a continuidade é DUVIDOSA. Aqui o ato termina em
+        # "Publique-se" e tem linhas de processo nas duas páginas: continuidade demonstrada, sem pendência.
+        self.assertEqual(r.atos[0].pagina_final, 4)
+        self.assertFalse(any("continua até a página" in p for p in r.atos[0].pendencias))
+        # Sem o "Publique-se" a continuidade é duvidosa e a pendência aparece.
+        sem_fim = classificar([(3, "\n".join(linhas[:8])), (4, "\n".join(l for l in linhas[8:] if "PUBLIQUE" not in l.upper()))], "x")
+        self.assertTrue(any("continuidade duvidosa" in p for p in sem_fim.atos[0].pendencias))
 
     def test_cabecalho_de_resenha_quebrado_em_duas_linhas(self):
         r = um(T.ANOTACAO.replace("RESENHA Nº : 901/2026", "RESENHA Nº :\n901/2026"))

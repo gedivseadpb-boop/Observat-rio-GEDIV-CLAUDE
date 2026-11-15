@@ -15,7 +15,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-VERSAO_REGRAS = "gediv-2026.11.12-1"   # grupos definitivos (SSA, ESP, INT), TEC. ADM e STF sem grupo, exclusões
+VERSAO_REGRAS = "gediv-2026.11.14-1"   # 05.3.4: dois grupos no mesmo ato e TS-04/TS-06 sem o requisito viram pendência
+# (antes: "gediv-2026.11.12-1" — grupos definitivos (SSA, ESP, INT), TEC. ADM e STF sem grupo, exclusões)
 
 PROGRESSAO = "PROGRESSAO"
 TEMPO = "TEMPO_SERVICO"
@@ -123,9 +124,14 @@ SUBCATEGORIAS = (
     Subcategoria("TS-02", "Desaverbação de Tempo de Serviço", r"DESAVERBACAO"),
     Subcategoria("TS-03", "Licença para Tratar de Interesses Particulares",
                  r"LICENCA\s+(?:PARA\s+)?(?:TRATO|TRATAR)\s+DE\s+INTERESSES?\s+PARTICULAR"),
-    Subcategoria("TS-04", "Desistência de Licença de Interesse Particular", r"DESISTENCIA\s+D[AE]\s+LICENCA"),
+    # TS-04 exige que a licença objeto da desistência seja a de interesses particulares (Etapa 05.3.4).
+    Subcategoria("TS-04", "Desistência de Licença de Interesse Particular",
+                 r"DESISTENCIA\s+D[AE]\s+LICENCA\s+(?:\S+\s+){0,8}?INTERESSES?\s+PARTICULAR"),
     Subcategoria("TS-05", "Licença Especial", r"LICENCA\s+ESPECIAL"),
-    Subcategoria("TS-06", "Conversão de Licença Especial em Tempo de Serviço", r"CONVERSAO\s+D[AE]\s+LICENCA\s+ESPECIAL"),
+    # TS-06 exige a conversão EM TEMPO de serviço/contribuição (conversão em pecúnia não é TS-06; Etapa 05.3.4).
+    Subcategoria("TS-06", "Conversão de Licença Especial em Tempo de Serviço",
+                 r"CONVERSAO\s+D[AE]\s+LICENCA\s+ESPECIAL\s+(?:\S+\s+){0,4}?(?:EM|PARA)\s+(?:FINS\s+DE\s+)?(?:CONTAGEM\s+(?:DE\s+)?)?"
+                 r"(?:DOBRO\s+(?:D[OE]\s+)?)?TEMPO\s+DE\s+(?:SERVICO|CONTRIBUICAO)"),
     Subcategoria("TS-07", "Conversão de Férias", r"CONVERSAO\s+D[AE]\s+FERIAS"),
 )
 SUBCATEGORIA_POR_CODIGO = {s.codigo: s for s in SUBCATEGORIAS}
@@ -163,17 +169,38 @@ def expressao_sem_grupo(preambulo_normalizado: str) -> tuple[str, str] | None:
     return None
 
 
-def identificar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None]:
-    """Código do grupo e a expressão literal que o demonstra. Sem expressão reconhecida: (None, None).
-    Expressão sem grupo homologado (TEC. ADM, STF) tem precedência: devolve (None, expressão)."""
-    sem_grupo = expressao_sem_grupo(preambulo_normalizado)
-    if sem_grupo:
-        return None, sem_grupo[0]
+def grupos_presentes(preambulo_normalizado: str) -> list[tuple[str, str]]:
+    """Todos os grupos cuja expressão aparece no preâmbulo: [(código, expressão literal)], na ordem do texto."""
+    achados = []
     for grupo in GRUPOS_AVALIACAO:
         achado = re.search(grupo.padrao, preambulo_normalizado)
         if achado:
-            return grupo.codigo, achado.group(0)
-    return None, None
+            achados.append((achado.start(), grupo.codigo, achado.group(0)))
+    return [(c, e) for _, c, e in sorted(achados)]
+
+
+def avaliar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None, str | None]:
+    """(código, expressão, pendência). Etapa 05.3.4: dois ou mais grupos no mesmo ato NÃO são resolvidos pela ordem
+    dos padrões — o ato fica sem grupo, com as expressões guardadas e uma pendência para a gerência.
+    Expressão sem grupo homologado (TEC. ADM, STF) continua sem grupo, nunca convertida (AST, SFT)."""
+    sem_grupo = expressao_sem_grupo(preambulo_normalizado)
+    if sem_grupo:
+        return None, sem_grupo[0], sem_grupo[1]
+    presentes = grupos_presentes(preambulo_normalizado)
+    if len(presentes) > 1:
+        codigos = ", ".join(c for c, _ in presentes)
+        return None, " | ".join(e for _, e in presentes), f"mais de um grupo do PCCR no mesmo ato ({codigos}); grupo não atribuído"
+    if presentes:
+        return presentes[0][0], presentes[0][1], None
+    return None, None, None
+
+
+def identificar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None]:
+    """Código do grupo e a expressão literal que o demonstra. Sem expressão reconhecida: (None, None).
+    Expressão sem grupo homologado (TEC. ADM, STF) tem precedência: devolve (None, expressão).
+    Mais de um grupo: (None, expressões) — ver `avaliar_grupo`."""
+    codigo, expressao, _ = avaliar_grupo(preambulo_normalizado)
+    return codigo, expressao
 
 
 def _sem_espacos(padrao: str) -> str:
@@ -188,14 +215,35 @@ def compactar(texto_normalizado: str) -> str:
     return re.sub(r"\s+", "", texto_normalizado)
 
 
-def identificar_subcategoria(preambulo_normalizado: str, compacto: bool = False) -> str | None:
-    """Subcategoria de Tempo de Serviço. Com `compacto=True`, o texto deve vir sem espaços (ver `compactar`):
-    recurso para palavras coladas ou partidas pela extração do PDF; só deve ser usado quando a busca normal falhar."""
+# Expressões que ABREM um assunto específico mas não trazem o requisito dele (Etapa 05.3.4). Elas impedem que o ato
+# caia num assunto genérico por aproximação ("desistência de licença especial" não é Licença Especial; "conversão de
+# licença especial em pecúnia" não é TS-06 nem TS-05): o ato fica em Tempo de Serviço sem assunto, com pendência.
+_SUB_INCOMPLETAS = (
+    ("TS-04", r"DESISTENCIA\s+D[AE]\s+LICENCA",
+     "desistência de licença sem indicação de que é a licença para tratar de interesses particulares (TS-04 exige)"),
+    ("TS-06", r"CONVERSAO\s+D[AE]\s+LICENCA\s+ESPECIAL",
+     "conversão de licença especial sem indicação de conversão em tempo de serviço (TS-06 exige)"),
+)
+_SUB_INCOMPLETAS_COMPACTAS = tuple((c, re.compile(_sem_espacos(p)), m) for c, p, m in _SUB_INCOMPLETAS)
+
+
+def avaliar_subcategoria(preambulo_normalizado: str, compacto: bool = False) -> tuple[str | None, str | None]:
+    """(subcategoria, pendência). Assunto específico sem o seu requisito: (None, pendência) — o ato é de Tempo de
+    Serviço, mas o assunto fica para a gerência; nunca vai para o assunto genérico mais próximo."""
     for codigo in _ORDEM_SUB:
         padrao = _SUB_COMPACTA[codigo] if compacto else SUBCATEGORIA_POR_CODIGO[codigo].padrao
         if re.search(padrao, preambulo_normalizado):
-            return codigo
-    return None
+            return codigo, None
+        for incompleta, padrao_incompleto, pendencia in (_SUB_INCOMPLETAS_COMPACTAS if compacto else _SUB_INCOMPLETAS):
+            if incompleta == codigo and re.search(padrao_incompleto, preambulo_normalizado):
+                return None, pendencia
+    return None, None
+
+
+def identificar_subcategoria(preambulo_normalizado: str, compacto: bool = False) -> str | None:
+    """Subcategoria de Tempo de Serviço. Com `compacto=True`, o texto deve vir sem espaços (ver `compactar`):
+    recurso para palavras coladas ou partidas pela extração do PDF; só deve ser usado quando a busca normal falhar."""
+    return avaliar_subcategoria(preambulo_normalizado, compacto)[0]
 
 
 def identificar_condicao(preambulo_normalizado: str) -> str:

@@ -27,12 +27,21 @@ from . import exclusoes as EX
 PAT_PROCESSO = re.compile(r"\b([A-Z]{2,6})\s*-\s*(PSE|PRC|OFI)\s*-\s*(\d{4})\s*([/-])\s*(\d{3,9})\b")
 PAT_RESENHA = re.compile(r"\bRESENHA\s*(?:N[O°.]*)?\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})((?:\s*[-/]\s*[A-Z]{2,10})*)")
 PAT_PORTARIA = re.compile(r"^PORTARIA\s+N[O°.]*\s*(\d{1,5})\s*/\s*(20\d{2})")
+# Etapa 05.3.4: a portaria também é reconhecida quando, antes do número, só há nomes de unidades na mesma linha
+# ("GERENCIA EXECUTIVA ... PORTARIA Nº 12/2026-GEDIV"); o sufixo (-GEDIV, -DEREH) é guardado como na resenha.
+PAT_PORTARIA_LIVRE = re.compile(r"\bPORTARIA\s+N[O°.]*\s*:?\s*(\d{1,5})\s*/\s*(20\d{2})((?:\s*[-/]\s*[A-Z]{2,10})*)")
+# Processo publicado com grafia que não fecha o padrão ("SAD-PSE-2O26/12345", "SAD-PSE-2026/"): a linha é uma
+# decisão, mas o número não é reconstituído.
+PAT_PROCESSO_SUSPEITO = re.compile(r"\b[A-Z0-9]{2,6}\s*-\s*(?:PSE|PRC|OFI)\s*-\s*[\dA-Z/ .-]{0,14}")
+# Título de bloco de mérito numa resenha mista ("DEFERIDOS:", "PROCESSOS INDEFERIDOS").
+PAT_TITULO_MERITO = re.compile(r"^\W*(?:(?:PROCESSOS?|REQUERIMENTOS?|PEDIDOS?)\s+)?(IN)?DEFERID[OA]S?\b\W*(?:\([^)]*\))?\W*$")
+MARCA_AMBIGUA = "[LINHA DE TABELA SEM ATRIBUICAO SEGURA]"   # pagina.MARCA_AMBIGUA, já normalizada
 PAT_EXPEDIENTE = re.compile(r"EXPEDIENTE(?:\s+DO\s+DIA)?\s*:?\s*(\d{2})[-/.](\d{2})[-/.](20\d{2})")
 PAT_GEDIV = re.compile(r"GER(?:ENCIA|\.)\s+EXEC(?:UTIVA|\.)\s+(?:D[EA]\s+)?CONC(?:ESSAO|\.)?\s*(?:D[EA]\s+)?"
                        r"DIREITOS\s+E\s+VANTAGENS|\bGEDIV\b")
 PAT_OUTRA_GERENCIA = re.compile(r"GER(?:ENCIA|\.)\s+(?:EXECUTIVA|EXEC\.|OPERACIONAL|OPER\.)\s+(?!.{0,40}DIREITOS\s+E\s+VANTAGENS)")
 PAT_DEREH = re.compile(r"\bDEREH\b|DIRETORI?A?\s+EXECUTIV[OA]\s+DE\s+RECURSOS\s+HUMANOS")
-PAT_CABECALHO_UNIDADE = re.compile(r"^(?:SECRETARIA\s+DE\s+ESTADO|DIRETORIA\s+EXECUTIVA|GER(?:ENCIA|\.)\s+EXEC|GOVERNO\s+DO\s+ESTADO)")
+PAT_CABECALHO_UNIDADE = re.compile(r"^(?:SECRETARIA\s+DE\s+ESTADO|DIRETORIA\s+EXECUTIVA|GER(?:ENCIA|\.)\s+(?:EXEC|OPER)|GOVERNO\s+DO\s+ESTADO)")
 PAT_OUTRA_SECRETARIA = re.compile(r"^SECRETARIA\s+DE\s+ESTADO\s+D[AEO]S?\s+(?!ADMINISTRACAO\b)")
 PAT_PUBLIQUE = re.compile(r"^\W*PUBLIQUE-?\s?SE")
 PAT_MOBILIARIO = re.compile(r"^(?:\d{1,3}\s+)?JOAO\s+PESSOA\s*-\s*[\w-]+\s*,\s*\d{1,2}\s+DE\s+\w+\s+DE\s+20\d{2}"
@@ -102,7 +111,7 @@ class Decisao:
     id: str
     ato_id: str
     pagina: int
-    processo: str
+    processo: str | None           # None: decisão sem processo reconhecido (Etapa 05.3.4), nunca um número presumido
     servidor: str | None
     matricula: str | None
     lotacao: str | None
@@ -176,8 +185,11 @@ def _linhas(paginas) -> list[Linha]:
             if PAT_MOBILIARIO.match(norm):          # cabeçalho ou rodapé corrido da página
                 continue
             anterior = saida[-1] if saida else None
-            if anterior and re.search(r"RESENHA\s*(?:N[O°.]*)?\s*:?$", anterior.norm) and re.match(r"\d{1,5}\s*/\s*20\d{2}", norm):
-                # cabeçalho quebrado pela largura da coluna: "RESENHA Nº" numa linha e o número na seguinte
+            if anterior and ((re.search(r"(?:RESENHA|PORTARIA\s+N[O°.]*)\s*(?:N[O°.]*)?\s*:?$", anterior.norm)
+                              and re.match(r"\d{1,5}\s*/\s*20\d{2}", norm))
+                             or (re.fullmatch(r"(?:.*\s)?PORTARIA", anterior.norm) and re.match(r"N[O°.]+\s*\d{1,5}\s*/\s*20\d{2}", norm))):
+                # cabeçalho quebrado pela largura da coluna: "RESENHA Nº" (ou "PORTARIA", "PORTARIA Nº") numa linha e o
+                # número na seguinte
                 anterior.texto, anterior.norm = f"{anterior.texto} {limpa}", f"{anterior.norm} {norm}"
                 continue
             saida.append(Linha(numero, limpa, norm))
@@ -193,23 +205,55 @@ def _resenha_no_cabecalho(norm: str):
     return achado if len(antes) < 90 and re.fullmatch(r"[A-Z .]*", antes) else None
 
 
+def _portaria_no_cabecalho(norm: str):
+    """A linha abre uma portaria: no início, ou depois apenas de nomes de unidades (nunca numa citação)."""
+    achado = PAT_PORTARIA_LIVRE.search(norm)
+    if not achado:
+        return None
+    antes = norm[:achado.start()].strip()
+    if not antes:
+        return achado
+    return achado if len(antes) < 120 and re.fullmatch(r"[A-Z .-]*", antes) and PAT_CABECALHO_UNIDADE.match(antes) else None
+
+
 def _inicios(linhas: list[Linha]) -> list[tuple[int, str, int]]:
     """(índice inicial já recuado aos cabeçalhos, tipo, índice da linha que identifica o ato)."""
     inicios, limite = [], 0
     for i, linha in enumerate(linhas):
-        tipo = "RESENHA" if _resenha_no_cabecalho(linha.norm) else "PORTARIA" if PAT_PORTARIA.match(linha.norm) else None
+        tipo = "RESENHA" if _resenha_no_cabecalho(linha.norm) else "PORTARIA" if _portaria_no_cabecalho(linha.norm) else None
         if PAT_PUBLIQUE.match(linha.norm):
             limite = i + 1
         if not tipo:
             continue
         inicio = i
-        while (tipo == "RESENHA" and inicio > limite and i - inicio < 3 and len(linhas[inicio - 1].norm) < 110
+        while (inicio > limite and i - inicio < 3 and len(linhas[inicio - 1].norm) < 110
                and PAT_CABECALHO_UNIDADE.match(linhas[inicio - 1].norm) and not PAT_PROCESSO.search(linhas[inicio - 1].norm)
                and not PAT_OUTRA_SECRETARIA.match(linhas[inicio - 1].norm)):
             inicio -= 1
+        if inicios and tipo == "RESENHA" and _continuacao_repetida(linhas, inicios[-1], i):
+            continue                     # o mesmo cabeçalho repetido na continuação: não é um ato novo
         inicios.append((inicio, tipo, i))
         limite = i + 1
     return inicios
+
+
+def _chave_do_cabecalho(norm: str) -> tuple[str, str] | None:
+    achado = _resenha_no_cabecalho(norm)
+    return (f"{int(achado.group(1))}/{achado.group(2)}", re.sub(r"\s+", "", achado.group(3))) if achado else None
+
+
+def _continuacao_repetida(linhas: list[Linha], anterior: tuple[int, str, int], i: int) -> bool:
+    """Etapa 05.3.4: resenha que continua em outra página ou coluna com o cabeçalho repetido ("RESENHA Nº 12/2026
+    (continuação)"). É o MESMO ato quando o número e o sufixo são iguais, o ato anterior não foi encerrado
+    (nenhum "Publique-se" entre os dois) e a repetição está em outra página ou se declara continuação."""
+    _, tipo_anterior, marco = anterior
+    if tipo_anterior != "RESENHA" or _chave_do_cabecalho(linhas[marco].norm) != _chave_do_cabecalho(linhas[i].norm):
+        return False
+    if any(PAT_PUBLIQUE.match(l.norm) for l in linhas[marco + 1:i]):
+        return False
+    if re.search(r"REPUBLICA|RETIFICA|SEM\s+EFEITO", " ".join(l.norm for l in linhas[i:i + 3])):
+        return False                     # alteração do ato publicada com o mesmo número: é outro ato
+    return linhas[i].pagina != linhas[marco].pagina or "CONTINUA" in linhas[i].norm
 
 
 def _fim(linhas: list[Linha], inicio: int, marco: int, proximo: int, tipo: str) -> tuple[int, str | None]:
@@ -220,6 +264,8 @@ def _fim(linhas: list[Linha], inicio: int, marco: int, proximo: int, tipo: str) 
             return j + 1, None
         if PAT_OUTRA_SECRETARIA.match(linhas[j].norm):
             return j, None
+        if tipo == "RESENHA" and _chave_do_cabecalho(linhas[j].norm) == _chave_do_cabecalho(linhas[marco].norm):
+            continue                     # cabeçalho do próprio ato repetido na continuação (ver _continuacao_repetida)
         # Cabeçalho de outra unidade no meio do texto (por exemplo, com o número da resenha ilegível):
         # o ato termina ali, para que linhas alheias nunca sejam atribuídas à GEDIV.
         if j > marco + 2 and (linhas[j].norm.startswith("SECRETARIA DE ESTADO DA ADMINISTRACAO")
@@ -228,6 +274,23 @@ def _fim(linhas: list[Linha], inicio: int, marco: int, proximo: int, tipo: str) 
     if proximo - marco - 1 > teto:
         return marco + 1 + teto, f"ato sem término reconhecido em {teto} linhas; alcance a conferir"
     return proximo, None
+
+
+def _continuidade_duvidosa(corpo: list[Linha], pendencia_de_fim: str | None) -> str | None:
+    """Motivo de dúvida na continuidade de um ato que atravessa página ou coluna; None quando ela está demonstrada:
+    o ato termina em "Publique-se" e tem linhas de processo na primeira e na última página (ou o cabeçalho foi
+    repetido na continuação)."""
+    if pendencia_de_fim:
+        return "término do ato não reconhecido com segurança"
+    if not PAT_PUBLIQUE.match(corpo[-1].norm):
+        return "o ato não termina em Publique-se"
+    primeira, ultima = corpo[0].pagina, corpo[-1].pagina
+    repetido = sum(bool(_resenha_no_cabecalho(l.norm)) for l in corpo) > 1
+    com_processo = {l.pagina for l in corpo if PAT_PROCESSO.search(l.norm)}
+    if repetido or (primeira in com_processo and ultima in com_processo):
+        return None
+    paginas_sem = sorted({primeira, ultima} - com_processo)
+    return "sem linhas de processo na página " + ", ".join(map(str, paginas_sem))
 
 
 def _merito(norm: str) -> str:
@@ -341,22 +404,72 @@ def _evolucao(cauda: str, eixo, modalidade, subcategoria) -> tuple[str, dict]:
     return cauda, {}
 
 
+@dataclass
+class _Marco:
+    """Onde começa uma decisão numa linha do ato: pelo processo reconhecido ou, sem ele, pela matrícula."""
+    inicio: int
+    fim: int
+    processo: str | None
+    lido: str | None = None        # grafia publicada de um processo que não fecha o padrão
+
+
+# Linha de tabela sem processo reconhecido (Etapa 05.3.4): começa (opcionalmente depois de um processo com grafia
+# defeituosa) pela matrícula e segue com o nome. A decisão é registrada com o processo AUSENTE, nunca presumido.
+PAT_LINHA_SEM_PROCESSO = re.compile(r"^(?P<lido>[A-Z0-9]{2,6}\s*-\s*(?:PSE|PRC|OFI)\b\S*\s+)?"
+                                    r"(?P<mat>\d{3}\.\d{3}-\d|\d{5,7}-\d)\s+(?=[A-Z][A-Z .'-]{4,})")
+
+
+def _marcos_da_linha(norm: str) -> list[_Marco]:
+    marcos = [_Marco(m.start(), m.end(), _processo(m)) for m in PAT_PROCESSO.finditer(norm)]
+    if marcos:
+        return marcos
+    sem = PAT_LINHA_SEM_PROCESSO.match(norm)
+    if sem:
+        lido = sem.group("lido").strip() if sem.group("lido") else None
+        return [_Marco(0, sem.start("mat"), None, lido)]
+    return []
+
+
+def _titulo_de_merito(norm: str) -> str | None:
+    achado = PAT_TITULO_MERITO.match(norm)
+    return ("INDEFERIDO" if achado.group(1) else "DEFERIDO") if achado else None
+
+
 def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]:
-    marcos = [(i, m) for i, linha in enumerate(corpo) for m in PAT_PROCESSO.finditer(linha.norm)]
+    marcos = [(i, m) for i, linha in enumerate(corpo) if i > 0 or not _resenha_no_cabecalho(linha.norm)
+              for m in _marcos_da_linha(linha.norm)]
+    # Linhas sem processo só contam DEPOIS da primeira linha com processo, ou num ato sem nenhum processo
+    # reconhecido (assim o texto corrido do preâmbulo nunca vira decisão).
+    primeira_com_processo = next((i for i, m in marcos if m.processo), None)
+    marcos = [(i, m) for i, m in marcos if m.processo or primeira_com_processo is None or i > primeira_com_processo]
+    # Mérito por bloco (Etapa 05.3.4): numa resenha mista, "DEFERIDOS:" / "INDEFERIDOS:" valem para as linhas abaixo
+    # até o próximo título; a decisão nunca herda o resultado de outro bloco nem o do ato inteiro misto.
+    bloco, titulos = {}, {}
+    atual = None
+    for i, linha in enumerate(corpo):
+        titulo = _titulo_de_merito(linha.norm)
+        if titulo:
+            atual = titulos[i] = titulo
+        bloco[i] = atual
+    misto = PAT_MERITO.search(" ".join(l.norm for l in corpo[:marcos[0][0]] if marcos)) and ato.resultado == "NAO_INFORMADO"
     decisoes, repeticoes = [], {}
     for n, (i, achado) in enumerate(marcos):
         linha = corpo[i]
         proxima_linha = marcos[n + 1][0] if n + 1 < len(marcos) else len(corpo)
         mesma_linha = n + 1 < len(marcos) and marcos[n + 1][0] == i
-        primeira = linha.norm[achado.end():marcos[n + 1][1].start() if mesma_linha else None]
+        primeira = linha.norm[achado.fim:marcos[n + 1][1].inicio if mesma_linha else None]
         primeira = re.sub(r"\s+", " ", PAT_MOBILIARIO_COLADO.sub("", primeira)).strip()
-        continuacao = []
+        continuacao, ambigua = [], False
         for j in range(i + 1, proxima_linha if not mesma_linha else i + 1):
+            if MARCA_AMBIGUA in corpo[j].norm:
+                ambigua = True          # fragmento que a leitura não soube atribuir: não é colado a esta pessoa
+                break
             if (len(continuacao) >= 4 or PAT_PUBLIQUE.match(corpo[j].norm) or PAT_CABECALHO_UNIDADE.match(corpo[j].norm)
-                    or re.match(r"^\W*(?:REPUBLICAD|PUBLICAD)", corpo[j].norm)):
+                    or re.match(r"^\W*(?:REPUBLICAD|PUBLICAD)", corpo[j].norm) or j in titulos):
                 break
             continuacao.append(corpo[j].norm)
-        antes = linha.norm[:achado.start()].strip() if not (n and marcos[n - 1][0] == i) else ""
+        acima_ambigua = i > 0 and MARCA_AMBIGUA in corpo[i - 1].norm
+        antes = linha.norm[:achado.inicio].strip() if not (n and marcos[n - 1][0] == i) else ""
         lotacao = antes if 3 <= len(antes) <= 60 and not PAT_MERITO.search(antes) and "PROCESSO" not in antes else None
 
         # A linha do processo é lida primeiro; as linhas de continuação (células quebradas) só completam o que faltar.
@@ -394,13 +507,34 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
                 servidor = f"{servidor} {abaixo[0]}"       # "... DOS" + sobrenome que desceu de linha
             if ato.eixo == C.PROGRESSAO:
                 detalhe = {**detalhe, "linha_quebrada": "nome e cargo podem continuar na linha seguinte; conferir no PDF"}
-        processo = _processo(achado)
+        pendencias = []
+        if achado.processo is None:
+            pendencias.append("processo não reconhecido na linha; registrado como ausente, sem número presumido"
+                              + (f" (grafia publicada: {achado.lido})" if achado.lido else ""))
+        if ambigua or acima_ambigua:
+            pendencias.append("linha de tabela vizinha sem atribuição segura; nome, cargo ou evolução podem estar incompletos")
         texto_da_linha = " ".join([primeira] + continuacao)
         proprio = _merito(texto_da_linha) if PAT_MERITO.search(texto_da_linha) else None
-        ordem = repeticoes[processo] = repeticoes.get(processo, 0) + 1
+        resultado = proprio or bloco.get(i) or ato.resultado
+        if not proprio and not bloco.get(i) and misto:
+            pendencias.append("resultado misto no ato (deferimento e indeferimento); resultado desta decisão não identificado")
+        if proprio is None and bloco.get(i):
+            detalhe = {**detalhe, "resultado_do_bloco": bloco[i]}
+        processo = achado.processo
+        anterior = decisoes[-1] if decisoes else None
+        if (anterior and anterior.pagina != linha.pagina and anterior.processo == processo and anterior.matricula == matricula
+                and anterior.servidor == servidor and (processo or matricula)):
+            # A mesma linha repetida no alto da página seguinte (continuação): contada uma vez.
+            anterior.detalhe.setdefault("pendencias", []).append(
+                f"linha repetida na continuação (p. {linha.pagina}); contada uma vez, conferir no PDF")
+            continue
+        if pendencias:
+            detalhe = {**detalhe, "pendencias": pendencias}
+        chave = processo or f"SEM_PROCESSO:{matricula or ''}"
+        ordem = repeticoes[chave] = repeticoes.get(chave, 0) + 1
         trecho = " ⏎ ".join(l.texto for l in corpo[i:i + 1 + len(continuacao)])[:400]
-        decisoes.append(Decisao(_id(chave_arquivo, ato.id, processo, ordem), ato.id, linha.pagina, processo, servidor,
-                                matricula, lotacao, cargo, detalhe, proprio or ato.resultado, trecho))
+        decisoes.append(Decisao(_id(chave_arquivo, ato.id, chave if processo is None else processo, ordem), ato.id, linha.pagina,
+                                processo, servidor, matricula, lotacao, cargo, detalhe, resultado, trecho))
     return decisoes
 
 
@@ -423,16 +557,24 @@ def _variantes_do_preambulo(preambulo: str) -> list[tuple[str, str]]:
 def _tema(preambulo: str) -> dict:
     tema = dict(eixo=None, modalidade=None, condicao=None, grupo=None, grupo_expressao=None, subcategoria=None,
                 candidato=None, pendencias=[])
+    incompleto = None
     for forma, texto in _variantes_do_preambulo(preambulo):
         compacto = forma == "compacto"
         if (PAT_PROGRESSAO_COMPACTA if compacto else PAT_PROGRESSAO).search(texto):
             return _tema_progressao(tema, preambulo, texto, forma)
-        sub = C.identificar_subcategoria(texto, compacto=compacto)
+        sub, pendencia = C.avaliar_subcategoria(texto, compacto=compacto)
         if sub:
             tema["eixo"], tema["subcategoria"] = C.TEMPO, sub
             if forma != "original":
                 tema["pendencias"].append(f"assunto identificado com texto reconstituído ({forma}); conferir a leitura no PDF")
             return tema
+        incompleto = incompleto or pendencia
+    if incompleto:
+        # Assunto específico sem o seu requisito (TS-04 sem interesses particulares, TS-06 sem tempo de serviço): o ato
+        # é de Tempo de Serviço, o assunto fica em branco para a gerência; nunca vai para o assunto genérico vizinho.
+        tema["eixo"] = C.TEMPO
+        tema["pendencias"].append(incompleto)
+        return tema
     for nome, padrao in C.CONCEITOS_CANDIDATOS:
         if re.search(padrao, preambulo):
             tema["candidato"] = nome
@@ -452,10 +594,10 @@ def _tema_progressao(tema: dict, preambulo: str, texto: str, forma: str) -> dict
     else:
         tema["pendencias"].append("modalidade da progressão não identificada de forma inequívoca")
     tema["condicao"] = C.identificar_condicao(preambulo)
-    tema["grupo"], tema["grupo_expressao"] = C.identificar_grupo(preambulo)
+    # Etapa 05.3.4: dois grupos no mesmo ato não são resolvidos pela ordem dos padrões (ver catalogo.avaliar_grupo).
+    tema["grupo"], tema["grupo_expressao"], pendencia = C.avaliar_grupo(preambulo)
     if not tema["grupo"]:
-        sem_grupo = C.expressao_sem_grupo(preambulo)
-        tema["pendencias"].append(sem_grupo[1] if sem_grupo else "grupo do PCCR não informado ou não reconhecido")
+        tema["pendencias"].append(pendencia or "grupo do PCCR não informado ou não reconhecido")
     return tema
 
 
@@ -469,9 +611,9 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
         fim, pendencia = _fim(linhas, inicio, marco, proximo, tipo)
         corpo = linhas[inicio:fim]
         norm = " ".join(l.norm for l in corpo)
-        cabecalho = _resenha_no_cabecalho(linhas[marco].norm) if tipo == "RESENHA" else PAT_PORTARIA.match(linhas[marco].norm)
+        cabecalho = _resenha_no_cabecalho(linhas[marco].norm) if tipo == "RESENHA" else _portaria_no_cabecalho(linhas[marco].norm)
         numero = f"{int(cabecalho.group(1))}/{cabecalho.group(2)}"
-        sufixo = re.sub(r"\s+", "", cabecalho.group(3)) or None if tipo == "RESENHA" else None
+        sufixo = re.sub(r"\s+", "", cabecalho.group(3)) or None
 
         gediv = PAT_GEDIV.search(norm)
         outra_sigla = bool(sufixo and re.search(r"[-/](?!DEREH\b|GS\b|SEAD\b|SAD\b|GEDIV\b)[A-Z]{3,10}", sufixo))
@@ -502,9 +644,11 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
                 if exclusao:                              # licença-saúde ou vacância sob a DEREH
                     excluir(*exclusao, NAO_EXPRESSO)
                     continue
-            if not tema["eixo"] and natureza == C.ORIGINAL:
+            if tipo == "PORTARIA" and natureza == C.ORIGINAL:
+                pass                                      # portaria da DEREH: vai para "Outras publicações" (abaixo)
+            elif not tema["eixo"] and natureza == C.ORIGINAL:
                 continue                                  # ato da DEREH sem tema dos dois eixos: fora do escopo
-            if not tema["eixo"] and not (PAT_PROGRESSAO.search(norm) or C.identificar_subcategoria(norm)):
+            elif not tema["eixo"] and not (PAT_PROGRESSAO.search(norm) or C.identificar_subcategoria(norm)):
                 continue
         vinculo = EXPRESSO if gediv else NAO_EXPRESSO
         trecho = " ".join(l.texto for l in corpo)
@@ -515,9 +659,18 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
                 excluir(*exclusao, vinculo)
                 continue
 
+        if tipo == "PORTARIA" and natureza == C.ORIGINAL:
+            # Etapa 05.3.4: toda portaria relacionada (GEDIV expressa, ou só DEREH) tem destino: "Outras publicações".
+            # Portaria com assunto de um dos eixos NÃO vira decisão de progressão ou de tempo: o assunto vai no título,
+            # como indício, para a gerência.
+            assunto = (f" — assunto: {C.EIXOS[tema['eixo']]} (indício; não convertida em decisão)" if tema["eixo"]
+                       else f" — {tema['candidato']} (conceito candidato)" if tema["candidato"] else "")
+            resultado.outras.append(Outra(_id(chave_arquivo, "PORTARIA", numero, pagina), "PORTARIA", pagina,
+                                          titulo + (f" {sufixo}" if sufixo else "") + assunto, vinculo, trecho[:600]))
+            continue
         if not tema["eixo"] and natureza == C.ORIGINAL:
-            # GEDIV comprovada, tema fora dos dois eixos (ou portaria comum): página "Outras publicações".
-            chave = "PORTARIA" if tipo == "PORTARIA" else "TEMA_FORA_DOS_EIXOS"
+            # GEDIV comprovada, tema fora dos dois eixos: página "Outras publicações".
+            chave = "TEMA_FORA_DOS_EIXOS"
             rotulo = titulo + (f" — {tema['candidato']} (conceito candidato)" if tema["candidato"] else "")
             resultado.outras.append(Outra(_id(chave_arquivo, chave, numero, pagina), chave, pagina, rotulo, vinculo, trecho[:600]))
             continue
@@ -536,7 +689,9 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
         if vinculo == NAO_EXPRESSO:
             ato.pendencias.append("vínculo com a GEDIV não expresso no ato (apenas DEREH); confirmar no PDF")
         if ato.pagina_final != ato.pagina:
-            ato.pendencias.append(f"ato continua até a página {ato.pagina_final}; conferir a continuidade")
+            duvida = _continuidade_duvidosa(corpo, pendencia)
+            if duvida:
+                ato.pendencias.append(f"ato continua até a página {ato.pagina_final}; continuidade duvidosa ({duvida}); conferir")
         if ato.resultado == "NAO_INFORMADO" and natureza == C.ORIGINAL:
             ato.pendencias.append("resultado (deferido/indeferido) não identificado no preâmbulo")
 
@@ -553,6 +708,13 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
             decisoes = _decisoes(ato, corpo, chave_arquivo)
             if not decisoes:
                 ato.pendencias.append("nenhum processo extraído neste ato; exige revisão")
+            sem_processo = sum(d.processo is None for d in decisoes)
+            if sem_processo:
+                ato.pendencias.append(f"{sem_processo} decisão(ões) sem processo reconhecido; registradas sem número, para revisão")
+            if any(MARCA_AMBIGUA in l.norm for l in corpo):
+                ato.pendencias.append("linha de tabela sem atribuição segura a uma pessoa; conferir no PDF")
+            if any("resultado misto" in " ".join(d.detalhe.get("pendencias", [])) for d in decisoes):
+                ato.pendencias.append("resultado misto (deferimento e indeferimento) sem indicação por linha; conferir")
             resultado.decisoes += decisoes
             resultado.atos.append(ato)
         elif natureza != C.ORIGINAL:
