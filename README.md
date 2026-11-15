@@ -108,3 +108,4 @@ O banco (`observatorio.sqlite3`) e os PDFs ficam na pasta `dados/`, que **não**
 12. [Etapa 05.3.1 — segurança, SQLite, validação e códigos de saída](docs/12-etapa05-3-pr01-seguranca-ci-validacao.md)
 13. [Etapa 05.3.2 — integridade da coleta, cobertura e retomada](docs/13-etapa05-3-pr02-coleta-cobertura.md)
 14. [Etapa 05.3.3 — leitura, banco, reclassificação e revisão humana](docs/14-etapa05-3-pr03-leitura-banco-revisao.md)
+15. [Etapa 05.3.4 — extração de PDFs difíceis, OCR e classificação dos atos](docs/15-etapa05-3-pr04-extracao-ocr-classificacao.md)
