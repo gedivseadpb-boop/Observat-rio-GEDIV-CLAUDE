@@ -35,11 +35,14 @@ PAT_PORTARIA_LIVRE = re.compile(r"\bPORTARIA\s+N[O°.]*\s*:?\s*(\d{1,5})\s*/\s*(
 PAT_PROCESSO_SUSPEITO = re.compile(r"\b[A-Z0-9]{2,6}\s*-\s*(?:PSE|PRC|OFI)\s*-\s*[\dA-Z/ .-]{0,14}")
 # Título de bloco de mérito numa resenha mista ("DEFERIDOS:", "PROCESSOS INDEFERIDOS").
 PAT_TITULO_MERITO = re.compile(r"^\W*(?:(?:PROCESSOS?|REQUERIMENTOS?|PEDIDOS?)\s+)?(IN)?DEFERID[OA]S?\b\W*(?:\([^)]*\))?\W*$")
+PAT_TRACO_DA_GRADE = re.compile(r"(?:^|\s)[|¦│┃]+(?=\s|$)")
 MARCA_AMBIGUA = "[LINHA DE TABELA SEM ATRIBUICAO SEGURA]"   # pagina.MARCA_AMBIGUA, já normalizada
 PAT_EXPEDIENTE = re.compile(r"EXPEDIENTE(?:\s+DO\s+DIA)?\s*:?\s*(\d{2})[-/.](\d{2})[-/.](20\d{2})")
+# Etapa 05.3.5: o "E" de "DIREITOS E VANTAGENS" pode faltar na leitura por OCR (letra isolada); a expressão continua
+# sendo a da GEDIV e, sobretudo, NÃO pode ser tomada por "outra gerência" (resenha 578/2026, DOE de 07/11/2026).
 PAT_GEDIV = re.compile(r"GER(?:ENCIA|\.)\s+EXEC(?:UTIVA|\.)\s+(?:D[EA]\s+)?CONC(?:ESSAO|\.)?\s*(?:D[EA]\s+)?"
-                       r"DIREITOS\s+E\s+VANTAGENS|\bGEDIV\b")
-PAT_OUTRA_GERENCIA = re.compile(r"GER(?:ENCIA|\.)\s+(?:EXECUTIVA|EXEC\.|OPERACIONAL|OPER\.)\s+(?!.{0,40}DIREITOS\s+E\s+VANTAGENS)")
+                       r"DIREITOS\s+(?:E\s+)?VANTAGENS|\bGEDIV\b")
+PAT_OUTRA_GERENCIA = re.compile(r"GER(?:ENCIA|\.)\s+(?:EXECUTIVA|EXEC\.|OPERACIONAL|OPER\.)\s+(?!.{0,40}DIREITOS\s+(?:E\s+)?VANTAGENS)")
 PAT_DEREH = re.compile(r"\bDEREH\b|DIRETORI?A?\s+EXECUTIV[OA]\s+DE\s+RECURSOS\s+HUMANOS")
 PAT_CABECALHO_UNIDADE = re.compile(r"^(?:SECRETARIA\s+DE\s+ESTADO|DIRETORIA\s+EXECUTIVA|GER(?:ENCIA|\.)\s+(?:EXEC|OPER)|GOVERNO\s+DO\s+ESTADO)")
 PAT_OUTRA_SECRETARIA = re.compile(r"^SECRETARIA\s+DE\s+ESTADO\s+D[AEO]S?\s+(?!ADMINISTRACAO\b)")
@@ -481,6 +484,9 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         if m and m.start() < 12:
             matricula, resto = m.group(1), resto[m.end():].strip()
         resto, detalhe = _evolucao(resto, ato.eixo, ato.modalidade, ato.subcategoria)
+        # Etapa 05.3.5: traço vertical da grade da tabela lido como caractere ("| NOME") não faz parte do nome. Sem
+        # isto, nome e cargo ficavam vazios em todas as linhas da tabela (resenha 570/2026, DOE de 07/11/2026).
+        resto = PAT_TRACO_DA_GRADE.sub(" ", resto).strip()
         resto = _juntar_letras_espacadas(resto)
         nome = PAT_NOME.match(resto)
         if nome:
@@ -505,8 +511,10 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
                 cargo = f"{cargo} {' '.join(abaixo)}"
             elif servidor and servidor.split()[-1] in _CONECTIVOS and abaixo:
                 servidor = f"{servidor} {abaixo[0]}"       # "... DOS" + sobrenome que desceu de linha
-            if ato.eixo == C.PROGRESSAO:
-                detalhe = {**detalhe, "linha_quebrada": "nome e cargo podem continuar na linha seguinte; conferir no PDF"}
+            # Etapa 05.3.5: vale para os dois eixos. Em tabela que a leitura não reconheceu pela geometria (nenhuma
+            # linha com três células), a linha de baixo chega aqui solta; a decisão fica sinalizada para conferência.
+            detalhe = {**detalhe, "linha_quebrada": "nome e cargo podem continuar na linha seguinte; conferir no PDF"
+                       if ato.eixo == C.PROGRESSAO else "há texto na linha seguinte que pode pertencer a esta decisão; conferir no PDF"}
         pendencias = []
         if achado.processo is None:
             pendencias.append("processo não reconhecido na linha; registrado como ausente, sem número presumido"
