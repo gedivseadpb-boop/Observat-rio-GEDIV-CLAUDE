@@ -135,7 +135,10 @@ class TesteRevisoes(TP.Base):
         self.assertTrue(publico['resenhas'][0]['conflito_aberto'])
         privado = indicadores.painel(self.banco, perfil=indicadores.GERENCIA_PERFIL)
         self.assertTrue(privado['linhas'][0]['conflito_aberto'])
-        self.assertEqual(exportacao.linhas_decisoes(privado)[1][-1], 'SIM')
+        linhas = exportacao.linhas_decisoes(privado)
+        coluna_conflito = linhas[0].index('Conflito aberto')
+        self.assertEqual(coluna_conflito, 26)  # Posição histórica, antes das colunas documentais.
+        self.assertEqual(linhas[1][coluna_conflito], 'SIM')
         with zipfile.ZipFile(io.BytesIO(exportacao.planilha(privado))) as z:
             self.assertIn('conflito aberto', z.read('xl/worksheets/sheet5.xml').decode())
         conflito = self.banco.conflitos()[0]
