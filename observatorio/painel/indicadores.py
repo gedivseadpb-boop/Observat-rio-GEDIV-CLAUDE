@@ -23,7 +23,7 @@ import unicodedata
 
 from ..gerencias.gediv import catalogo as C
 from ..nucleo.banco import Banco
-from . import projecao
+from . import documental, projecao
 
 GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
 CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
@@ -66,6 +66,7 @@ def _linhas(banco: Banco) -> list[dict]:
         "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
         "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
         "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
+        "a.gerencia AS gerencia_painel, SUBSTR(a.texto,1,1200) AS texto_identificacao, l.numero_edicao, l.data_edicao, "
         "EXISTS (SELECT 1 FROM conflito x WHERE x.estado = 'ABERTO' AND "
         "((x.alvo_tipo = 'decisao' AND x.alvo_id = d.id) OR (x.alvo_tipo = 'ato' AND x.alvo_id = a.id))) AS conflito_aberto "
         "FROM decisao d JOIN ato a ON a.id = d.ato_id "
@@ -78,6 +79,8 @@ def _linhas(banco: Banco) -> list[dict]:
     linhas = []
     for l in consulta:
         linha = dict(l)
+        linha.update(documental.identificar(linha))
+        linha.pop("texto_identificacao")
         linha["detalhe"] = json.loads(linha["detalhe"] or "{}")
         linha["pendencias"] = json.loads(linha["pendencias"] or "[]")
         linhas.append(linha)
@@ -255,6 +258,7 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
             "subcategoria": l["subcategoria"], "vinculo": l["vinculo"], "natureza": l["natureza"], "decisoes": 0,
             "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"], "conflito_aberto": False,
             "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito,
+            **{campo: l[campo] for campo in documental.CAMPOS},
             **_fonte(banco, cache, l["sha256"], l["pagina"])})
         r["decisoes"] += 1
         r["deferido"] += l["resultado"] == "DEFERIDO"

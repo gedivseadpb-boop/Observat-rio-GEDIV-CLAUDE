@@ -265,7 +265,7 @@
       const b = document.createElement('button'); b.type = 'button'; b.className = 'item' + (S.selecionado && S.selecionado.id === it.id ? ' selecionado' : '');
       if (it.tipo === 'ato') {
         const r = it.r;
-        b.innerHTML = `<b>Resenha ${esc(r.resenha || 's/ nº')}</b><span class="selo ${classeAssunto(r)}">${esc(r.eixo === 'TEMPO_SERVICO' ? 'Tempo de Serviço' : NOMES.modalidade[r.modalidade] || 'Progressão')}</span>`
+        b.innerHTML = `<b>${esc(r.identificacao_documental || ('Resenha ' + (r.resenha || 's/ nº')))}</b><span class="selo ${classeAssunto(r)}">${esc(r.eixo === 'TEMPO_SERVICO' ? 'Tempo de Serviço' : NOMES.modalidade[r.modalidade] || 'Progressão')}</span>`
           + `<small>${dataBR(r.data)} · p. ${r.pagina} · ${r.decisoes} decisão(ões) · ${esc(assunto(r))}${r.vinculo !== 'EXPRESSO' ? ' · <span class="selo alerta">GEDIV não expressa</span>' : ''}${r.refeito ? ' · <span class="selo alerta">refeito</span>' : ''}${r.sem_efeito ? ' · <span class="selo alerta">sem efeito</span>' : ''}</small>`;
       } else if (it.tipo === 'decisao') {
         const l = it.l;

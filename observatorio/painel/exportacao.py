@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from xml.sax.saxutils import escape
 
 from ..gerencias.gediv import catalogo as C
+from . import documental
 
 _PERIGO = re.compile(r"^[\s\x00-\x1f]*[=+\-@\t\r]")
 _INVALIDO_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -98,7 +99,7 @@ def _detalhe(d: dict) -> str:
 CABECALHO_DECISOES = ["Data da publicação", "Resenha", "Página", "Eixo", "Modalidade", "Condição", "Grupo", "Subcategoria",
                       "Processo", "Servidor", "Matrícula", "Lotação", "Cargo", "Classe/nível e demais dados", "Resultado",
                       "Natureza", "Vínculo GEDIV", "Validação", "Revisor", "Revisado em", "Refeito", "Tornado sem efeito",
-                      "Fonte oficial", "Evidência (trecho)", "ID da decisão", "ID do ato", "Conflito aberto"]
+                      "Fonte oficial", "Evidência (trecho)", "ID da decisão", "ID do ato", "Conflito aberto"] + documental.CABECALHO_EXPORTACAO
 
 
 def linhas_decisoes(projecao: dict) -> list[list]:
@@ -111,7 +112,8 @@ def linhas_decisoes(projecao: dict) -> list[list]:
                       _nome(subs, l["subcategoria"]), l["processo"], l["servidor"], l["matricula"], l["lotacao"], l["cargo"],
                       _detalhe(l["detalhe"]), _nome(C.RESULTADOS, l["resultado"]), l["natureza"], l["vinculo"], l["validacao"],
                       l["revisor"], l["revisado_em"], "SIM" if l["refeito"] else "NÃO", "SIM" if l["sem_efeito"] else "NÃO",
-                      l["url_oficial"] or "não informado", l["trecho"], l["id"], l["ato_id"], "SIM" if l["conflito_aberto"] else "NÃO"])
+                      l["url_oficial"] or "não informado", l["trecho"], l["id"], l["ato_id"], "SIM" if l["conflito_aberto"] else "NÃO"]
+                     + documental.valores_exportacao(l))
     return saida
 
 
@@ -119,11 +121,12 @@ def planilha(projecao: dict) -> bytes:
     """Abas: Decisoes, Atos, Eventos_de_Alteracao, Indicadores, Metadados."""
     meta, f = projecao["meta"], projecao["meta"]["filtros"]
     atos = [["Data", "Resenha", "Página", "Eixo", "Modalidade", "Grupo", "Subcategoria", "Decisões", "Deferidos", "Indeferidos",
-             "Vínculo GEDIV", "Refeito", "Tornado sem efeito", "Fonte oficial", "ID do ato"]]
+             "Vínculo GEDIV", "Refeito", "Tornado sem efeito", "Fonte oficial", "ID do ato"] + documental.CABECALHO_EXPORTACAO]
     for r in projecao["resenhas"]:
         atos.append([r["data"], r["resenha"], r["pagina"], _nome(C.EIXOS, r["eixo"]), _nome(C.MODALIDADES, r["modalidade"]), r["grupo"],
                      r["subcategoria"], r["decisoes"], r["deferido"], r["indeferido"], r["vinculo"], "SIM" if r["refeito"] else "NÃO",
-                     "SIM" if r["sem_efeito"] else "NÃO", r["url_oficial"] or "não informado", r["ato_id"]])
+                     "SIM" if r["sem_efeito"] else "NÃO", r["url_oficial"] or "não informado", r["ato_id"]]
+                    + documental.valores_exportacao(r))
     eventos = [["Data do evento", "Tipo", "Subtipo", "Ato modificador", "Página", "Resenhas citadas", "Estado do vínculo",
                 "Ato original", "Fundamento", "Fonte oficial", "ID do evento"]]
     for e in projecao["eventos"]:
