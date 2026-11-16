@@ -145,9 +145,9 @@ class TestePublicacao(unittest.TestCase):
         c.write_text(json.dumps({"ausencia_tecnica_edicoes": 5, "inconclusivas": 1, "observacao": "SEGREDO FICTICIO"}))
         saida = self.raiz / "snapshot.json"
         self.assertEqual(main(["--banco", str(p), "--cobertura", str(c), "--saida", str(saida)]), 0)
-        d = json.loads(saida.read_text())
+        d = json.loads(saida.read_text(encoding="utf-8"))
         self.assertEqual(d["cobertura"]["inconclusivas"], 1)
-        self.assertNotIn("SEGREDO", saida.read_text())
+        self.assertNotIn("SEGREDO", saida.read_text(encoding="utf-8"))
         with self.assertRaises(SystemExit):
             main(["--banco", str(p), "--saida", str(p)])
 
