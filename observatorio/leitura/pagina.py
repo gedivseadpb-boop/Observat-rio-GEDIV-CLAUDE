@@ -41,6 +41,31 @@ def agrupar_linhas(palavras: list[Palavra], tolerancia: float = 3.0) -> list[lis
     return [sorted(linha, key=lambda p: p.x0) for linha in linhas]
 
 
+def _corredor_menos_ocupado(ocupacao, inicio, fim, largura_minima, centro, linhas):
+    """Dentro da faixa tolerante, prefere um vão real a uma palavra pouco frequente.
+
+    O ponto médio da faixa inteira pode cortar um título comprido e fazer duas
+    publicações paralelas parecerem uma linha de largura total.
+    """
+    meio = (inicio + fim) / 2
+    minimo = min(ocupacao[inicio:fim])
+    if ocupacao[int(meio)] == minimo:
+        return Divisor(meio, fim - inicio)
+    ponto = min(range(inicio, fim), key=lambda x: (ocupacao[x], abs(x - centro)))
+    # A largura tolerante também pode incluir palavras. Limita-a pelos vãos
+    # observados; espaços comuns entre palavras não são prova de separação.
+    limiar = max(largura_minima, limiar_de_celula(linhas))
+    vaos = []
+    for linha in linhas:
+        esquerda = [p.x1 for p in linha if p.x1 <= ponto]
+        direita = [p.x0 for p in linha if p.x0 >= ponto]
+        if esquerda and direita and not any(p.x0 < ponto < p.x1 for p in linha):
+            vao = min(direita) - max(esquerda)
+            if vao >= limiar:
+                vaos.append(vao)
+    return Divisor(float(ponto), min(fim - inicio, min(vaos, default=fim - inicio)))
+
+
 def encontrar_divisores(linhas: list[list[Palavra]], largura: float, fracao_cruzamento: float = 0.2,
                         largura_minima: float = 5.0) -> list[Divisor]:
     """Procura corredores verticais vazios (espaço entre colunas) na região central da página.
@@ -65,7 +90,7 @@ def encontrar_divisores(linhas: list[list[Palavra]], largura: float, fracao_cruz
             inicio = x
         elif not livre and inicio is not None:
             if x - inicio >= largura_minima:
-                divisores.append(Divisor((inicio + x) / 2, x - inicio))
+                divisores.append(_corredor_menos_ocupado(ocupacao, inicio, x, largura_minima, largura / 2, linhas))
             inicio = None
     # exige texto em quantidade dos dois lados de cada corredor
     validos = []
