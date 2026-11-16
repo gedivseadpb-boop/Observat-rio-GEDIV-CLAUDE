@@ -15,6 +15,7 @@ import re
 import sqlite3
 import tempfile
 from collections import defaultdict
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -64,7 +65,7 @@ def _ler(caminho: Path) -> list[dict]:
     if not caminho.is_file():
         raise ValueError("Banco de origem indisponível")
     # Não usar Banco(): seu construtor aplica migrações, desnecessárias nesta leitura.
-    with sqlite3.connect(caminho.resolve().as_uri() + "?mode=ro", uri=True) as con:
+    with closing(sqlite3.connect(caminho.resolve().as_uri() + "?mode=ro", uri=True)) as con:
         con.row_factory = sqlite3.Row
         if con.execute("PRAGMA user_version").fetchone()[0] > 8:
             raise ValueError("Esquema posterior ao contrato suportado")

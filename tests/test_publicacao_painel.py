@@ -6,6 +6,8 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
+from unittest.mock import patch
 from pathlib import Path
 
 from observatorio.gerencias.gediv import catalogo as C
@@ -23,7 +25,7 @@ class TestePublicacao(unittest.TestCase):
               conflito=False):
         self.seq += 1
         p = self.raiz / f"fonte{self.seq}.sqlite3"
-        with sqlite3.connect(p) as con:
+        with closing(sqlite3.connect(p)) as con, con:
             con.executescript('''
                 CREATE TABLE leitura(sha256 TEXT,numero_edicao TEXT,data_edicao TEXT,situacao TEXT,
                                      revisao TEXT,paginas INTEGER);
@@ -49,6 +51,21 @@ class TestePublicacao(unittest.TestCase):
                     if conflito and indice == 0 and j == 0:
                         con.execute("INSERT INTO conflito VALUES('ABERTO','decisao',?)", (did,))
         return p
+
+    def test_leitura_fecha_as_conexoes_sem_depender_do_coletor(self):
+        p = self.banco([("MAG", 6)])
+        conectar = sqlite3.connect
+        abertas = []
+        def rastrear(*args, **kwargs):
+            con = conectar(*args, **kwargs)
+            abertas.append(con)
+            return con
+        with patch("observatorio.painel.publicacao.sqlite3.connect", side_effect=rastrear):
+            projetar([p])
+        self.assertTrue(abertas)
+        for con in abertas:
+            with self.assertRaises(sqlite3.ProgrammingError):
+                con.execute("SELECT 1")
 
     def test_faixas_nao_sao_contagens_exatas(self):
         self.assertEqual(metrica(0)["valor"], 0)
@@ -136,7 +153,7 @@ class TestePublicacao(unittest.TestCase):
 
     def test_varias_decisoes_da_mesma_pessoa_nao_liberam_celula(self):
         p = self.banco([("MAG", 8)])
-        with sqlite3.connect(p) as con:
+        with closing(sqlite3.connect(p)) as con, con:
             con.execute("UPDATE decisao SET matricula=\"99887766\"")
         d = projetar([p])
         self.assertEqual(d["celulas"], [])
@@ -157,13 +174,13 @@ class TestePublicacao(unittest.TestCase):
         self.assertNotIn(C.TEMPO, d["resumo_eixos"])
         # Muitas decisões de uma única pessoa também não liberam o total do eixo.
         p = self.banco([("TS-01", 8)])
-        with sqlite3.connect(p) as con:
+        with closing(sqlite3.connect(p)) as con, con:
             con.execute("UPDATE decisao SET matricula='99887766'")
         self.assertNotIn(C.TEMPO, projetar([p])["resumo_eixos"])
 
     def test_materias_excluidas_nunca_entram_nos_indicadores(self):
         p = self.banco([("MAG", 6), ("AST", 9)])
-        with sqlite3.connect(p) as con:
+        with closing(sqlite3.connect(p)) as con, con:
             con.execute("UPDATE ato SET eixo='LICENCA_SAUDE' WHERE grupo='AST'")
         d = projetar([p])
         self.assertEqual(d["resumo"]["provisorios"]["rotulo"], "5–9")
