@@ -1,0 +1,21 @@
+name: Painel público
+on:
+  push:
+    branches: [entrega/painel-publico-gediv]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  distribuicao:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validar projeção pública sem bancos privados
+        run: python -m unittest tests.test_publicacao_painel tests.test_distribuicao_publica -v
+      - name: Verificar exportação XLSX no navegador sem dependências
+        run: node --test tests/test_exportacao_publica.cjs
+      - name: Preparar distribuição estática permitida
+        run: python scripts/preparar_painel_publico.py --projecao painel-publico/dados.json --saida dist

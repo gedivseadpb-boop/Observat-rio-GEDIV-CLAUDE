@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "atualizado_em": "2026-11-16T21:40:56.238189+00:00",
+  "origem": "dados_reais",
+  "experimental": true,
+  "versao_regras": "gediv-2026.11.14-1",
+  "catalogo": {
+    "grupos": [
+      {
+        "codigo": "MAG",
+        "nome": "Magistério"
+      },
+      {
+        "codigo": "SSA",
+        "nome": "Saúde"
+      },
+      {
+        "codigo": "GAJ",
+        "nome": "Apoio Judiciário"
+      },
+      {
+        "codigo": "FAP",
+        "nome": "Fiscalização Agropecuária"
+      },
+      {
+        "codigo": "AST",
+        "nome": "Técnicos Administrativos"
+      },
+      {
+        "codigo": "ANS",
+        "nome": "Nível Superior"
+      },
+      {
+        "codigo": "ESP",
+        "nome": "Grupo Especial"
+      },
+      {
+        "codigo": "DPS",
+        "nome": "Divulgação e Promoção"
+      },
+      {
+        "codigo": "SFT",
+        "nome": "Fazenda · Auditor Fiscal"
+      },
+      {
+        "codigo": "OSPB",
+        "nome": "Orquestra Sinfônica"
+      },
+      {
+        "codigo": "GPC",
+        "nome": "Polícia Civil"
+      },
+      {
+        "codigo": "SEI",
+        "nome": "Informática"
+      },
+      {
+        "codigo": "SAT",
+        "nome": "Área Tecnológica"
+      },
+      {
+        "codigo": "ACI",
+        "nome": "Auditoria e Controle Interno"
+      },
+      {
+        "codigo": "PPGG",
+        "nome": "PPGG"
+      },
+      {
+        "codigo": "INT",
+        "nome": "INT (denominação a confirmar)"
+      }
+    ],
+    "subcategorias": [
+      {
+        "codigo": "TS-01",
+        "nome": "Anotação de Tempo de Serviço/Contribuição"
+      },
+      {
+        "codigo": "TS-02",
+        "nome": "Desaverbação de Tempo de Serviço"
+      },
+      {
+        "codigo": "TS-03",
+        "nome": "Licença para Tratar de Interesses Particulares"
+      },
+      {
+        "codigo": "TS-04",
+        "nome": "Desistência de Licença de Interesse Particular"
+      },
+      {
+        "codigo": "TS-05",
+        "nome": "Licença Especial"
+      },
+      {
+        "codigo": "TS-06",
+        "nome": "Conversão de Licença Especial em Tempo de Serviço"
+      },
+      {
+        "codigo": "TS-07",
+        "nome": "Conversão de Férias"
+      }
+    ]
+  },
+  "cobertura": {
+    "inicio_historico": "2026-01-01",
+    "primeira_publicacao": "2026-10-01",
+    "ultima_publicacao": "2026-11-14",
+    "edicoes": 19,
+    "paginas": 884,
+    "ausencia_tecnica_edicoes": 5,
+    "inconclusivas": 1,
+    "historico_completo": false,
+    "observacao": "Cobertura parcial do Diário Oficial; ausência de dados não confirma ausência de atos. A publicação usa agregados mensais em faixas e omite recortes pequenos. Dados provisórios não passaram por revisão humana e não são resultados oficiais."
+  },
+  "privacidade": {
+    "limiar": 5,
+    "faixa": 5,
+    "cobertura_parcial": true,
+    "observacao": "Recortes sem pelo menos cinco matrículas distintas reconhecidas não são divulgados. Faixas não são contagens exatas; somas filtradas incluem somente agregados publicáveis."
+  },
+  "resumo": {
+    "conferidos": {
+      "valor": 0,
+      "minimo": 0,
+      "maximo": 0,
+      "rotulo": "0",
+      "protegido": false
+    },
+    "provisorios": {
+      "valor": null,
+      "minimo": 210,
+      "maximo": 214,
+      "rotulo": "210–214",
+      "protegido": true
+    },
+    "atos": {
+      "valor": null,
+      "minimo": 35,
+      "maximo": 39,
+      "rotulo": "35–39",
+      "protegido": true
+    },
+    "publicacoes_pendentes": {
+      "valor": null,
+      "minimo": 35,
+      "maximo": 39,
+      "rotulo": "35–39",
+      "protegido": true
+    }
+  },
+  "resumo_eixos": {
+    "PROGRESSAO": {
+      "conferidos": {
+        "valor": 0,
+        "minimo": 0,
+        "maximo": 0,
+        "rotulo": "0",
+        "protegido": false
+      },
+      "provisorios": {
+        "valor": null,
+        "minimo": 190,
+        "maximo": 194,
+        "rotulo": "190–194",
+        "protegido": true
+      },
+      "atos": {
+        "valor": null,
+        "minimo": 20,
+        "maximo": 24,
+        "rotulo": "20–24",
+        "protegido": true
+      },
+      "publicacoes_pendentes": {
+        "valor": null,
+        "minimo": 20,
+        "maximo": 24,
+        "rotulo": "20–24",
+        "protegido": true
+      }
+    },
+    "TEMPO_SERVICO": {
+      "conferidos": {
+        "valor": 0,
+        "minimo": 0,
+        "maximo": 0,
+        "rotulo": "0",
+        "protegido": false
+      },
+      "provisorios": {
+        "valor": null,
+        "minimo": 15,
+        "maximo": 19,
+        "rotulo": "15–19",
+        "protegido": true
+      },
+      "atos": {
+        "valor": null,
+        "minimo": 15,
+        "maximo": 19,
+        "rotulo": "15–19",
+        "protegido": true
+      },
+      "publicacoes_pendentes": {
+        "valor": null,
+        "minimo": 15,
+        "maximo": 19,
+        "rotulo": "15–19",
+        "protegido": true
+      }
+    }
+  },
+  "celulas": [
+    {
+      "periodo": "2026-10",
+      "eixo": "PROGRESSAO",
+      "modalidade": "VERTICAL",
+      "grupo": null,
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 0,
+        "maximo": 4,
+        "rotulo": "0–4",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 40,
+        "maximo": 44,
+        "rotulo": "40–44",
+        "protegido": true
+      }
+    },
+    {
+      "periodo": "2026-11",
+      "eixo": "PROGRESSAO",
+      "modalidade": "HORIZONTAL",
+      "grupo": "GAJ",
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 0,
+        "maximo": 4,
+        "rotulo": "0–4",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 25,
+        "maximo": 29,
+        "rotulo": "25–29",
+        "protegido": true
+      }
+    },
+    {
+      "periodo": "2026-11",
+      "eixo": "PROGRESSAO",
+      "modalidade": "HORIZONTAL",
+      "grupo": "GPC",
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 0,
+        "maximo": 4,
+        "rotulo": "0–4",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 40,
+        "maximo": 44,
+        "rotulo": "40–44",
+        "protegido": true
+      }
+    },
+    {
+      "periodo": "2026-11",
+      "eixo": "PROGRESSAO",
+      "modalidade": "HORIZONTAL",
+      "grupo": "MAG",
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 0,
+        "maximo": 4,
+        "rotulo": "0–4",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 5,
+        "maximo": 9,
+        "rotulo": "5–9",
+        "protegido": true
+      }
+    },
+    {
+      "periodo": "2026-11",
+      "eixo": "PROGRESSAO",
+      "modalidade": "HORIZONTAL",
+      "grupo": "SSA",
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 0,
+        "maximo": 4,
+        "rotulo": "0–4",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 5,
+        "maximo": 9,
+        "rotulo": "5–9",
+        "protegido": true
+      }
+    },
+    {
+      "periodo": "2026-11",
+      "eixo": "PROGRESSAO",
+      "modalidade": "VERTICAL",
+      "grupo": null,
+      "subcategoria": null,
+      "situacao": "provisorio",
+      "atos": {
+        "valor": null,
+        "minimo": 5,
+        "maximo": 9,
+        "rotulo": "5–9",
+        "protegido": true
+      },
+      "decisoes": {
+        "valor": null,
+        "minimo": 60,
+        "maximo": 64,
+        "rotulo": "60–64",
+        "protegido": true
+      }
+    }
+  ]
+}
