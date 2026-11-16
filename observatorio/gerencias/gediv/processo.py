@@ -27,6 +27,8 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
         try:
             paginas = banco.paginas(sha)
             resultado = classificar([(p["numero"], p["texto"]) for p in paginas], sha)
+            from .paddle_complementar import preservar_propostas
+            preservar_propostas(banco, resultado, sha)
             ruins = [p["numero"] for p in paginas if p["qualidade"] not in ("OK", "VAZIA")]
             if ruins:
                 resultado.pendencias.append(

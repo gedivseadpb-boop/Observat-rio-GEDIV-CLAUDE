@@ -21,18 +21,29 @@ from . import catalogo, processo
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.gerencias.gediv", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["classificar", "situacao", "catalogo"])
+    ap.add_argument("comando", choices=["classificar", "complementar", "situacao", "catalogo"])
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--refazer", action="store_true")
+    ap.add_argument("--paddleocr-modelos", type=Path, help="complementar: diretório local dos pesos verificados")
+    ap.add_argument("--paddleocr-python", default=sys.executable, help="Python do ambiente CPU opcional")
+    ap.add_argument("--limite", type=int, help="complementar: máximo de arquivos")
     a = ap.parse_args(argv)
+    if a.comando == "complementar" and (not a.paddleocr_modelos or (a.limite is not None and a.limite < 1)):
+        ap.error("complementar exige --paddleocr-modelos e limite positivo, se informado")
     if a.comando == "catalogo":
         print(json.dumps(catalogo.como_dicionario(), ensure_ascii=False, indent=2))
         return 0
     banco = Banco(Path(a.dados) / "observatorio.sqlite3")
     try:
-        dados = processo.classificar_pendentes(banco, a.refazer) if a.comando == "classificar" else processo.situacao(banco)
+        if a.comando == "complementar":
+            from ...nucleo.acervo import Acervo
+            from .paddle_complementar import Config, complementar
+            dados = complementar(banco, Acervo(Path(a.dados)/"acervo"),
+                                 Config(a.paddleocr_modelos, a.paddleocr_python), a.limite)
+        else:
+            dados = processo.classificar_pendentes(banco, a.refazer) if a.comando == "classificar" else processo.situacao(banco)
         print(json.dumps(dados, ensure_ascii=False, indent=2))
-        return 0
+        return 3 if a.comando == "complementar" and (dados["recuperados"] or dados["sinalizados"] or dados["falhas"]) else 0
     finally:
         banco.fechar()
 
