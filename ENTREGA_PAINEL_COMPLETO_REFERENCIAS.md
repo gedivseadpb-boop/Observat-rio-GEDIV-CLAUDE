@@ -9,11 +9,17 @@ Não se declara o painel integralmente concluído.
 
 Repositório: https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE
 
-A branch local de trabalho permanece `entrega/painel-publico-gediv`, conforme a
-instrução da responsável. A preservação remota usa somente a nova branch
-`entrega/painel-completo-referencias`, conforme a autorização de push do prompt.
+Na implementação anterior, a branch local era `entrega/painel-publico-gediv`, com
+preservação remota em `entrega/painel-completo-referencias`. Em 17/11/2026, conforme
+o novo pedido, o trabalho local passou a `entrega/painel-completo-referencias`,
+continuando de `bd69223f62380ec9264918a8b0f0de33b63af75d`.
 O histórico da branch remota publicada e a `main` não são substituídos. Não há PR,
 merge, publicação de Site, alteração de DNS ou ativação de agendamento nesta entrega.
+
+A proposta de disponibilização, pacote seguro e limitações estão em
+[23-preparacao-publicacao-internet.md](docs/23-preparacao-publicacao-internet.md).
+GitHub Pages ainda não foi ativado: a publicação depende da autorização específica
+do endereço e pacote apresentados à responsável.
 
 ## Código entregue
 

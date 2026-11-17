@@ -48,8 +48,8 @@ def preparar(saida: Path, bancos: list[Path] | None = None, projecao: Path | Non
         return achado.group(1) + nome + ("?v=" + versoes[nome] if nome in versoes else "") + achado.group(3)
     html = re.sub(r'((?:src|href)="\./)([^"?]+)(?:\?v=[^"]*)?(")',
                   versionar, indice.read_text(encoding="utf-8"))
-    indice.write_text(html, encoding="utf-8")
-    (saida / "dados.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    indice.write_text(html, encoding="utf-8", newline="\n")
+    (saida / "dados.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     return {"arquivos_publicos": len(ASSETS) + 1, "saida": str(saida)}
 
 

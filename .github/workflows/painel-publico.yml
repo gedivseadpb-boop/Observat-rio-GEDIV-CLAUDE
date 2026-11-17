@@ -23,8 +23,12 @@ jobs:
       - name: Instalar somente dependências de teste
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Validar projeção pública sem bancos privados
-        run: python -m unittest tests.test_publicacao_painel tests.test_distribuicao_publica -v
+        run: python -m unittest tests.test_publicacao_painel tests.test_distribuicao_publica tests.test_preparacao_github_pages -v
       - name: Verificar consulta, integração DOM e exportação XLSX
         run: npm test
+      - name: Congelar pacote para revisão (não publica)
+        if: github.ref == 'refs/heads/entrega/painel-completo-referencias'
+        run: python scripts/preparar_github_pages.py --saida "${{ runner.temp }}/gediv-pages-preparado"
       - name: Preparar distribuição estática permitida
+        if: github.ref != 'refs/heads/entrega/painel-completo-referencias'
         run: python scripts/preparar_painel_publico.py --projecao painel-publico/dados.json --saida dist
