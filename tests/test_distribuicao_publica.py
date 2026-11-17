@@ -11,6 +11,32 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 class TestePacotePublico(unittest.TestCase):
+    def test_recursos_novos_nao_reutilizam_cache_da_versao_anterior(self):
+        import hashlib
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        import json
+        with TemporaryDirectory() as tmp:
+            raiz = Path(tmp) / 'projeto'
+            assets = raiz / 'painel-publico'
+            assets.mkdir(parents=True)
+            for nome in m.ASSETS:
+                (assets / nome).write_text('recurso de teste', encoding='utf-8')
+            (assets / 'index.html').write_text('<link href="./estilo.css"><script src="./app.js"></script>', encoding='utf-8')
+            projecao = Path(tmp) / 'snapshot.json'
+            projecao.write_text(json.dumps(projetar([])), encoding='utf-8')
+            saida = Path(tmp) / 'dist'
+            with patch.object(m, 'RAIZ', raiz):
+                m.preparar(saida, projecao=projecao)
+                antes = (saida / 'index.html').read_text(encoding='utf-8')
+                (assets / 'estilo.css').write_text('estilo atualizado', encoding='utf-8')
+                m.preparar(saida, projecao=projecao)
+            depois = (saida / 'index.html').read_text(encoding='utf-8')
+            self.assertNotEqual(antes, depois)
+            digest = hashlib.sha256((saida / 'estilo.css').read_bytes()).hexdigest()[:12]
+            self.assertIn('estilo.css?v=' + digest, depois)
+            self.assertEqual(len(list(saida.iterdir())), len(m.ASSETS) + 1)
+
     def test_snapshot_vazio_real_nao_vira_exemplo(self):
         dados = projetar([])
         m.validar_snapshot(dados)

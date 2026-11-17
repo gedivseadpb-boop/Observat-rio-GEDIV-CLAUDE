@@ -3,7 +3,8 @@
 O painel público foi ampliado sobre `entrega/painel-publico-gediv`, a partir de
 `2240dcd37a74bba4497e239d7c642fca5b5b29c2`. Esta é uma entrega **parcial do escopo
 integral solicitado**: há implementação e testes, mas as consultas documentais
-individuais, os resultados e a validação visual da nova versão permanecem bloqueados.
+individuais e os resultados completos dependem de dados autorizados e integração gerencial segura.
+A validação visual da interface pública foi concluída em Chromium local.
 Não se declara o painel integralmente concluído.
 
 Repositório: https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE
@@ -37,10 +38,11 @@ merge, publicação de Site, alteração de DNS ou ativação de agendamento nes
 - CSV, XLSX e PDF baixáveis, além de impressão específica. Os relatórios incluem os
   mesmos filtros, todas as páginas e a versão da projeção. Exportação da lista aplica
   sua busca local; a exportação geral usa os filtros aplicados, como informado na tela.
-- PNG dos gráficos de evolução está implementado no navegador, mas não foi executado
-  nesta sessão por indisponibilidade da prévia; permanece sem validação visual.
+- PNG dos gráficos de evolução foi baixado e conferido visualmente, com proporções
+  preservadas, legenda, filtros e data da projeção.
 - Modo claro/escuro, foco visível, atalho para conteúdo, alternativas em tabela,
-  menu móvel e diálogo com retorno de foco. Responsividade ainda requer prova visual.
+  menu móvel e diálogo com retorno de foco. Testes visuais cobrem larguras de desktop,
+  485 pixels e 388 pixels CSS com zoom de 125%.
 - Validação fechada da projeção; erros removem valores anteriores, esvaziam o relatório
   e bloqueiam exportações. Atualizar apenas relê `dados.json`; não executa coleta/OCR.
 - Gerador do pacote com lista fixa de oito arquivos. Células duplicadas e dimensões
@@ -81,7 +83,7 @@ A coluna Prova diferencia testes de integração DOM de execução em navegador.
 
 | Imagem | Estado do escopo | Implementação e prova |
 |---|---|---|
-| 01 | Implementado; visual pendente | Abas, atualização, situação, exportações e sete cartões; integração DOM de carregamento e navegação. |
+| 01 | Implementado e testado em navegador | Abas, atualização, situação, exportações e sete cartões; carregamento e navegação verificados em Chromium. |
 | 02 | Parcial | Filtros, cartões, gráficos disponíveis, consulta e ficha de agregados. Resenhas e resultados dependem de projeção autorizada. |
 | 03 | Parcial | Sete serviços, histórico, calendário e cobertura geral. Distribuição por edição, processo e PDF individual indisponíveis. |
 | 04 | Parcial | Colunas agrupadas e roscas em faixas, seleção e tabelas. Rosca TS sem valores enquanto as células permanecerem suprimidas. |
@@ -90,14 +92,14 @@ A coluna Prova diferencia testes de integração DOM de execução em navegador.
 | 07 | Bloqueado para dados individuais | Tabela pública ordenável e exportável funcional; lista por resenha com identificação exige servidor gerencial seguro. |
 | 08 | Bloqueado para dados individuais | Ficha pública de agregado com origem funcional; ficha de processo e PDF por registro exigem acesso seguro e metadados. |
 | 09 | Parcial | Catálogo dos 16 grupos e Não informado, barras, filtros e tabela. Resultados por grupo não disponibilizados. |
-| 10 | Implementado; visual pendente | Datas, calendário nativo e atalhos; testes impedem aplicar total mensal a um dia. Cobertura geral tem escopo explícito. |
-| 11 | Implementado; valores limitados pela fonte | Sete KPIs com unidades distintas; desconhecidos usam — e conferência zero só aparece quando documentada. Testes DOM/modelo. |
+| 10 | Implementado e testado em navegador | Datas, calendário nativo e atalhos; testes impedem aplicar total mensal a um dia. Cobertura geral tem escopo explícito. |
+| 11 | Implementado; valores limitados pela fonte | Sete KPIs com unidades distintas; desconhecidos usam — e conferência zero só aparece quando documentada. Testes DOM/modelo e navegador. |
 | 12 | Bloqueado para dados individuais | Estrutura da ficha documental descrita na área separada; campos de progressão, TS, evidências e revisão não recebem dados sem autenticação. |
 
 ## Segurança e acesso gerencial
 
 **NÃO HABILITADA (SEGURANÇA).** Não há conexão ativa com serviço gerencial seguro nesta
-prévia estática, nem base privada disponível no workspace. O sistema privado já existente
+prévia estática, e os registros da fonte privada não foram copiados para a interface pública. O sistema privado já existente
 foi preservado. Não foi criado login fictício, credencial no JavaScript ou envio de dados
 individuais antes de autenticação. Sua futura integração precisa de autenticação no
 servidor, autorização por perfil/escopo e auditoria; campos ausentes usam Não extraído.
@@ -112,23 +114,25 @@ reprocessamento de OCR e classificação não integra esta mudança.
 - Suíte Python completa: 587 testes executados, 13 ignorados por componentes opcionais,
   sem falhas. Após adicionar o teste de duplicatas/dimensões, seis testes do pacote foram
   executados com sucesso. Coleta, OCR e bases privadas não foram reexecutados.
-- JavaScript: 22 testes passaram, incluindo oito de integração DOM com a projeção real,
+- JavaScript: 23 testes passaram, incluindo nove de integração DOM com a projeção real,
   dez de consulta/privacidade, dois de XLSX e dois do PDF.
-- PDF, XLSX e CSV foram gerados pelos controles da aplicação em DOM e lidos com
+- Python focado na versão atual: 28 testes de projeção, distribuição e privacidade passaram.
+  O teste novo garante que um CSS atualizado recebe uma URL de recurso diferente.
+- PDF, XLSX e CSV foram baixados pelos controles reais no Chromium e lidos com
   `pypdf` em modo estrito, `openpyxl` e `csv`: PDF de uma página e planilhas de 14 linhas.
   Isso comprova formato e conteúdo; não comprova layout visual em leitores gráficos.
 - Build: oito arquivos estáticos permitidos; nenhuma dependência de teste vai ao navegador.
-- O site público atual foi aberto em Chromium antes da interrupção e exibiu dados.
-  A nova prévia **não teve validação visual desktop/mobile**: `sites-preview start`
-  falhou com `relay could not open browser port 4173: timed out waiting for relay readiness`,
-  inclusive após a retomada do ambiente. `sites-preview status` confirmou parada.
-- A orientação de [prévia gerenciada do Sites](skill://plugin_connector_1p_689987207de08191979cf68eca2941c6/sites/references/preview/managed.md)
-  determina: “If the CLI, daemon, or browser route is unavailable, report the environment
-  limitation ... Do not change network permissions or bypass the sandbox.” A falha do serviço
-  não foi contornada por publicação não autorizada ou troca da infraestrutura.
-- A abertura do painel privado de referência foi recusada pela revisão automática, que
-  considerou o acesso privado não autorizado de forma específica. As capturas permitiram
-  continuar a implementação sem acessar esse painel.
+- O serviço de prévia Sites falhou com `relay could not open browser port 4173`.
+  A responsável escolheu explicitamente substituí-lo por servidor local Python para os testes.
+  A nova versão foi aberta em Chromium com JavaScript ativo: dados HTTP 200, gráficos,
+  filtros, fichas de agregados, tabelas, dez áreas, exports e layout estreito foram verificados.
+  Falha HTTP 503 controlada removeu números antigos e bloqueou exports; a recuperação
+  restaurou os dados. Datas de um único dia não receberam totais mensais.
+- Nenhum site foi publicado para obter uma prévia. O servidor de teste só escuta o loopback.
+  A troca do método de teste foi escolhida expressamente pela responsável.
+- A leitura da referência privada e dos metadados da conexão recebeu autorização específica
+  na retomada. Essa fonte permanece separada da projeção pública. A responsável decidiu
+  manter o acesso do serviço existente como está; nenhuma mudança foi aplicada nele.
 - CI Linux/Windows está configurado para validar pacote, modelo, DOM e exports, sem
   bancos privados, publicação ou agendamento. O resultado remoto deve ser consultado pelo
   commit de entrega; não se presume CI aprovado a partir dos testes locais.
@@ -154,6 +158,9 @@ python -m unittest discover -s tests
 python scripts/preparar_painel_publico.py --projecao painel-publico/dados.json --saida dist
 ```
 
-**Próximo passo necessário:** restabelecer a prévia local e conferir a interface no navegador
-antes de solicitar autorização para publicar. Esta entrega não autoriza nem substitui os sites
-existentes, e a ampliação dos dados/gerencial continua separadamente bloqueada como descrito.
+**Para disponibilizar a versão completa na internet:** disponibilizar uma projeção autorizada
+com os metadados/resultados faltantes, habilitar o ambiente gerencial com autenticação,
+autorização e auditoria verificadas e obter autorização de publicação. A interface pública
+foi testada localmente; nenhum Site existente foi substituído e nenhum deploy foi feito.
+
+Detalhes da execução e correções visuais: `docs/22-validacao-visual-painel.md`.

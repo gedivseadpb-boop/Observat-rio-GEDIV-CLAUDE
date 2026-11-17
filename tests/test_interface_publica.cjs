@@ -49,6 +49,14 @@ test('filtros aguardam aplicar e sincronizam cartão, tabela, exportação e imp
   assert.ok(Buffer.from(bytes).includes(Buffer.from('25–29')));
   a.$('limpar').click();assert.match(a.$('indicadores').textContent,/210–214/);
 });
+test('botão Aplicar fixo fora da rolagem continua associado ao formulário',async t=>{
+  const a=await app(t);a.change('grupo','GAJ');
+  const button=a.w.document.querySelector('.filter-actions [type=submit]');
+  assert.equal(button.form,a.$('filtros'));
+  assert.equal(button.closest('form'),null);
+  button.click();
+  assert.match(a.$('indicadores').textContent,/25–29/);
+});
 test('recorte diário mostra indisponibilidade e não atribui total mensal ao dia',async t=>{
   const a=await app(t);a.change('inicio','2026-11-14');a.change('fim','2026-11-14');a.apply();
   assert.equal(a.$('restricaoRecorte').hidden,false);

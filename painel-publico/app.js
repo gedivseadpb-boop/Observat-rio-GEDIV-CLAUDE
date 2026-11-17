@@ -68,10 +68,10 @@
   function chartControls(id) {
     return '<div class="chart-actions"><label>Unidade <select data-unidade aria-label="Unidade do gráfico ' + id + '"><option value="decisoes"' + (chartUnit === 'decisoes' ? ' selected' : '') + '>Decisões</option><option value="atos"' + (chartUnit === 'atos' ? ' selected' : '') + '>Ocorrências de atos nas células</option></select></label><label>Período <select data-granularidade aria-label="Granularidade do gráfico ' + id + '"><option value="mes">Mensal · disponível</option><option value="semana">Semanal · não disponível</option><option value="dia">Diária · não disponível</option></select></label><button class="text-button" type="button" data-png>↓ PNG</button></div>';
   }
-  function evolution(line = false) {
+  function evolution(line = false, width = 700) {
     const periods = [...new Set(visible.map(c => c.periodo))].sort();
     const values = periods.map(p => series.map(s => filteredMetric(visible.filter(c => c.periodo === p && matchesSeries(c, s.key)), chartUnit)));
-    const W = 700, H = 260, left = 48, right = 20, top = 28, bottom = 46, w = W - left - right, h = H - top - bottom;
+    const W = Math.max(300, Math.min(1100, Math.round(width))), H = 260, left = 48, right = 20, top = 28, bottom = 46, w = W - left - right, h = H - top - bottom;
     const max = Math.max(5, ...values.flatMap(row => row.map(m => M.numberBounds(m)?.max || 0)));
     let svg = '';
     if (periods.length) {
@@ -96,7 +96,7 @@
         svg += '<text x="' + (left + step * (i + .5)) + '" y="' + (H - 18) + '" text-anchor="middle">' + esc(monthLabel(p)) + '</text>';
       });
     }
-    const body = chartControls(line ? 'histórico' : 'evolução') + (svg ? '<div class="chart-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="' + (line ? 'Linhas' : 'Colunas agrupadas') + ' por mês, limites das faixas publicáveis">' + svg + '</svg></div>' : empty('Sem agregado publicável no recorte', M.selectionIssue(state) || 'Dados preservados ou não divulgados. Isso não confirma ausência de publicação.')) + legend()
+    const body = chartControls(line ? 'histórico' : 'evolução') + (svg ? '<div class="chart-box" data-plot-kind="' + (line ? 'line' : 'bars') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="' + (line ? 'Linhas' : 'Colunas agrupadas') + ' por mês, limites das faixas publicáveis">' + svg + '</svg></div>' : empty('Sem agregado publicável no recorte', M.selectionIssue(state) || 'Dados preservados ou não divulgados. Isso não confirma ausência de publicação.')) + legend()
       + '<p class="data-note">Parte sólida: limite inferior. Parte clara: restante da faixa. ' + (chartUnit === 'atos' ? 'Ocorrências de atos nas células podem se repetir; não são atos distintos.' : 'São decisões de agregados publicáveis, não totais exatos da base.') + '</p>'
       + alternative(['Mês', ...series.map(s => s.name)], periods.map((p, i) => [monthLabel(p), ...values[i].map(M.metricLabel)]), 'Mesmos dados do gráfico · ' + (chartUnit === 'decisoes' ? 'decisões' : 'ocorrências de atos') + ' em faixas');
     return panel(line ? 'Evolução histórica' : 'Evolução das publicações', 'Dados mensais por modalidade · selecione um mês para consultar', body);
@@ -200,6 +200,11 @@
     document.querySelectorAll('[name=servico]').forEach(input => { input.disabled = state.eixo === 'PROGRESSAO'; });
     $('filtrosPendentes').textContent = '';
   }
+  function fitPlots() {
+    document.querySelectorAll('.chart-box').forEach(box => {
+      if (box.clientWidth > 0) box.closest('.panel').outerHTML = evolution(box.dataset.plotKind === 'line', box.clientWidth);
+    });
+  }
   function render(sync = false) {
     cards();
     if (!data) return;
@@ -212,6 +217,7 @@
     $('restricaoRecorte').innerHTML = issue ? '<div><b>Este recorte não pode ser calculado</b><p>' + esc(issue) + '</p></div>' : '';
     const contents = { geral: overview, progressao: overview, tempo: overview, historico: history, dia: daily, alteracoes: changes, outras: others, cobertura: sources, pendencias: pending, gerencial: management };
     $('pagina').innerHTML = contents[page]();
+    fitPlots();
     $('pagina').setAttribute('aria-busy', 'false');
     document.querySelectorAll('#abas a, #menuApoio a').forEach(a => { if (a.hash === '#' + page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     $('contextoCurto').textContent = pages[page];
@@ -281,8 +287,26 @@
     const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' }));
     try {
       const img = new Image(); img.src = url; await img.decode();
-      const canvas = document.createElement('canvas'); canvas.width = 1400; canvas.height = 700;
-      const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#153452'; ctx.font = 'bold 24px Arial'; ctx.fillText('GEDIV · ' + button.closest('.panel').querySelector('h3').textContent, 32, 40); ctx.drawImage(img, 0, 70, 1400, 520); ctx.font = '16px Arial'; ctx.fillText('Agregados mensais parciais em faixas · partes sólidas: limites inferiores', 32, 625); ctx.fillText('Projeção: ' + timestamp(data.atualizado_em) + ' (Brasília)', 32, 654);
+      const canvas = document.createElement('canvas'); canvas.width = 1400;
+      const ctx = canvas.getContext('2d'); ctx.font = '18px Arial';
+      const filterLines = []; let currentLine = '';
+      for (const word of ('Filtros: ' + describeFilters()).split(' ')) {
+        if (currentLine && ctx.measureText(currentLine + ' ' + word).width > 1336) { filterLines.push(currentLine); currentLine = ''; }
+        currentLine += (currentLine ? ' ' : '') + word;
+      }
+      if (currentLine) filterLines.push(currentLine);
+      const headerHeight = 90 + filterLines.length * 24;
+      const box = svg.viewBox.baseVal, plotHeight = Math.round(1336 * box.height / box.width);
+      canvas.height = headerHeight + plotHeight + 130;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#153452'; ctx.font = 'bold 24px Arial';
+      ctx.fillText('GEDIV · ' + button.closest('.panel').querySelector('h3').textContent, 32, 40);
+      ctx.font = '18px Arial'; filterLines.forEach((line, i) => ctx.fillText(line, 32, 75 + i * 24));
+      ctx.drawImage(img, 32, headerHeight, 1336, plotHeight);
+      const footerY = headerHeight + plotHeight + 25;
+      series.forEach((item, i) => { const x = 32 + i * 435; ctx.fillStyle = item.color; ctx.fillRect(x, footerY - 14, 16, 16); ctx.fillStyle = '#153452'; ctx.fillText(item.name, x + 25, footerY); });
+      ctx.font = '16px Arial'; ctx.fillText('Agregados mensais parciais em faixas · partes sólidas: limites inferiores', 32, footerY + 35);
+      ctx.fillText('Projeção: ' + timestamp(data.atualizado_em) + ' (Brasília)', 32, footerY + 64);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       if (blob) download(blob, 'GEDIV_grafico_publico.png');
     } catch (_) { notify('Não foi possível gerar o PNG. Use a tabela ou PDF / imprimir.'); } finally { URL.revokeObjectURL(url); }
@@ -412,7 +436,11 @@
   $('imprimir').onclick = () => { if (data) { buildPrint(); window.print(); } };
   window.addEventListener('beforeprint', buildPrint);
   window.addEventListener('hashchange', () => route());
-  window.addEventListener('resize', () => { if (!window.matchMedia('(max-width:780px)').matches) closeMenu(false); });
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    if (!window.matchMedia('(max-width:780px)').matches) closeMenu(false);
+    clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (data) fitPlots(); }, 120);
+  });
   async function load(manual = false) {
     if (loading) return;
     loading = true; $('atualizar').disabled = true; $('erro').hidden = true; $('estado').hidden = false;

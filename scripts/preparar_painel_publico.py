@@ -6,6 +6,7 @@ Nenhuma coleta, aprovação, alteração de banco ou publicação é feita por e
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -38,6 +39,16 @@ def preparar(saida: Path, bancos: list[Path] | None = None, projecao: Path | Non
         raise ValueError("A pasta de saída contém arquivos não permitidos; use uma pasta nova.")
     for nome in ASSETS:
         shutil.copyfile(RAIZ / "painel-publico" / nome, saida / nome)
+    # Recursos com conteúdo novo não podem herdar o cache de uma versão anterior.
+    indice = saida / "index.html"
+    versoes = {nome: hashlib.sha256((saida / nome).read_bytes()).hexdigest()[:12]
+               for nome in ASSETS if nome.endswith((".js", ".css"))}
+    def versionar(achado):
+        nome = achado.group(2)
+        return achado.group(1) + nome + ("?v=" + versoes[nome] if nome in versoes else "") + achado.group(3)
+    html = re.sub(r'((?:src|href)="\./)([^"?]+)(?:\?v=[^"]*)?(")',
+                  versionar, indice.read_text(encoding="utf-8"))
+    indice.write_text(html, encoding="utf-8")
     (saida / "dados.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"arquivos_publicos": len(ASSETS) + 1, "saida": str(saida)}
 

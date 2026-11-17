@@ -5,7 +5,7 @@
 <meta name="description" content="Indicadores públicos de Progressão Funcional e Tempo de Serviço da GEDIV. Dados reais, cobertura e conferência transparentes.">
 <title>Painel Diário Oficial | GEDIV</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230d4d91'/%3E%3Cpath d='M11 11h18v18H11zM16 17h8M16 22h8' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="./estilo.css"><script src="./xlsx.js" defer></script><script src="./pdf.js" defer></script><script src="./modelo.js" defer></script><script src="./app.js" defer></script>
+<link rel="stylesheet" href="./estilo.css?v=7f2ff0068935"><script src="./xlsx.js?v=ef50dd8ae97d" defer></script><script src="./pdf.js?v=d3a1cab5dc40" defer></script><script src="./modelo.js?v=cafbb8a74605" defer></script><script src="./app.js?v=4b6d8788b21e" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
@@ -34,8 +34,8 @@
 <label for="tipo">Tipo da publicação</label><select id="tipo"><option value="">Todos os tipos</option><option value="ORIGINAL">Original</option><option value="REPUBLICACAO">Republicação / refeito</option><option value="RETIFICACAO">Retificação</option><option value="SEM_EFEITO">Tornado sem efeito</option><option value="OUTRAS">Outras publicações</option></select>
 <label for="coberturaFiltro">Situação da cobertura</label><select id="coberturaFiltro"><option value="">Toda a cobertura disponível</option><option value="verificada">Edição verificada</option><option value="parcial">Parcial</option><option value="pendente">Pendente</option><option value="nao_verificada">Não verificada</option><option value="quarentena">Quarentena</option><option value="sem_edicao">Ausência confirmada</option></select>
 <p class="field-note">Resultados, tipos e cobertura detalhada só podem ser contados quando constam da projeção autorizada.</p></details>
-<div class="filter-actions"><button class="button primary" type="submit">⌕ Aplicar filtros</button><button class="text-button" id="limpar" type="button">Limpar filtros</button><p id="filtrosPendentes" class="field-note" role="status"></p></div>
-</form><p class="sidebar-note">Dados públicos agregados.<br>A consulta individual exige acesso gerencial seguro.</p>
+</form><div class="filter-actions"><button class="button primary" type="submit" form="filtros">⌕ Aplicar filtros</button><button class="text-button" id="limpar" type="button">Limpar filtros</button><p id="filtrosPendentes" class="field-note" role="status"></p></div>
+<p class="sidebar-note">Dados públicos agregados.<br>A consulta individual exige acesso gerencial seguro.</p>
 </aside>
 <main id="conteudo" tabindex="-1">
 <div class="page-heading"><div><p class="eyebrow">SECRETARIA DE ESTADO DA ADMINISTRAÇÃO</p><h1>Painel Diário Oficial <span>| GEDIV</span></h1><p>Progressão Funcional e Tempo de Serviço, com informação e transparência.</p></div><div class="updated"><span class="live-dot" aria-hidden="true"></span><div><span>Projeção disponível</span><b id="atualizacao">Carregando…</b></div></div></div>
