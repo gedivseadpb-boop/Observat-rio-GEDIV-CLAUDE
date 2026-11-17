@@ -47,6 +47,14 @@ test('zero conhecido de conferidos permanece distinto de uma célula não divulg
   assert.equal(M.metricLabel(M.qualityMetric(data,s,[],'publicacoes_pendentes')),'—');
 });
 
+test('período mensal fora da cobertura não transforma ausência de base em zero conferido',()=>{
+  const s=selection({inicio:'2026-12-01',fim:'2026-12-31',situacao:'conferido'});
+  const cells=M.filterCells(data.celulas,s);
+  assert.match(M.coverageIssue(data,s),/fora da cobertura/);
+  assert.equal(M.metricLabel(M.decisionMetric(data,s,cells)),'—');
+  assert.equal(M.metricLabel(M.qualityMetric(data,s,cells,'conferidos')),'—');
+});
+
 test('grupos e múltiplos serviços selecionam somente suas dimensões oficiais',()=>{
   const cells=M.filterCells(data.celulas,selection({eixo:'PROGRESSAO',modalidade:'HORIZONTAL',grupo:'GAJ'}));
   assert.ok(cells.length);

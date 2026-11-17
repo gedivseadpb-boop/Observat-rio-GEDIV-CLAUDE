@@ -47,12 +47,21 @@
       && (!s.grupo || (s.grupo === 'NAO_INFORMADO' ? c.grupo === null : c.grupo === s.grupo))
       && (!subs.length || subs.includes(c.subcategoria)) && (!s.situacao || c.situacao === s.situacao));
   }
+  function coverageIssue(data, s) {
+    const c = data?.cobertura;
+    if (!c || (!s.inicio && !s.fim)) return '';
+    if ((s.inicio && c.ultima_publicacao && s.inicio.slice(0, 7) > c.ultima_publicacao.slice(0, 7)) ||
+        (s.fim && c.primeira_publicacao && s.fim.slice(0, 7) < c.primeira_publicacao.slice(0, 7))) {
+      return 'O período escolhido está fora da cobertura documental informada. Não há dados para calcular este recorte; isso não significa zero publicações.';
+    }
+    return '';
+  }
   function summaryFor(data, s) {
     if (selectionIssue(s) || s.inicio || s.fim || s.modalidade || s.grupo || s.subcategorias?.length) return null;
     return s.eixo ? data.resumo_eixos[s.eixo] || null : data.resumo;
   }
   function decisionMetric(data, s, cells) {
-    if (selectionIssue(s)) return vazio();
+    if (selectionIssue(s) || coverageIssue(data, s)) return vazio();
     const summary = summaryFor(data, s);
     if (summary) {
       if (s.situacao === 'conferido') return summary.conferidos;
@@ -63,7 +72,7 @@
     return sumMetrics(cells.map(c => c.decisoes), s.situacao === 'conferido' && noConfirmed);
   }
   function qualityMetric(data, s, cells, key) {
-    if (selectionIssue(s)) return vazio();
+    if (selectionIssue(s) || coverageIssue(data, s)) return vazio();
     if ((s.situacao || s.tipo) && ['atos', 'publicacoes_pendentes'].includes(key)) return vazio();
     if (s.situacao && ((key === 'conferidos' && s.situacao !== 'conferido') || (key === 'provisorios' && s.situacao !== 'provisorio'))) return vazio();
     const summary = summaryFor(data, s);
@@ -135,7 +144,7 @@
     });
     return d;
   }
-  const api = { EIXOS, MODALIDADES, CAMPOS, novoEstado, vazio, zero, numberBounds, metricLabel, sumMetrics, validDate, monthEnd, selectionIssue, filterCells, summaryFor, decisionMetric, qualityMetric, shareInterval, shareLabel, csvValue, cellsToRows, cellsToCsv, searchCells, sortCells, pagination, validateProjection };
+  const api = { EIXOS, MODALIDADES, CAMPOS, novoEstado, vazio, zero, numberBounds, metricLabel, sumMetrics, validDate, monthEnd, selectionIssue, coverageIssue, filterCells, summaryFor, decisionMetric, qualityMetric, shareInterval, shareLabel, csvValue, cellsToRows, cellsToCsv, searchCells, sortCells, pagination, validateProjection };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.GedivModelo = api;
 })(typeof window !== 'undefined' ? window : globalThis);
