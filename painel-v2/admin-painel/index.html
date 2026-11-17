@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<!-- Esta página NÃO contém dados. Tudo vem do servidor gerencial, depois do login conferido no servidor. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; frame-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Painel do admin · GEDIV</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%234b3592'/%3E%3Cpath d='M12 20h16M20 12v16' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../estilo.css">
+<link rel="stylesheet" href="./admin.css">
+<script src="./admin.js" defer></script>
+</head>
+<body class="admin">
+<a class="pular" href="#conteudo">Ir para o conteúdo</a>
+<header class="topo">
+  <a class="marca" href="./" aria-label="Painel do admin GEDIV">
+    <span class="marca-simbolo admin-simbolo" aria-hidden="true">G</span>
+    <span class="marca-texto"><b>Painel do admin</b><small>GEDIV · uso restrito</small></span>
+  </a>
+  <p class="topo-frase">Conferência das decisões publicadas no Diário Oficial</p>
+  <div class="topo-acoes">
+    <span id="quemEsta" class="selo-admin" hidden></span>
+    <button id="sair" type="button" class="botao" hidden>Sair</button>
+    <a class="botao botao-discreto" href="../#/inicio">Painel público</a>
+  </div>
+</header>
+
+<main id="conteudo" tabindex="-1" class="admin-conteudo">
+  <div id="aviso" class="estado" role="status" hidden></div>
+
+  <section id="telaLogin" class="login" aria-labelledby="tLogin" hidden>
+    <h1 id="tLogin">Entrar no painel do admin</h1>
+    <p class="descricao">Acesso restrito à equipe da GEDIV. Use o seu usuário e a sua senha pessoal: tudo o que você conferir ou corrigir fica registrado no seu nome.</p>
+    <form id="formLogin" class="login-form" novalidate>
+      <label class="campo"><span>Usuário</span><input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label class="campo"><span>Senha</span><input id="senha" name="senha" type="password" autocomplete="current-password" required></label>
+      <p id="erroLogin" class="erro-campo" role="alert"></p>
+      <button id="entrar" type="submit" class="botao botao-primario">Entrar</button>
+    </form>
+    <p class="nota">Esqueceu a senha ou foi bloqueado por tentativas? Peça à pessoa responsável pelo sistema. Após 5 tentativas erradas, o acesso fica bloqueado por 15 minutos.</p>
+  </section>
+
+  <section id="telaApp" hidden>
+    <nav class="sub-abas" aria-label="Seções do painel do admin">
+      <a href="#fila" data-aba="fila">Fila de revisão</a>
+      <a href="#conferidas" data-aba="conferidas">Já conferidas</a>
+      <a href="#conflitos" data-aba="conflitos">Conflitos</a>
+      <a href="#historico" data-aba="historico">Histórico de ações</a>
+    </nav>
+    <div id="area" aria-live="polite"></div>
+  </section>
+</main>
+
+<dialog id="dialogo" aria-labelledby="dialogoTitulo">
+  <form id="dialogoForm" method="dialog" novalidate>
+    <div class="dialogo-cabeca"><h2 id="dialogoTitulo"></h2><button id="fecharDialogo" type="button" class="botao" value="cancelar">Cancelar ✕</button></div>
+    <div id="dialogoCorpo"></div>
+    <p id="dialogoErro" class="erro-campo" role="alert"></p>
+    <div class="dialogo-acoes"><button id="dialogoConfirmar" type="submit" class="botao botao-primario">Confirmar</button></div>
+  </form>
+</dialog>
+<div id="anuncio" class="so-leitor" role="status" aria-live="polite"></div>
+</body>
+</html>

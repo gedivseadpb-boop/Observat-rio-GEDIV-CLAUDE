@@ -1,0 +1,36 @@
+/* Painel do admin: usa os tokens de ../estilo.css; aqui só o que é próprio do admin. */
+.admin .topo { border-bottom: 3px solid #6b55b8; }
+.admin-simbolo { background: #4b3592; }
+.selo-admin { background: #efe9fb; color: #4b3592; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 14px; }
+:root[data-theme="dark"] .selo-admin { background: #2a2245; color: #c9baf5; }
+.admin-conteudo { max-width: 1200px; margin: 0 auto; padding: var(--e5) var(--e5) var(--e6); }
+.login { max-width: 460px; margin: var(--e6) auto; background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); padding: var(--e6); }
+.login-form { display: flex; flex-direction: column; gap: var(--e4); margin: var(--e4) 0; }
+.login-form .campo { min-width: 0; }
+.erro-campo { color: var(--vermelho); font-weight: 600; min-height: 1.4em; margin: 0; }
+.cabeca-aba { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--e3); margin-bottom: var(--e4); }
+.cabeca-aba h1:focus, .cabeca-aba h2:focus { outline: none; }
+.acoes { display: flex; flex-wrap: wrap; gap: var(--e2); }
+.resumo-admin { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--e3); margin-bottom: var(--e5); }
+.resumo-admin div { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); padding: var(--e3) var(--e4); display: flex; flex-direction: column; }
+.resumo-admin span { color: var(--suave); font-size: 14px; }
+.resumo-admin b { font-size: 26px; }
+.acoes-linha { white-space: nowrap; }
+.acoes-linha .botao-texto { min-height: 36px; }
+.revisor { color: var(--suave); }
+tr.fora-contagem td, tr.fora-contagem th { opacity: .6; }
+.trilha-acoes { padding-left: var(--e4); }
+.trilha-acoes li { margin-bottom: var(--e2); }
+.grade-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--e3); margin-bottom: var(--e3); }
+.grade-campos .campo { min-width: 0; }
+.campo-largo { width: 100%; margin: var(--e3) 0; }
+.campo textarea { min-height: 80px; border: 1px solid var(--linha); border-radius: 8px; padding: var(--e2) var(--e3); background: var(--superficie); font: inherit; color: inherit; font-weight: 400; }
+.caixa { display: flex; gap: var(--e2); align-items: flex-start; margin: var(--e2) 0; }
+.caixa input { width: 20px; height: 20px; margin-top: 2px; }
+.dialogo-acoes { display: flex; justify-content: flex-end; margin-top: var(--e3); }
+.carregando { color: var(--suave); }
+@media (max-width: 900px) { .admin .botao-menu { display: none; } .admin-conteudo { padding: var(--e4); } .login { padding: var(--e5); margin: var(--e4) auto; } }
+/* Topo do admin em telas estreitas: as ações quebram linha em vez de empurrar a página para o lado. */
+.admin .topo { flex-wrap: wrap; }
+.admin .topo-acoes { flex-wrap: wrap; min-width: 0; }
+@media (max-width: 600px) { .admin .topo-acoes { width: 100%; justify-content: flex-start; } .admin .topo-frase { display: none; } }
