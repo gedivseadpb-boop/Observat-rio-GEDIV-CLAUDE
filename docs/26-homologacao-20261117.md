@@ -19,3 +19,7 @@ Publicação prevista: apenas avanço normal da branch `gh-pages` do repositóri
 O commit local do pacote é `2a71073dd7a60cdee4bf1684c634008ae0f80bb1`. Tanto o push Git quanto a operação GitHub de criação de árvore foram recusados com HTTP403 (`Resource not accessible by integration`). Nenhuma referência remota foi atualizada. A prévia ainda serve `cae5b18ede3af64c10af3b76a8bbdece08e8f62f`; os testes HTTPS da versão nova permanecem pendentes até haver conexão com gravação. A responsável já autorizou a publicação exclusivamente na homologação; não é necessária nova autorização de design ou publicação.
 
 A comparação final confirmou os oito arquivos públicos e refs main/gh-pages do painel oficial idênticos ao início do trabalho. Não houve acesso à Conferência Privada.
+
+## Causa exata do HTTP403 verificada
+
+Conta autenticada: `gedivseadpb-boop`. Instalação `chatgpt-codex-connector` ID167237847: `contents: write`, seleção de repositórios `selected`, não suspensa. `GET /user/installations/167237847/repositories` retornou exatamente um repositório: o principal autorizado; a homologação está ausente. A branch gh-pages da homologação não é protegida, o repositório não está arquivado nem desabilitado. É necessário a responsável incluir `gediv-painel-redesign-preview` na seleção da instalação existente. Não falta permissão global Contents:write e não se trata de conta incorreta. Nenhum controle de acesso foi alterado pelo agente.
