@@ -29,7 +29,7 @@ DOE/PB ──► PDF ──► acervo (SHA-256) ──► leitura por colunas / 
 
 ## 2. O que veio de cada origem
 
-**Do projeto Claude (base, mantida):** coleta em lotes com trava por fonte, acervo por SHA-256,
+**Do projeto GPT (base, mantida):** coleta em lotes com trava por fonte, acervo por SHA-256,
 banco SQLite com migração de esquema, leitura por colunas, OCR, qualidade por página, sonda de
 acesso, testes sem internet e a regra de documentar cada afirmação com onde foi testada.
 

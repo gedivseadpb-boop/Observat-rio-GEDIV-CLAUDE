@@ -16,16 +16,16 @@ A cópia inclui bundle Git completo, ZIP exato da publicação, configuração P
 
 Reativação usa os bytes arquivados em branch determinística, não `main`, `HEAD` ou um build novo. Backups, planos, autorizações e diário ficam fora do repositório público em `--controle`, sem segredos ou dados pessoais.
 
-## Pedidos disponíveis ao Claude
+## Pedidos disponíveis ao GPT
 
 | Pedido | Resultado |
 | --- | --- |
-| “Claude, verificar sites GEDIV.” | Informa URLs, versões, dados e situação. Não altera nada. |
-| “Claude, cadastre este segundo site GEDIV.” | Verifica independência antes de cadastrá-lo. Não escolhe vencedor. |
-| “Claude, escolha SITE-A como definitivo e SITE-B como secundário.” | Registra os papéis sem desativar. |
-| “Claude, prepare a desativação do site que não escolhi.” | Preserva e testa; gera plano identificado. Não retira o site. |
-| “Claude, desative o site que não escolhi e preserve tudo.” | Exige autorização específica vinculada ao plano. |
-| “Claude, reative o site arquivado.” | Restaura a versão preservada após novo plano e autorização. |
+| “GPT, verificar sites GEDIV.” | Informa URLs, versões, dados e situação. Não altera nada. |
+| “GPT, cadastre este segundo site GEDIV.” | Verifica independência antes de cadastrá-lo. Não escolhe vencedor. |
+| “GPT, escolha SITE-A como definitivo e SITE-B como secundário.” | Registra os papéis sem desativar. |
+| “GPT, prepare a desativação do site que não escolhi.” | Preserva e testa; gera plano identificado. Não retira o site. |
+| “GPT, desative o site que não escolhi e preserve tudo.” | Exige autorização específica vinculada ao plano. |
+| “GPT, reative o site arquivado.” | Restaura a versão preservada após novo plano e autorização. |
 
 A frase de desativação não pode atingir o vencedor: o alvo fica definido previamente e o código recusa IDs iguais, cadastro alterado, hashes divergentes, ausência de backup e mudança nos dados do vencedor.
 

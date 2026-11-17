@@ -131,7 +131,7 @@ Sem correspondência única, o evento fica `PENDENTE_VINCULACAO`.
 | Cartões do painel (imagem aprovada mostra 6; V3 define 7) | **Os 7 da V3** | V3 é o contrato dos indicadores |
 | Nome por extenso da GEDIV (a imagem do painel traz "Desenvolvimento do Servidor") | "Gerência Executiva de Concessão de Direitos e Vantagens" | É a expressão das próprias resenhas |
 | Página extra pedida no documento oficial | Aba **"Outras publicações"**: Republicado por incorreção, Portaria, Ato Normativo, Alterações na Lei | Documento oficial |
-| Reaproveitar ou reescrever | Base Claude mantida; do Gemini e do V2 aproveitaram-se regras e formatos, não o código | Instrução desta entrega; DEC-010 |
+| Reaproveitar ou reescrever | Base GPT mantida; do Gemini e do V2 aproveitaram-se regras e formatos, não o código | Instrução desta entrega; DEC-010 |
 
 ## 7. Pendências de regra (dependem da GEDIV)
 
