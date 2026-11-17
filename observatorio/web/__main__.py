@@ -23,13 +23,19 @@ def main(argv=None) -> int:
     ap.add_argument("--dados", default="dados")
     ap.add_argument("--endereco", default="127.0.0.1")
     ap.add_argument("--porta", type=int, default=8000)
+    ap.add_argument("--origem-admin", action="append", default=[],
+                    help="endereço de origem do painel de administração autorizado a chamar a API (ex.: "
+                         "https://gedivseadpb-boop.github.io); repita para mais de um. Também: GEDIV_ORIGENS_ADMIN")
     a = ap.parse_args(argv)
+    origens = a.origem_admin + [o.strip() for o in os.environ.get("GEDIV_ORIGENS_ADMIN", "").split(",") if o.strip()]
     token = os.environ.get("GEDIV_TOKEN_GERENCIA", "")
     gerado = not token
     if gerado:
         token = secrets.token_urlsafe(24)
-    servidor = criar_servidor(a.dados, token, a.endereco, a.porta)
+    servidor = criar_servidor(a.dados, token, a.endereco, a.porta, origens)
     print(f"{NOME} — http://{a.endereco}:{servidor.server_address[1]}", flush=True)
+    if origens:
+        print("Painel de administração autorizado em: " + ", ".join(origens), flush=True)
     if gerado:
         print(f"Credencial da gerência (válida só nesta execução): {token}", flush=True)
     else:

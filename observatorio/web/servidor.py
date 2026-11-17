@@ -6,9 +6,15 @@ Perfis:
 - gerência (credencial no cabeçalho `Authorization: Bearer ...`): linhas individualizadas, fila de
   pendências, revisão, exportações e PDFs do acervo.
 
-A autorização é verificada no servidor em todas as rotas. A credencial vem da variável de ambiente
-GEDIV_TOKEN_GERENCIA; se ela não existir, uma credencial aleatória é gerada a cada inicialização e
-mostrada apenas no terminal. O servidor escuta em 127.0.0.1 por padrão.
+A autorização é verificada no servidor em todas as rotas. Duas formas de credencial da gerência:
+- conta individual (usuário e senha, `observatorio.web.contas`): POST /api/login devolve um token de sessão;
+  quem conferir, corrigir ou rejeitar fica registrado pelo NOME DA CONTA, não por um nome digitado;
+- credencial técnica única (variável GEDIV_TOKEN_GERENCIA), mantida por compatibilidade.
+O servidor escuta em 127.0.0.1 por padrão.
+
+Painel de administração em outro endereço (por exemplo, a página estática /admin-painel no GitHub Pages): as
+origens autorizadas são informadas em `origens_admin`; só elas recebem os cabeçalhos CORS. A página não contém
+dados: tudo vem desta API, depois do login.
 """
 from __future__ import annotations
 
@@ -22,6 +28,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .. import NOME, __version__
+from .contas import AcessoNegado, Contas
 from ..gerencias.gediv import catalogo
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
@@ -43,8 +50,10 @@ class Erro(Exception):
         self.status, self.mensagem = status, mensagem
 
 
-def criar_manipulador(pasta_dados: Path, token_gerencia: str):
+def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
     caminho_banco, acervo = pasta_dados / "observatorio.sqlite3", Acervo(pasta_dados / "acervo")
+    contas = Contas(pasta_dados / "contas.sqlite3")
+    origens = frozenset(o.rstrip("/") for o in origens_admin if o)
 
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "PainelGEDIV"
@@ -54,11 +63,32 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
             pass
 
         # --- utilidades -------------------------------------------------
-        def _perfil(self) -> str:
+        def _token(self) -> str:
             cabecalho = self.headers.get("Authorization", "")
-            if cabecalho.startswith("Bearer ") and hmac.compare_digest(cabecalho[7:].strip().encode(), token_gerencia.encode()):
+            return cabecalho[7:].strip() if cabecalho.startswith("Bearer ") else ""
+
+        def _conta(self) -> dict | None:
+            """Sessão de conta individual válida, ou None. Calculada uma vez por pedido."""
+            if not hasattr(self, "_conta_cache"):
+                token = self._token()
+                self._conta_cache = contas.sessao(token) if token else None
+            return self._conta_cache
+
+        def _perfil(self) -> str:
+            token = self._token()
+            if token and hmac.compare_digest(token.encode(), token_gerencia.encode()):
+                return indicadores.GERENCIA_PERFIL
+            if token and self._conta():
                 return indicadores.GERENCIA_PERFIL
             return indicadores.PUBLICO
+
+        def _ator(self) -> str:
+            conta = self._conta()
+            return f"{conta['nome']} ({conta['usuario']})" if conta else "gerencia (credencial)"
+
+        def _origem_permitida(self) -> str | None:
+            origem = (self.headers.get("Origin") or "").rstrip("/")
+            return origem if origem and origem in origens else None
 
         def _exigir_gerencia(self) -> None:
             if "Authorization" not in self.headers:
@@ -70,7 +100,12 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
             self.send_response(status)
             self.send_header("Content-Type", tipo)
             self.send_header("Content-Length", str(len(corpo)))
-            for nome, valor in {**SEGURANCA, **(extras or {})}.items():
+            cors = {}
+            origem = self._origem_permitida()
+            if origem and urlsplit(self.path).path.startswith("/api/"):
+                cors = {"Access-Control-Allow-Origin": origem, "Vary": "Origin",
+                        "Access-Control-Expose-Headers": "Content-Disposition"}
+            for nome, valor in {**SEGURANCA, **cors, **(extras or {})}.items():
                 self.send_header(nome, valor)
             self.end_headers()
             if self.command != "HEAD":
@@ -81,6 +116,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                          {"Cache-Control": "no-store"})
 
         def _atender(self, acao) -> None:
+            self.__dict__.pop("_conta_cache", None)          # a sessão é verificada de novo a cada pedido
             banco = None
             try:
                 banco = Banco(caminho_banco)
@@ -106,6 +142,16 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
         def do_POST(self):
             self._atender(self._post)
 
+        def do_OPTIONS(self):
+            # Pré-verificação CORS: só para a API e só para origens autorizadas do painel de administração.
+            origem = self._origem_permitida()
+            if not origem or not urlsplit(self.path).path.startswith("/api/"):
+                return self._enviar(403, b"", "text/plain; charset=utf-8")
+            self._enviar(204, b"", "text/plain; charset=utf-8", {
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                "Access-Control-Max-Age": "600"})
+
         def _get(self, banco: Banco) -> None:
             url = urlsplit(self.path)
             rota = url.path
@@ -118,6 +164,11 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
                                    "cobertura": indicadores.cobertura(banco)})
+            if rota == "/api/sessao":
+                conta = self._conta()
+                if not conta:
+                    raise Erro(401, "sessão inexistente ou expirada")
+                return self._json(conta)
             if rota == "/api/catalogo":
                 return self._json(catalogo.como_dicionario())
             if rota == "/api/painel":
@@ -129,7 +180,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                 projecao = indicadores.painel(banco, consulta, perfil)
                 nome = f"painel-gediv-{projecao['meta']['escopo']}-{date.today().isoformat()}"
                 with banco.con:
-                    banco.auditar("gerencia (credencial)", "EXPORTAR", "painel", consulta.get("formato", "xlsx"), None,
+                    banco.auditar(self._ator(), "EXPORTAR", "painel", consulta.get("formato", "xlsx"), None,
                                   {"filtros": projecao["meta"]["filtros"], "linhas": len(projecao["linhas"])}, None)
                 if consulta.get("formato") == "csv":
                     return self._enviar(200, exportacao.csv(exportacao.linhas_decisoes(projecao)), "text/csv; charset=utf-8",
@@ -173,13 +224,13 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                 return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})
             raise Erro(404, "rota inexistente")
 
-        def _post(self, banco: Banco) -> None:
-            if urlsplit(self.path).path != "/api/revisao":
-                raise Erro(404, "rota inexistente")
-            self._exigir_gerencia()
+        def _corpo_json(self) -> dict:
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 raise Erro(415, "envie JSON")
-            tamanho = int(self.headers.get("Content-Length") or 0)
+            try:
+                tamanho = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                raise Erro(400, "tamanho inválido")
             if not 0 < tamanho <= MAX_CORPO:
                 raise Erro(413, "corpo ausente ou grande demais")
             try:
@@ -187,7 +238,32 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
                 assert isinstance(p, dict)
             except Exception:
                 raise Erro(400, "JSON inválido")
-            comuns = (str(p.get("decisao", "")), str(p.get("responsavel", "")), str(p.get("justificativa", "")))
+            return p
+
+        def _post(self, banco: Banco) -> None:
+            rota = urlsplit(self.path).path
+            if rota == "/api/login":
+                p = self._corpo_json()
+                try:
+                    sessao = contas.entrar(str(p.get("usuario", ""))[:80], str(p.get("senha", ""))[:200])
+                except AcessoNegado:
+                    raise Erro(401, "usuário ou senha inválidos, ou acesso bloqueado temporariamente")
+                with banco.con:
+                    banco.auditar(f"{sessao['nome']} ({sessao['usuario']})", "ENTRAR", "sessao", sessao["usuario"], None, None, None)
+                return self._json(sessao)
+            if rota == "/api/logout":
+                if self._conta():
+                    with banco.con:
+                        banco.auditar(self._ator(), "SAIR", "sessao", self._conta()["usuario"], None, None, None)
+                    contas.sair(self._token())
+                return self._json({"encerrada": True})
+            if rota != "/api/revisao":
+                raise Erro(404, "rota inexistente")
+            self._exigir_gerencia()
+            p = self._corpo_json()
+            # Com conta individual, o responsável é SEMPRE a pessoa logada (o nome enviado pelo navegador é ignorado).
+            responsavel = self._ator() if self._conta() else str(p.get("responsavel", ""))
+            comuns = (str(p.get("decisao", "")), responsavel, str(p.get("justificativa", "")))
             alvo = p.get("alvo")
             if alvo == "ato":
                 r = servico.revisar_ato(banco, str(p.get("id", "")), *comuns, bool(p.get("confirma_fonte")), bool(p.get("confirma_vinculo")))
@@ -230,10 +306,11 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str):
     return Manipulador
 
 
-def criar_servidor(pasta_dados: str | Path, token_gerencia: str, endereco: str = "127.0.0.1", porta: int = 8000) -> ThreadingHTTPServer:
+def criar_servidor(pasta_dados: str | Path, token_gerencia: str, endereco: str = "127.0.0.1", porta: int = 8000,
+                   origens_admin=()) -> ThreadingHTTPServer:
     if len(token_gerencia) < 16:
         raise ValueError("a credencial da gerência precisa de pelo menos 16 caracteres")
     Banco(Path(pasta_dados) / "observatorio.sqlite3").fechar()        # cria ou atualiza o esquema antes de atender
-    servidor = ThreadingHTTPServer((endereco, porta), criar_manipulador(Path(pasta_dados), token_gerencia))
+    servidor = ThreadingHTTPServer((endereco, porta), criar_manipulador(Path(pasta_dados), token_gerencia, origens_admin))
     servidor.daemon_threads = True
     return servidor
