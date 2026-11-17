@@ -1,73 +1,57 @@
 <!doctype html>
 <html lang="pt-BR" data-theme="light">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<meta name="description" content="Painel público GEDIV: indicadores agregados do Diário Oficial da Paraíba, com cobertura e situação de conferência transparentes.">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<meta name="description" content="Indicadores públicos de Progressão Funcional e Tempo de Serviço da GEDIV. Dados reais, cobertura e conferência transparentes.">
 <title>Painel Diário Oficial | GEDIV</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230f5c59'/%3E%3Cpath d='M11 11h18v18H11z' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M16 17h8M16 22h8' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="./estilo.css">
-<script src="./xlsx.js" defer></script>
-<script src="./app.js" defer></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230d4d91'/%3E%3Cpath d='M11 11h18v18H11zM16 17h8M16 22h8' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./estilo.css"><script src="./xlsx.js" defer></script><script src="./pdf.js" defer></script><script src="./modelo.js" defer></script><script src="./app.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
-<aside class="sidebar" aria-label="Navegação principal">
-  <a class="side-brand" href="#conteudo" aria-label="GEDIV, início"><span class="brand-mark" aria-hidden="true">G</span><span><b>GEDIV</b><small>DIÁRIO OFICIAL</small></span></a>
-  <p class="nav-label">EXPLORAR O PAINEL</p>
-  <nav class="main-nav" id="navegacao">
-    <button type="button" class="nav-item active" data-eixo="" aria-current="page"><span aria-hidden="true">▦</span> Visão geral</button>
-    <button type="button" class="nav-item" data-eixo="PROGRESSAO"><span aria-hidden="true">↗</span> Progressão Funcional</button>
-    <button type="button" class="nav-item" data-eixo="TEMPO_SERVICO"><span aria-hidden="true">◷</span> Tempo de Serviço</button>
-    <a class="nav-item" href="#cobertura"><span aria-hidden="true">▤</span> Cobertura documental</a>
-  </nav>
-  <div class="side-note"><span class="side-dot" aria-hidden="true"></span><b>Prévia pública</b><p>Dados reais em conferência.<br>Somente informações agregadas.</p></div>
-  <div class="sidebar-bottom"><span>SECRETARIA DE ESTADO<br>DA ADMINISTRAÇÃO · PB</span><small>Gerência Executiva de Concessão<br>de Direitos e Vantagens</small></div>
+<header class="topbar">
+<a class="brand" href="#geral" aria-label="GEDIV, visão geral"><span class="brand-mark" aria-hidden="true">G</span><span><b>GEDIV</b><small>DIÁRIO OFICIAL · PARAÍBA</small></span></a>
+<span class="topbar-description">Informação para acompanhar seus direitos</span>
+<div class="top-actions"><span class="public-badge">Consulta pública</span><button id="tema" type="button" class="button compact" aria-label="Ativar modo escuro" aria-pressed="false">◐ <span>Tema</span></button></div>
+</header>
+<div class="workspace" id="casca">
+<aside class="sidebar" id="menuLateral" aria-label="Menu e filtros">
+<div class="sidebar-head"><b>Menu e filtros</b><button class="button compact" type="button" id="recolherMenu" aria-label="Recolher menu" aria-controls="menuLateral">« Recolher</button></div>
+<nav id="menuApoio" class="side-nav" aria-label="Áreas de apoio"><a href="#cobertura">▤ Edições e fontes</a><a href="#pendencias">◷ Pendências</a><a href="#gerencial">◇ Área gerencial</a></nav>
+<form id="filtros" autocomplete="off">
+<fieldset><legend>Período de publicação</legend>
+<div class="date-fields"><label>De<input type="date" id="inicio" aria-label="Data inicial" min="2026-01-01"></label><span aria-hidden="true">→</span><label>Até<input type="date" id="fim" aria-label="Data final" min="2026-01-01"></label></div>
+<button type="button" class="text-button calendar-button" id="abrirCalendario">▦ Escolher datas</button>
+<div class="period-shortcuts" aria-label="Períodos rápidos"><button type="button" data-periodo="hoje">Hoje</button><button type="button" data-periodo="mes">Este mês</button><button type="button" data-periodo="ano">Este ano</button><button type="button" data-periodo="tudo">Tudo</button></div>
+<p class="field-note">Os agregados são mensais. Escolha meses completos para consultar os indicadores.</p></fieldset>
+<fieldset><legend>Eixo de consulta</legend><label class="sr-only" for="eixo">Eixo</label><select id="eixo"><option value="">Os dois eixos</option><option value="PROGRESSAO">Progressão Funcional</option><option value="TEMPO_SERVICO">Tempo de Serviço</option></select>
+<label for="modalidade">Modalidade de progressão</label><select id="modalidade"><option value="">Horizontal e Vertical</option><option value="HORIZONTAL">Horizontal</option><option value="VERTICAL">Vertical</option></select>
+<label for="grupo">Grupo ocupacional (PCCR)</label><select id="grupo"><option value="">Todos os grupos</option></select><p class="field-note">Plano de Cargos, Carreiras e Remuneração. Códigos sem confirmação ficam separados.</p></fieldset>
+<fieldset><legend>Serviços · Tempo de Serviço</legend><div id="listaServicos" class="check-list"></div><p class="field-note">Escolha um ou mais dos sete serviços.</p></fieldset>
+<fieldset><legend>Conferência dos dados</legend><label class="sr-only" for="situacao">Situação de conferência</label><select id="situacao"><option value="">Todos os dados disponíveis</option><option value="conferido">Conferidos</option><option value="provisorio">Provisórios</option><option value="pendente">Pendentes / não verificados</option></select></fieldset>
+<details class="advanced"><summary>Filtros avançados</summary>
+<label for="resultado">Resultado da decisão</label><select id="resultado"><option value="">Todos os resultados</option><option value="DEFERIDO">Deferido</option><option value="INDEFERIDO">Indeferido</option><option value="OUTROS">Outros / não informado</option></select>
+<label for="tipo">Tipo da publicação</label><select id="tipo"><option value="">Todos os tipos</option><option value="ORIGINAL">Original</option><option value="REPUBLICACAO">Republicação / refeito</option><option value="RETIFICACAO">Retificação</option><option value="SEM_EFEITO">Tornado sem efeito</option><option value="OUTRAS">Outras publicações</option></select>
+<label for="coberturaFiltro">Situação da cobertura</label><select id="coberturaFiltro"><option value="">Toda a cobertura disponível</option><option value="verificada">Edição verificada</option><option value="parcial">Parcial</option><option value="pendente">Pendente</option><option value="nao_verificada">Não verificada</option><option value="quarentena">Quarentena</option><option value="sem_edicao">Ausência confirmada</option></select>
+<p class="field-note">Resultados, tipos e cobertura detalhada só podem ser contados quando constam da projeção autorizada.</p></details>
+<div class="filter-actions"><button class="button primary" type="submit">⌕ Aplicar filtros</button><button class="text-button" id="limpar" type="button">Limpar filtros</button><p id="filtrosPendentes" class="field-note" role="status"></p></div>
+</form><p class="sidebar-note">Dados públicos agregados.<br>A consulta individual exige acesso gerencial seguro.</p>
 </aside>
-<div class="app-shell">
-  <header class="topbar">
-    <div class="breadcrumb"><span>Transparência e informação</span><span aria-hidden="true">/</span><b>Painel GEDIV</b></div>
-    <div class="top-actions"><span class="public-badge"><span aria-hidden="true">●</span> Consulta pública</span><button id="tema" type="button" class="icon-button" aria-label="Ativar modo escuro" title="Alternar tema"><span aria-hidden="true">◐</span></button></div>
-  </header>
-  <main id="conteudo" tabindex="-1">
-    <section class="page-heading">
-      <div><p class="eyebrow">GOVERNO DA PARAÍBA · SEAD</p><h1>Painel Diário Oficial <span>| GEDIV</span></h1><p class="page-subtitle">Progressão Funcional e Tempo de Serviço, em uma visão clara.</p></div>
-      <div class="updated"><span class="live-dot" aria-hidden="true"></span><div><span>Projeção atualizada em</span><b id="atualizacao">Carregando…</b></div></div>
-    </section>
-    <div id="estado" class="state-notice" role="status" aria-live="polite"><span class="notice-icon" aria-hidden="true">i</span><div><b>Carregando os dados disponíveis</b><p>Os indicadores serão apresentados após a leitura da projeção pública.</p></div></div>
-    <div id="erro" class="error-state" role="alert" hidden><h2>Os dados não puderam ser carregados</h2><p id="mensagemErro"></p><button type="button" class="button primary" id="tentarNovamente">Tentar novamente</button></div>
-    <section class="filters-panel" aria-label="Filtros dos indicadores">
-      <div class="section-top"><h2><span aria-hidden="true">☷</span> Explore os dados</h2><button type="button" class="text-button" id="limpar">Limpar filtros <span aria-hidden="true">↺</span></button></div>
-      <form id="filtros" class="filters" autocomplete="off">
-        <label>De<input type="month" id="inicio" aria-label="Mês inicial"></label>
-        <label>Até<input type="month" id="fim" aria-label="Mês final"></label>
-        <label>Eixo<select id="eixo"><option value="">Os dois eixos</option><option value="PROGRESSAO">Progressão Funcional</option><option value="TEMPO_SERVICO">Tempo de Serviço</option></select></label>
-        <label>Modalidade<select id="modalidade"><option value="">Horizontal e vertical</option><option value="HORIZONTAL">Horizontal</option><option value="VERTICAL">Vertical</option></select></label>
-        <label>Grupo PCCR<select id="grupo"><option value="">Todos os grupos</option></select></label>
-        <label>Assunto TS<select id="subcategoria"><option value="">Todos os assuntos</option></select></label>
-        <label>Situação<select id="situacao"><option value="">Todos os dados disponíveis</option><option value="provisorio">Provisórios</option><option value="conferido">Conferidos</option></select></label>
-      </form>
-      <div class="filter-bottom"><span id="filtrosAtivos">Visão geral da base disponível</span><span><span class="tiny-lock" aria-hidden="true">◇</span> Faixas de contagem para preservar a privacidade</span></div>
-    </section>
-    <div class="indicator-heading"><h2 id="tituloIndicadores">Visão geral da base</h2><span id="escopoIndicadores">Totais disponíveis, apresentados em faixas</span></div>
-    <section id="indicadores" class="cards" aria-label="Indicadores principais" aria-live="polite">
-      <article class="metric-card"><span>Decisões</span><strong>—</strong><small>Aguardando dados</small></article>
-      <article class="metric-card"><span>Atos</span><strong>—</strong><small>Aguardando dados</small></article>
-      <article class="metric-card"><span>Decisões conferidas</span><strong>—</strong><small>Aguardando dados</small></article>
-      <article class="metric-card"><span>Decisões provisórias</span><strong>—</strong><small>Aguardando dados</small></article>
-    </section>
-    <div class="section-title"><div><p class="eyebrow">COMPORTAMENTO NO PERÍODO</p><h2>Explore os dois eixos</h2></div><span class="subtle-pill">Recorte público parcial</span></div>
-    <p class="data-note">Os gráficos e a tabela usam apenas agregados publicáveis. Contagens pequenas são preservadas; por isso, este recorte pode não somar o total da base. Ausência de agregado não confirma ausência de publicação.</p>
-    <section class="chart-panel evolution"><div class="panel-heading"><div><h3>Evolução por período</h3><p>Decisões por mês de publicação, em faixas</p></div><div class="chart-legend"><span><i class="legend-vertical"></i>Vertical</span><span><i class="legend-horizontal"></i>Horizontal</span><span><i class="legend-tempo"></i>Tempo de Serviço</span></div></div><div id="evolucao" class="evolution-chart"><p class="empty-state">Aguardando dados.</p></div></section>
-    <div class="chart-grid">
-      <section class="chart-panel" id="painelGrupos"><div class="panel-heading"><div><h3>Progressão por grupo PCCR</h3><p>Horizontal e vertical · clique no grupo para filtrar</p></div><span class="panel-symbol" aria-hidden="true">↗</span></div><div id="grupos" class="bars"><p class="empty-state">Aguardando dados.</p></div></section>
-      <section class="chart-panel" id="painelAssuntos"><div class="panel-heading"><div><h3>Tempo de Serviço por assunto</h3><p>TS-01 a TS-07 · clique no assunto para filtrar</p></div><span class="panel-symbol orange" aria-hidden="true">◷</span></div><div id="assuntos" class="bars"><p class="empty-state">Aguardando dados.</p></div></section>
-    </div>
-    <section class="chart-panel records"><div class="panel-heading"><div><h3>Agregados disponíveis no recorte</h3><p id="quantidadeTabela">Somente contagens públicas; sem registros individuais</p></div><div class="export-actions"><button type="button" class="button" id="exportarCsv" disabled><span aria-hidden="true">↓</span> Exportar CSV</button><button type="button" class="button" id="exportarXlsx" disabled><span aria-hidden="true">↓</span> Excel</button><button type="button" class="button" id="exportarPdf" disabled><span aria-hidden="true">▧</span> PDF / imprimir</button></div></div><div class="table-scroll"><table><caption class="sr-only">Contagens em faixas por mês, eixo e assunto</caption><thead><tr><th>Mês</th><th>Eixo / modalidade</th><th>Grupo ou assunto</th><th>Situação</th><th>Atos</th><th>Decisões</th></tr></thead><tbody id="tabela"><tr><td colspan="6" class="empty-state">Aguardando dados.</td></tr></tbody></table></div><p class="table-footnote">CSV, Excel e PDF mantêm a mesma proteção e o mesmo recorte exibido na tela. Nenhum dado individual é incluído.</p></section>
-    <section class="coverage-panel" id="cobertura" aria-labelledby="tituloCobertura"><div class="coverage-intro"><p class="eyebrow">TRANSPARÊNCIA DA COBERTURA</p><h2 id="tituloCobertura">O que esta base já alcança</h2><p>Leitura documental, pertinência e conferência de decisões são etapas diferentes.</p></div><div class="coverage-stats" id="coberturaIndicadores"><p class="empty-state">Aguardando dados.</p></div><div class="coverage-notes" id="coberturaNotas"></div></section>
-    <footer><img src="./logo.png" width="157" height="49" alt="Governo da Paraíba"><div><b>Painel Diário Oficial | GEDIV</b><p>Fonte: Diário Oficial do Estado da Paraíba · Projeção pública de dados agregados.</p><p>Prévia experimental. Não substitui a publicação oficial nem a conferência administrativa.</p></div><a href="#conteudo">Voltar ao início ↑</a></footer>
-  </main>
-</div>
-</body>
-</html>
+<main id="conteudo" tabindex="-1">
+<div class="page-heading"><div><p class="eyebrow">SECRETARIA DE ESTADO DA ADMINISTRAÇÃO</p><h1>Painel Diário Oficial <span>| GEDIV</span></h1><p>Progressão Funcional e Tempo de Serviço, com informação e transparência.</p></div><div class="updated"><span class="live-dot" aria-hidden="true"></span><div><span>Projeção disponível</span><b id="atualizacao">Carregando…</b></div></div></div>
+<div class="mobile-toolbar"><button id="abrirMenu" class="button" type="button" aria-expanded="true" aria-controls="menuLateral">☷ Menu e filtros</button><span id="contextoCurto">Visão geral</span></div>
+<nav id="abas" class="tabs" aria-label="Áreas do painel"><a href="#geral" aria-current="page">Visão geral</a><a href="#progressao">Progressão</a><a href="#tempo">Tempo de Serviço</a><a href="#dia">Publicações do dia</a><a href="#historico">Histórico</a><a href="#alteracoes">Alterações / Refeitos</a><a href="#outras">Outras publicações</a></nav>
+<div class="actionbar"><div><span class="status-dot" aria-hidden="true"></span><b id="situacaoResumo">Carregando a projeção</b><span id="versaoResumo"></span></div><div class="export-actions"><button class="button" id="atualizar" type="button" title="Reler a projeção pública disponível; não inicia coleta">↻ Atualizar dados</button><button class="button" id="exportarXlsx" type="button" disabled>↓ Excel</button><button class="button" id="exportarCsv" type="button" disabled>↓ CSV</button><button class="button" id="exportarPdf" type="button" disabled>↓ PDF</button><button class="button" id="imprimir" type="button" disabled>▧ Imprimir</button></div></div>
+<div id="estado" class="notice" role="status"><span aria-hidden="true">i</span><div><b>Carregando os dados disponíveis</b><p>Aguarde a leitura da projeção pública.</p></div></div>
+<div id="erro" class="notice error" role="alert" hidden><div><h2>Os dados não puderam ser carregados</h2><p id="mensagemErro"></p><button class="button" id="tentarNovamente" type="button">Tentar novamente</button></div></div>
+<div class="active-filters"><div><b>Consulta atual</b><p id="filtrosAtivos">Visão geral da base disponível</p></div><button class="text-button" id="sobreDados" type="button">Entenda os dados e as contagens</button></div>
+<div id="restricaoRecorte" class="notice warning" role="status" hidden></div>
+<section class="cards" id="indicadores" aria-label="Sete indicadores principais" aria-live="polite"></section>
+<section id="pagina" aria-labelledby="tituloPagina" aria-busy="true"><h2 id="tituloPagina">Visão geral</h2><p class="empty-state">Aguardando dados.</p></section>
+<footer><img src="./logo.png" width="157" height="49" alt="Governo da Paraíba"><div><b>Painel Diário Oficial | GEDIV</b><p>Fonte: Diário Oficial do Estado da Paraíba · Prévia experimental.</p><p>A consulta não substitui a publicação oficial nem a conferência administrativa.</p></div><a href="#geral">Voltar à visão geral ↑</a></footer>
+</main></div>
+<div class="menu-backdrop" id="fundoMenu" hidden></div>
+<dialog id="detalhe" aria-labelledby="tituloDetalhe"><div class="dialog-head"><div><p class="eyebrow">CONSULTA PÚBLICA</p><h2 id="tituloDetalhe">Detalhes da seleção</h2></div><button class="button" type="button" id="fecharDetalhe">Fechar ✕</button></div><div id="corpoDetalhe"></div></dialog>
+<div id="anuncio" class="sr-only" role="status" aria-live="polite"></div><div id="toast" class="toast" role="status" hidden></div>
+<section id="impressao" aria-label="Relatório para impressão" hidden></section>
+</body></html>

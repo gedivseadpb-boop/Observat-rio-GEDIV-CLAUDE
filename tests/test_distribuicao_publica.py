@@ -43,3 +43,17 @@ class TestePacotePublico(unittest.TestCase):
                 'atos':{'valor':None,'minimo':0,'maximo':4,'rotulo':'0–4','protegido':True},
                 'decisoes':{'valor':None,'minimo':10,'maximo':14,'rotulo':'10–14','protegido':True}})
         m.validar_snapshot(dados)
+
+    def test_recusa_duplicatas_e_dimensoes_cruzadas(self):
+        dados = projetar([])
+        celula = {'periodo': '2026-10', 'eixo': 'PROGRESSAO', 'modalidade': 'HORIZONTAL',
+                  'grupo': 'MAG', 'subcategoria': None, 'situacao': 'provisorio',
+                  'atos': {'valor': None, 'minimo': 0, 'maximo': 4, 'rotulo': '0–4', 'protegido': True},
+                  'decisoes': {'valor': None, 'minimo': 5, 'maximo': 9, 'rotulo': '5–9', 'protegido': True}}
+        dados['celulas'] = [celula, copy.deepcopy(celula)]
+        with self.assertRaises(ValueError):
+            m.validar_snapshot(dados)
+        dados['celulas'] = [celula]
+        celula['subcategoria'] = 'TS-01'
+        with self.assertRaises(ValueError):
+            m.validar_snapshot(dados)

@@ -1,0 +1,11 @@
+{
+  "name": "gediv-painel-publico",
+  "private": true,
+  "description": "Verificação da interface pública estática GEDIV; nenhuma dependência no navegador",
+  "scripts": {
+    "test": "node --test tests/test_exportacao_publica.cjs tests/test_consulta_publica.cjs tests/test_interface_publica.cjs tests/test_pdf_publico.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

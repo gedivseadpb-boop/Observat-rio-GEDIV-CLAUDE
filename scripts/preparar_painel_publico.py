@@ -14,7 +14,7 @@ import sys
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
-ASSETS = ("index.html", "app.js", "estilo.css", "logo.png", "xlsx.js")
+ASSETS = ("index.html", "app.js", "modelo.js", "estilo.css", "logo.png", "xlsx.js", "pdf.js")
 
 
 def preparar(saida: Path, bancos: list[Path] | None = None, projecao: Path | None = None, cobertura: Path | None = None) -> dict:
@@ -105,6 +105,7 @@ def validar_snapshot(dados: dict) -> None:
             raise ValueError("Resumo de eixo fora do contrato público.")
         for m in resumo.values():
             metrica(m)
+    chaves = set()
     for celula in dados.get("celulas", []):
         if set(celula) != {"periodo", "eixo", "modalidade", "grupo", "subcategoria", "situacao", "atos", "decisoes"}:
             raise ValueError("Célula contém campos fora do contrato público.")
@@ -118,6 +119,15 @@ def validar_snapshot(dados: dict) -> None:
             raise ValueError("Assunto não oficial.")
         if celula["modalidade"] not in {None, "HORIZONTAL", "VERTICAL"}:
             raise ValueError("Modalidade não permitida.")
+        if celula["eixo"] == "PROGRESSAO":
+            if celula["subcategoria"] is not None:
+                raise ValueError("Progressão não admite serviço TS.")
+        elif celula["modalidade"] is not None or celula["grupo"] is not None:
+            raise ValueError("Tempo de Serviço não admite modalidade ou grupo de Progressão.")
+        chave = tuple(celula[k] for k in ("periodo", "eixo", "modalidade", "grupo", "subcategoria", "situacao"))
+        if chave in chaves:
+            raise ValueError("Célula pública duplicada: somas e denominadores seriam incorretos.")
+        chaves.add(chave)
         metrica(celula["atos"])
         metrica(celula["decisoes"])
         decisoes = celula.get("decisoes", {})
