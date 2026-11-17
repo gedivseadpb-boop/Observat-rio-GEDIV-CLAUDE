@@ -14,12 +14,12 @@ Validação: 28 testes Python de privacidade/publicação/distribuição; testes
 
 Publicação prevista: apenas avanço normal da branch `gh-pages` do repositório `gediv-painel-redesign-preview`, cuja configuração Pages já usa essa branch. Nenhum merge, force-push, alteração de main ou da hospedagem oficial. Restauração possível a partir do commit anterior, preservando o histórico por um novo commit. Não houve alteração da Conferência Privada, do seu acesso ou de qualquer serviço pago.
 
-## Bloqueio da publicação
+## Publicação realizada e verificada no HTTPS
 
-O commit local do pacote é `2a71073dd7a60cdee4bf1684c634008ae0f80bb1`. Tanto o push Git quanto a operação GitHub de criação de árvore foram recusados com HTTP403 (`Resource not accessible by integration`). Nenhuma referência remota foi atualizada. A prévia ainda serve `cae5b18ede3af64c10af3b76a8bbdece08e8f62f`; os testes HTTPS da versão nova permanecem pendentes até haver conexão com gravação. A responsável já autorizou a publicação exclusivamente na homologação; não é necessária nova autorização de design ou publicação.
+A responsável incluiu o repositório da prévia na instalação GitHub. Publicado exatamente o commit `2a71073dd7a60cdee4bf1684c634008ae0f80bb1` por avanço normal de `gh-pages`, sem alterações de código. Build Pages concluído (`built`). Endereço: https://gedivseadpb-boop.github.io/gediv-painel-redesign-preview/#geral . Os onze arquivos HTTPS retornam HTTP200 e hashes idênticos ao manifesto aprovado.
 
-A comparação final confirmou os oito arquivos públicos e refs main/gh-pages do painel oficial idênticos ao início do trabalho. Não houve acesso à Conferência Privada.
+Verificados no Chrome gerenciado com JavaScript ativo e TLS válido: identificação H1; dados canônicos carregados; calendário com aplicação/cancelamento; data diária sem total mensal; filtro GAJ25–29; indicadores coerentes; clique direto na legenda Vertical; clique em barra mensal; paginação, busca e detalhe de agregados; sete serviços TS; downloads CSV/XLSX/PDF/PNG. Os arquivos CSV, Excel e PDF exportados contêm o filtro GAJ e a faixa25–29; assinaturas dos quatro formatos válidas.
 
-## Causa exata do HTTP403 verificada
+A suíte headless HTTPS encontrou trust store próprio sem a CA atual do ambiente; não houve bypass nem alteração de certificados. A rodada online foi feita no Chrome gerenciado. Os21 testes automatizados anteriores continuam classificados como locais, incluindo320/390/768/1024px. Emulação DevTools não foi usada após o navegador informar bloqueio pela organização.
 
-Conta autenticada: `gedivseadpb-boop`. Instalação `chatgpt-codex-connector` ID167237847: `contents: write`, seleção de repositórios `selected`, não suspensa. `GET /user/installations/167237847/repositories` retornou exatamente um repositório: o principal autorizado; a homologação está ausente. A branch gh-pages da homologação não é protegida, o repositório não está arquivado nem desabilitado. É necessário a responsável incluir `gediv-painel-redesign-preview` na seleção da instalação existente. Não falta permissão global Contents:write e não se trata de conta incorreta. Nenhum controle de acesso foi alterado pelo agente.
+A comparação final comprovou os oito arquivos públicos e refs main/gh-pages do painel oficial inalterados. A main da prévia continua em `cae5b18ede3af64c10af3b76a8bbdece08e8f62f`. Não houve interação com a Conferência Privada. A publicação de homologação não constitui aprovação do design definitivo.
