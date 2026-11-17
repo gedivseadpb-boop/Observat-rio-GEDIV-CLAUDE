@@ -116,6 +116,15 @@ class TestePreparacaoPages(unittest.TestCase):
             pages.preparar(self.saida)
         self.assertFalse(self.saida.exists())
 
+    def test_manifesto_nao_pode_afirmar_cobertura_diferente_do_json(self):
+        pages.preparar(self.saida)
+        arquivo = self.saida / pages.MANIFESTO
+        manifesto = json.loads(arquivo.read_text(encoding="utf-8"))
+        manifesto["projecao"]["cobertura"]["historico_completo"] = True
+        arquivo.write_text(json.dumps(manifesto), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Metadados"):
+            pages.verificar(self.saida)
+
 
 if __name__ == "__main__":
     unittest.main()

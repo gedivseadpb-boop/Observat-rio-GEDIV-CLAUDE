@@ -75,6 +75,12 @@ def verificar(saida: Path) -> dict:
     if arquivos != manifesto["arquivos"]:
         raise ValueError("A distribuição difere dos hashes aprováveis.")
     validar_recursos(saida / "site")
+    dados = json.loads((saida / "site/dados.json").read_text(encoding="utf-8"))
+    esperado = {"sha256": arquivos["dados.json"]["sha256"],
+                "atualizado_em": dados["atualizado_em"], "cobertura": dados["cobertura"],
+                "versao_regras": dados["versao_regras"]}
+    if manifesto["projecao"] != esperado:
+        raise ValueError("Metadados da projeção diferem do JSON público.")
     if sha((saida / PACOTE).read_bytes()) != manifesto["zip_sha256"]:
         raise ValueError("O ZIP difere do manifesto.")
     with zipfile.ZipFile(saida / PACOTE) as z:

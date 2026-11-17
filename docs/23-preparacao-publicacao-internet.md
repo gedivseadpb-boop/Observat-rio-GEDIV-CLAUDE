@@ -55,8 +55,9 @@ Geração comprovada no arquivo: **16/11/2026 às 18:40:56, horário de Brasíli
 
 São **19 edições e 884 páginas**, com extremos documentais de **01/10 a 14/11/2026**;
 histórico parcial desde 01/01/2026. Os extremos não comprovam cobertura de todos
-os dias. A projeção informa cinco ausências técnicas de edição e uma inconclusiva;
-isso não permite calcular o número total de edições pendentes no calendário.
+os dias. A projeção informa cinco edições com ausência técnica proposta de atos
+pertinentes e uma inconclusiva; isso não confirma ausência de edição, homologação
+humana nem permite calcular o número total de edições pendentes no calendário.
 Não há matriz por edição nem relação pública de PDFs processados.
 
 Existem seis células mensais publicáveis: decisões provisórias em faixas, resumo
@@ -88,6 +89,37 @@ Os testes visuais e funcionais da interface e exportações já constam em
 testes se concentram em integridade, privacidade e subcaminho da hospedagem.
 O teste de falha 503 e recuperação anterior continua aplicável: o código da
 interface e o JSON não foram modificados nesta preparação.
+
+### Resultado dos testes desta preparação
+
+O pacote foi aberto em Chromium em
+`http://127.0.0.1:8767/Observat-rio-GEDIV-CLAUDE/#historico`, com JavaScript ativo.
+A abertura direta e a recarga preservaram Histórico, indicadores e cobertura real.
+Retorno à Visão geral mostrou os gráficos; aplicar GAJ mostrou uma linha, quatro
+SVGs e a faixa 25–29. O CSV baixado pelo botão real conservou GAJ e 25–29, sem
+linhas de outros grupos. Limpar restaurou 210–214. A área gerencial exibiu
+`NÃO HABILITADA (SEGURANÇA)`.
+
+Os sete recursos HTTP da página (CSS, quatro scripts, logo e JSON) retornaram 200
+no subdiretório, com bytes iguais aos do pacote; o JSON mantém o hash acima.
+JS/CSS conservaram suas versões por conteúdo. Largura da janela: 1180 pixels CSS;
+documento: 1165, sem rolagem horizontal da página. A execução anterior em 388 pixels
+CSS, tema, falha/recuperação e quatro exportações permanece documentada no relatório 22.
+Esta etapa acrescenta a prova de carregamento e exportação no subcaminho, sem repetir
+toda a auditoria. Somente Chromium foi usado na verificação visual; Firefox e Safari
+não foram executados nesta sessão.
+
+Os 35 testes Python focados incluem sete novos cenários de origem/branch limpa,
+reprodução do pacote, arquivos extras, adulteração, caminhos relativos, versão de
+cache, contrato privado e metadados de cobertura. O workflow público executa também
+os 23 testes JavaScript existentes no Linux e Windows. O primeiro pacote desta
+preparação passou no [CI público](https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/actions/runs/44110506596).
+A situação do commit final fica registrada na verificação externa da entrega.
+
+Evidências adicionais ficam fora do repositório e do ZIP de publicação:
+`VALIDACAO_SUBCAMINHO.json`, duas capturas e `filtro-GAJ-subdiretorio.csv`.
+O manifesto da entrega final identifica seu SHA de origem. **Nenhum teste local
+comprova a disponibilização ou o comportamento do CDN/HTTPS definitivo.**
 
 ## Execução somente depois da autorização específica
 
