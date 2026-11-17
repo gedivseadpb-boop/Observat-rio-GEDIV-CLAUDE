@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "fonte_oficial": {
+    "id": "projecao-publica-gediv-v1",
+    "url": "https://raw.githubusercontent.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/entrega/painel-completo-referencias/painel-publico/dados.json"
+  },
+  "sites": [
+    {
+      "id": "painel-publico-atual",
+      "nome": "Painel público GEDIV ampliado",
+      "provider": "github_pages",
+      "repo": "gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE",
+      "url": "https://gedivseadpb-boop.github.io/Observat-rio-GEDIV-CLAUDE/",
+      "fonte_id": "projecao-publica-gediv-v1",
+      "arquivos_publicos": [".nojekyll", "index.html", "app.js", "modelo.js", "estilo.css", "logo.png", "xlsx.js", "pdf.js", "dados.json"],
+      "workflows_publicacao": [421500658],
+      "workflows_preservados": [420636693, 413611573, 413611574]
+    }
+  ],
+  "observacao": "Segundo dashboard e vencedor ainda não designados. Não há autorização de desativação. A Conferência Privada está fora deste controle."
+}

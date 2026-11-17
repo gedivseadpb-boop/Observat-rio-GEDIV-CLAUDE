@@ -24,6 +24,9 @@ dados/
 *.sqlite3
 sonda.json
 
+# Backups, planos, autorizações e diário do controle de publicação
+gediv-sites-controle/
+
 # Bases de demonstração e exportações locais
 dados-*/
 *.xlsx

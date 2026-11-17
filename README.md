@@ -92,6 +92,18 @@ O banco (`observatorio.sqlite3`) e os PDFs ficam na pasta `dados/`, que **não**
 - Uma branch por etapa; integração à `main` somente com os testes aprovados.
 - Toda afirmação de "funciona" na documentação indica onde e como foi testada.
 
+## Comparação e arquivamento reversível de sites
+
+O painel público publicado é independente de Sites anteriores e utiliza a projeção pública autorizada.
+O controle reversível para comparação entre dois dashboards está em
+[docs/24-controle-reversivel-sites-gediv.md](docs/24-controle-reversivel-sites-gediv.md).
+Ele não desativa nada por padrão: o segundo site deve ser cadastrado, o vencedor deve ser designado e
+uma autorização específica deve aprovar o plano que preserva e despublica somente o secundário.
+
+```text
+python -m observatorio.sites verificar
+```
+
 ## Documentação
 
 1. [Recuperação e diagnóstico dos projetos anteriores](docs/01-recuperacao-diagnostico.md)
