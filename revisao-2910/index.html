@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><title>Observatório DOE · GEDIV</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="logo.png" alt="Governo da Paraíba"><span class="brand-sep"></span><span class="brand-text"><b>SEAD · GEDIV</b><small>Direitos e Vantagens</small></span></div>
+  <div class="header-title"><h1>Observatório do Diário Oficial</h1><p>Publicações, progressões e tempo de serviço</p></div>
+  <div class="header-right"><span class="top-status"><i></i><span><b>Projeção pública parcial</b><small>Coleta diária não conectada</small></span></span><button class="icon-btn light" id="about" aria-label="Informações sobre a base" title="Informações sobre a base">?</button></div>
+</header>
+<div class="shell" id="shell">
+<aside class="sidebar" id="sidebar" aria-label="Filtros da visão">
+  <div class="side-head"><div><span class="filter-icon">⌁</span><strong>Filtros</strong></div><button class="icon-btn" id="collapse" aria-label="Recolher filtros" title="Recolher filtros">‹‹</button></div>
+  <button class="clear-link" id="clear">Limpar filtros</button>
+  <div class="side-section"><label>Período de publicação</label><div class="dates"><input type="date" id="from" aria-label="Data inicial"><input type="date" id="to" aria-label="Data final"></div></div>
+  <div class="side-section"><label for="axis">Eixo</label><select id="axis"><option value="">Todos os eixos</option><option value="progressao">Progressão Funcional</option><option value="tempo">Tempo de Serviço</option></select></div>
+  <div class="side-section"><label for="modality">Modalidade da Progressão</label><select id="modality"><option value="">Horizontal e Vertical</option><option>Horizontal</option><option>Vertical</option></select><label for="group" class="sub-label">Grupo ocupacional</label><select id="group"><option value="">Todos os grupos</option></select><small class="field-hint">Catálogo em complementação</small></div>
+  <div class="side-section service-section"><label>Serviços · Tempo de Serviço</label><div class="service-filters" id="serviceFilters"></div></div>
+  <div class="side-section"><label for="merit">Resultado</label><select id="merit"><option value="">Todos</option><option value="deferido">Deferido</option><option value="indeferido">Indeferido</option><option value="outro">Outro</option></select></div>
+  <div class="side-section"><label for="search">Buscar nesta base</label><div class="side-search"><input id="search" placeholder="Mês, grupo ou assunto" autocomplete="off"><span>⌕</span></div><small class="field-hint">Consulta pública de agregados; sem nomes ou processos.</small></div>
+  <button class="side-bottom" id="collapseBottom">‹‹ &nbsp; Recolher menu</button>
+</aside>
+<div class="collapsed-rail"><button id="expand" aria-label="Expandir filtros">››</button><span>FILTROS</span></div>
+<main class="main" id="reportRoot">
+ <div class="toolbar"><nav class="tabs" aria-label="Visões do painel"><button data-view="geral" class="active">Visão geral</button><button data-view="vertical">Progressão Vertical</button><button data-view="horizontal">Progressão Horizontal</button><button data-view="tempo">Tempo de Serviço</button><button data-view="outras">Outros benefícios</button><button data-view="hoje">Publicações do dia</button><button data-view="historico">Histórico</button></nav>
+ <div class="downloads"><button id="downloadToggle" class="download-main" aria-expanded="false">↓ &nbsp; Download da página <span>⌄</span></button><div class="download-menu" id="downloadMenu" hidden><button id="downloadXlsx">▦ &nbsp; Planilha Excel (.xlsx)</button><button id="downloadCsv">▤ &nbsp; Lista filtrada (.csv)</button><button id="downloadPdf">▧ &nbsp; Relatório / salvar PDF</button><button id="downloadPng">▣ &nbsp; Resumo da visão (.png)</button></div></div></div>
+ <div class="heading-row"><div><div class="eyebrow">ACOMPANHAMENTO GERENCIAL <span> / </span> <span id="breadcrumb">VISÃO GERAL</span></div><h2 id="viewTitle">Visão geral das publicações</h2><p id="viewSubtitle">Explore os resultados e consulte cada publicação na fonte.</p></div><div class="updated"><span>Geração da projeção</span><b>Carregando…</b></div></div>
+ <div class="context-row"><button id="backView" class="back-button" disabled>← Voltar</button><div id="activeFilters" class="active-filters" aria-label="Filtros ativos"></div></div>
+ <div class="banner"><div class="banner-symbol">i</div><div><strong>Agregados públicos reais · cobertura parcial</strong><span>Carregando a projeção pública canônica. A coleta diária ainda não foi comprovada.</span></div><button id="coverageOpen">Ver cobertura →</button></div>
+ <section class="kpis" id="kpis" aria-label="Indicadores da visão"></section>
+ <div class="workgrid">
+  <div class="charts">
+   <div class="chart-top">
+    <section class="card"><div class="card-heading"><div><h3>Evolução das publicações</h3><p>Decisões por mês e modalidade</p></div><span class="chart-tag">Período selecionado</span></div><div id="timeline" class="timeline"></div><div class="legend"><span><i class="blue"></i>Vertical</span><span><i class="teal"></i>Horizontal</span><span><i class="orange"></i>Tempo de Serviço</span></div></section>
+    <section class="card"><div class="card-heading"><div><h3 id="axisChartTitle">Publicações por assunto</h3><p id="axisChartSubtitle">Clique na fatia ou na legenda para detalhar</p></div></div><div id="axisChart" class="axis-chart"></div></section>
+   </div>
+   <section class="card"><div class="card-heading"><div><h3>Resultados por área</h3><p>Resultados de mérito ainda não disponíveis na projeção</p></div><span class="chart-tag">Decisões em faixas</span></div><div id="resultsChart" class="results-chart"></div></section>
+   <section class="card"><div class="card-heading"><div><h3>Tempo de Serviço por serviço</h3><p>Os sete serviços permanecem visíveis · clique para filtrar</p></div><span class="chart-tag">Decisões</span></div><div class="service-bars" id="serviceBars"></div><div class="service-note"><b>Outros termos em análise:</b> desaverbação de conversão de licença especial, averbação, contagem e certidão de tempo. O enquadramento depende de validação da GEDIV.</div></section>
+   <div class="chart-bottom">
+    <section class="card"><div class="card-heading"><div><h3>Progressão por grupo</h3><p>Horizontal e Vertical · contagens protegidas em faixas</p></div></div><div id="groupChart" class="group-chart"></div><div class="service-note">Os grupos listados são referências para busca; os números representam agregados mensais protegidos.</div></section>
+    <section class="card"><div class="card-heading"><div><h3>Cobertura de leitura do DOE</h3><p>Cobertura geral da base, sem filtro</p></div></div><div class="coverage"><div class="coverage-number">— <small>edições</small></div><p>Carregando cobertura…</p><div class="coverage-row"><i></i><span>Páginas com registros conferidos</span><b>parcial</b></div><div class="coverage-row"><i class="amber"></i><span>Histórico e suplementos</span><b>pendentes</b></div><div class="coverage-note">Ausência nesta base não comprova ausência de publicação.</div></div></section>
+   </div>
+  </div>
+  <aside class="right-pane"><section class="card explorer"><div class="card-heading"><div><h3>Publicações e processos</h3><p id="resultCount">—</p></div><button class="icon-btn" id="full" title="Ampliar tabela" aria-label="Ampliar tabela">⛶</button></div><div class="switch" role="group" aria-label="Forma de visualização"><button id="byResenha" class="active">Por agregado</button><button id="byProcess">Consulta gerencial</button></div><div class="list-head"><span id="listHeading">RESENHA / ASSUNTO</span><span>QTD.</span></div><div id="records" class="records"></div><div class="list-footer"><button id="prev" aria-label="Página anterior">‹</button><span id="pagination">—</span><button id="next" aria-label="Próxima página">›</button></div></section>
+   <section class="card detail"><div class="card-heading"><div><h3>Detalhes da publicação</h3><p>Evidência e vínculo com a fonte</p></div></div><div id="details" class="detail-body"><div class="empty-small">Selecione uma publicação para ver os detalhes.</div></div></section>
+   <section class="card pending-card"><div><span class="pending-icon">!</span><b>Registros em validação</b><span class="pending-number" id="pendingCount">—</span></div><p>Aguardando a projeção pública das pendências.</p><button id="showPending">Ver pendência →</button></section>
+  </aside>
+ </div>
+ <section id="printReport" class="print-only"></section>
+ <footer>Fonte: Diário Oficial da Paraíba · A União &nbsp;•&nbsp; Não indica a situação atual do processo no SESuite.</footer>
+</main></div>
+<dialog id="dialog"><div class="dialog-head"><div><span class="eyebrow">OBSERVATÓRIO DOE</span><h2 id="dialogTitle">Informações</h2></div><button id="closeDialog" class="icon-btn" aria-label="Fechar">×</button></div><div id="dialogBody"></div><div class="dialog-footer"><button id="closeDialog2">Fechar</button></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+<script src="modelo.js"></script><script src="adapter.js"></script><script src="config.js"></script><script src="export.js"></script><script src="app.js"></script>
+</body></html>
