@@ -13,7 +13,7 @@ fs.mkdirSync(out,{recursive:true});
    const ctx=await browser.newContext({viewport:{width,height:960},locale:'pt-BR',timezoneId:'America/Sao_Paulo',acceptDownloads:true});const p=await ctx.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));p.setDefaultTimeout(8000);
    await p.goto('http://127.0.0.1:4191/');await p.locator('#reportRoot[aria-busy=false]').waitFor();
    assert.equal(await p.locator('[data-card=decisions] .val').innerText(),'210–214');
-   await p.screenshot({path:path.join(out,'geral-'+width+'.png'),fullPage:true});
+   await p.screenshot({path:path.join(out,'inicial-'+width+'.png'),fullPage:true});
    const dims=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,id:e.id,cl:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).filter(e=>e.right>innerWidth+1&&e.width>0).slice(0,15)}));
    console.log('Reflow',JSON.stringify(dims));assert.ok(dims.scroll<=dims.width+1,JSON.stringify(dims));
    if(width<700)await p.locator('#expand').click();
