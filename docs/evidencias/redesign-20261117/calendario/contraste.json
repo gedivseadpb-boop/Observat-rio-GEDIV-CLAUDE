@@ -1,0 +1,405 @@
+{
+  "checks": [
+    {
+      "theme": "light",
+      "selector": "#gedivCalendarioTitulo",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalendarioAjuda",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(75, 95, 117)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 6.577040218787156,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-keyboard",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(75, 95, 117)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 6.577040218787156,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-coverage",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(75, 95, 117)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 6.577040218787156,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-weekdays span",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(75, 95, 117)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 6.577040218787156,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-nav button",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalInicio",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-message",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(234, 240, 246)",
+      "ratio": 13.040671597378731,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-days button.selected",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(25, 91, 159)",
+      "ratio": 6.911510862375489,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-days button.in-range",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(234, 240, 246)",
+      "ratio": 13.040671597378731,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-shortcuts button",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalAplicar",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(25, 91, 159)",
+      "ratio": 6.911510862375489,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalInicio",
+      "state": "control-border",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalInicio",
+      "state": "normal",
+      "kind": "border",
+      "foreground": "rgb(113, 134, 157)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 3.750639452573799,
+      "minimum": 3
+    },
+    {
+      "theme": "light",
+      "selector": ".gediv-cal-days button.selected",
+      "state": "hover",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(16, 71, 127)",
+      "ratio": 9.41793436467326,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalAplicar",
+      "state": "hover",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(16, 71, 127)",
+      "ratio": 9.41793436467326,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalInicio",
+      "state": "focus",
+      "kind": "text",
+      "foreground": "rgb(21, 40, 61)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 14.970198682873674,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "#gedivCalInicio",
+      "state": "focus",
+      "kind": "outline",
+      "foreground": "rgb(23, 106, 189)",
+      "background": "rgb(255, 255, 255)",
+      "ratio": 5.478923183816068,
+      "minimum": 3
+    },
+    {
+      "theme": "light",
+      "selector": "[data-cal-shortcut=\"mes\"]",
+      "state": "selected",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(16, 71, 127)",
+      "ratio": 9.41793436467326,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "selector": "[data-cal-shortcut=\"mes\"]",
+      "state": "selected-hover",
+      "kind": "text",
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(16, 71, 127)",
+      "ratio": 9.41793436467326,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalendarioTitulo",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalendarioAjuda",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(190, 205, 222)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 9.777078187613938,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-keyboard",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(190, 205, 222)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 9.777078187613938,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-coverage",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(190, 205, 222)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 9.777078187613938,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-weekdays span",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(190, 205, 222)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 9.777078187613938,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-nav button",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalInicio",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-message",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(27, 46, 69)",
+      "ratio": 12.696377625567655,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-days button.selected",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(154, 200, 255)",
+      "ratio": 10.63118555315525,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-days button.in-range",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(27, 46, 69)",
+      "ratio": 12.696377625567655,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-shortcuts button",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalAplicar",
+      "state": "normal",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(154, 200, 255)",
+      "ratio": 10.63118555315525,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalInicio",
+      "state": "control-border",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalInicio",
+      "state": "normal",
+      "kind": "border",
+      "foreground": "rgb(120, 146, 173)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 4.907541955757144,
+      "minimum": 3
+    },
+    {
+      "theme": "dark",
+      "selector": ".gediv-cal-days button.selected",
+      "state": "hover",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(189, 221, 255)",
+      "ratio": 13.157584706429173,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalAplicar",
+      "state": "hover",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(189, 221, 255)",
+      "ratio": 13.157584706429173,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalInicio",
+      "state": "focus",
+      "kind": "text",
+      "foreground": "rgb(241, 246, 253)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 14.57197736236524,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "#gedivCalInicio",
+      "state": "focus",
+      "kind": "outline",
+      "foreground": "rgb(182, 217, 255)",
+      "background": "rgb(20, 35, 56)",
+      "ratio": 10.817878390792913,
+      "minimum": 3
+    },
+    {
+      "theme": "dark",
+      "selector": "[data-cal-shortcut=\"mes\"]",
+      "state": "selected",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(189, 221, 255)",
+      "ratio": 13.157584706429173,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "selector": "[data-cal-shortcut=\"mes\"]",
+      "state": "selected-hover",
+      "kind": "text",
+      "foreground": "rgb(11, 20, 33)",
+      "background": "rgb(189, 221, 255)",
+      "ratio": 13.157584706429173,
+      "minimum": 4.5
+    }
+  ],
+  "failures": []
+}

@@ -15,7 +15,7 @@ import sys
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
-ASSETS = ("index.html", "app.js", "modelo.js", "estilo.css", "logo.png", "xlsx.js", "pdf.js")
+ASSETS = ("index.html", "app.js", "modelo.js", "estilo.css", "logo.png", "xlsx.js", "pdf.js", "calendario.js", "calendario.css")
 
 
 def preparar(saida: Path, bancos: list[Path] | None = None, projecao: Path | None = None, cobertura: Path | None = None) -> dict:

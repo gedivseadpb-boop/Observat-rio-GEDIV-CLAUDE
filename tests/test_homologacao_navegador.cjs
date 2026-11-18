@@ -17,7 +17,7 @@ fs.mkdirSync(OUT,{recursive:true});
  const clean=async()=>{await page.locator('#limpar').click();};
  const test=async(name,fn)=>{try{await fn(); results.push({name,ok:true});console.log('PASS',name);}catch(e){results.push({name,ok:false,error:e.message});console.log('FAIL',name,e.message);try{await page.screenshot({path:path.join(OUT,'failure-'+results.length+'.png'),fullPage:true});}catch{} }finally{await page.keyboard.press('Escape').catch(()=>{});await page.keyboard.press('Escape').catch(()=>{});}};
  const apply=async()=>{await page.locator('button[form="filtros"]').click();};
- const decision=async()=>page.locator('#indicadores [data-kpi="decisoes"]').locator('..').locator('strong').innerText();
+ const decision=async()=>{const main=page.locator('.exec-kpi-card .exec-kpi-value').first();return await main.count()?main.innerText():(await page.locator('#indicadores [data-kpi="decisoes"]').locator('..').locator('strong').textContent()).trim();};
  await home();
  await test('Projeção real, indicadores e cobertura',async()=>{assert.equal(await decision(),'210–214');assert.match(await page.locator('#coberturaTopoResumo').innerText(),/19 edições.*884/);assert.equal(await page.locator('#listaServicos input').count(),7);assert.equal(await page.locator('.records tbody tr').count(),5);});
  await test('Filtro GAJ e exportação CSV/XLSX/PDF da mesma seleção',async()=>{

@@ -18,7 +18,9 @@
     pendencias: 'Pendências',
     gerencial: 'Área gerencial'
   };
-  const colors = ['#1e64c8', '#0d9f7e', '#e68626', '#6c5ce7', '#c99b1e', '#c85a68', '#52789c'];
+  const colors = Array.from({ length: 7 }, (_, i) => 'var(--chart-' + (i + 1) + ')');
+  const icon = name => '<svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-' + name + '"></use></svg>';
+  const themeColor = value => value.startsWith('var(') ? getComputedStyle(document.documentElement).getPropertyValue(value.slice(4, -1)).trim() : value;
   const series = [
     { key: 'VERTICAL', name: 'Progressão Vertical', color: colors[0] },
     { key: 'HORIZONTAL', name: 'Progressão Horizontal', color: colors[1] },
@@ -43,6 +45,7 @@
   let query = '', queryMode = 'agregados', queryPage = 0, pageSize = 5, tablePage = 0, tableSort = 'periodo', sortDirection = -1, selected = null;
   let calendarMonth = '', selectedDay = '', graphMeasure = 'quantidade', chartUnit = 'decisoes', toastTimer, focusBeforeDialog;
   let evolutionType = 'colunas', subjectChartType = 'rosca', resultsDimension = 'area';
+  let navigationStep = 0;
 
   const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   function dayLabel(v) { return M.validDate(v) ? v.split('-').reverse().join('/') : 'Não extraído'; }
@@ -56,7 +59,7 @@
   const matchesSeries = (c, s) => s === 'TEMPO_SERVICO' ? c.eixo === s : c.eixo === 'PROGRESSAO' && c.modalidade === s;
   const filteredMetric = (cells, prop = 'decisoes') => M.sumMetrics(cells.map(c => c[prop]));
   const pill = (text, cls = '') => '<span class="pill ' + esc(cls) + '">' + esc(text) + '</span>';
-  const empty = (title, text, locked = false) => '<div class="empty-state">' + (locked ? '<span class="lock-symbol" aria-hidden="true">◇</span>' : '') + '<b>' + esc(title) + '</b><p>' + esc(text) + '</p></div>';
+  const empty = (title, text, locked = false) => '<div class="empty-state"><span class="empty-symbol">' + icon(locked ? 'lock' : 'info') + '</span><b>' + esc(title) + '</b><p>' + esc(text) + '</p></div>';
   const section = (title, subtitle, badge = 'Dados públicos') => '<div class="section-heading"><div><h2 id="tituloPagina" tabindex="-1">' + esc(title) + '</h2><p>' + esc(subtitle) + '</p></div>' + pill(badge) + '</div>';
   const panel = (title, desc, content, actions = '', cls = '') => '<section class="panel ' + cls + '"><div class="panel-head"><div><h3>' + esc(title) + '</h3><p>' + esc(desc) + '</p></div>' + (actions ? '<div class="panel-head-actions">' + actions + '</div>' : '') + '</div>' + content + '</section>';
   const definition = (label, value) => '<dt>' + esc(label) + '</dt><dd>' + esc(value ?? 'Não extraído') + '</dd>';
@@ -128,7 +131,6 @@
     const vertShare = vertBounds && horizBounds && (vertBounds.min + horizBounds.min) > 0 ? Math.round(vertBounds.min / (vertBounds.min + horizBounds.min) * 100) : 0;
     const vertInterval = M.shareLabel(M.shareInterval(vert, [vert, horiz]));
     const horizInterval = M.shareLabel(M.shareInterval(horiz, [vert, horiz]));
-    const cobPct = cob && cob.edicoes ? Math.round((cob.edicoes - cob.ausencia_tecnica_edicoes - cob.inconclusivas) / cob.edicoes * 100) : 0;
 
     if (page === 'progressao') {
       const progActs = data ? M.qualityMetric(data, { ...state, eixo: 'PROGRESSAO', subcategorias: [] }, visible.filter(c => c.eixo === 'PROGRESSAO'), 'atos') : M.vazio();
@@ -221,7 +223,7 @@
         '<article class="exec-kpi-card tone-slate">' +
           '<div class="exec-kpi-top"><span class="exec-kpi-tag">EDIÇÕES E PÁGINAS PROCESSADAS</span><a class="text-chip" href="#cobertura">Fontes →</a></div>' +
           '<strong class="exec-kpi-value">' + (cob ? esc(cob.edicoes + ' ed. · ' + cob.paginas + ' págs.') : '—') + '</strong>' +
-          '<div class="exec-kpi-meta"><span>' + (cob ? esc((cob.edicoes - cob.ausencia_tecnica_edicoes - cob.inconclusivas) + ' edições com atos · ' + cob.ausencia_tecnica_edicoes + ' sem atos · ' + cob.inconclusivas + ' inconcl.') : 'Base documental') + '</span><b>' + (cob ? dayLabel(cob.primeira_publicacao) + ' a ' + dayLabel(cob.ultima_publicacao) : '') + '</b></div>' +
+          '<div class="exec-kpi-meta"><span>Cobertura da base inteira · histórico parcial</span><b>' + (cob ? dayLabel(cob.primeira_publicacao) + ' a ' + dayLabel(cob.ultima_publicacao) : '') + '</b></div>' +
         '</article>' +
       '</div>' +
       '<div class="pending-strip" role="region" aria-label="Resumo rápido de indicadores em integração">' +
@@ -231,7 +233,7 @@
           '<span class="pending-pill" title="Deferimentos, indeferimentos e outros resultados dependem de homologação administrativa"><b>Mérito (Deferidos / Indeferidos / Outros):</b> em conferência documental</span>' +
           '<span class="pending-pill" title="Eventos modificadores separados por natureza jurídica: ato refeito, ato tornado sem efeito e republicação por incorreção"><b>Modificadores (Refeitos · Sem efeito · Republicações por incorreção):</b> vínculo em integração</span>' +
         '</div>' +
-        '<a class="pending-strip-link" href="#tituloMonitorIndicadores">Ver matriz dos 10 indicadores ↓</a>' +
+        '<a class="pending-strip-link" href="#tituloMonitorIndicadores">Entender os indicadores</a>' +
       '</div>' +
     '</section>';
   }
@@ -263,7 +265,7 @@
       const isCob = key === 'cobertura_doe' && cob;
       const val = isCob ? (cob.edicoes + ' edições · ' + cob.paginas + ' págs.') : '—';
       const sub = isCob
-        ? ((cob.edicoes - cob.ausencia_tecnica_edicoes - cob.inconclusivas) + ' edições com atos GEDIV · ' + cob.ausencia_tecnica_edicoes + ' com ausência técnica · ' + cob.inconclusivas + ' inconclusiva')
+        ? (cob.ausencia_tecnica_edicoes + ' com ausência técnica proposta · ' + cob.inconclusivas + ' inconclusiva(s) · categorias independentes')
         : (data ? 'Não verificado / não divulgado na projeção v1' : 'Aguardando dados');
       return '<article class="metric-card secondary-card ' + (isCob ? 'available' : 'pending-metric') + '">' +
         '<div class="metric-card-cat">' + esc(category) + '</div>' +
@@ -484,7 +486,7 @@
         (restRows ? '<details class="more-bars"><summary>Ver demais ' + (withData.length ? withoutData.length : mapped.length - 5) + ' grupos do catálogo PCCR sem agregado divulgado neste recorte</summary><div class="bar-list secondary-bar-list">' + restRows + '</div></details>' : '');
     } else {
       const tsAxis = axisMetric('TEMPO_SERVICO');
-      const tsActs = data?.resumo_eixos?.TEMPO_SERVICO?.atos || M.vazio();
+      const tsActs = state.eixo && state.eixo !== 'TEMPO_SERVICO' ? M.vazio() : M.qualityMetric(data, { ...state, eixo: 'TEMPO_SERVICO' }, visible.filter(c => c.eixo === 'TEMPO_SERVICO'), 'atos');
       const tsHeader = '<div class="ts-axis-banner">' +
         '<div><b>Total do eixo Tempo de Serviço no recorte: ' + esc(M.metricLabel(tsAxis)) + ' decisões</b><p>Atos identificados no eixo: <b>' + esc(M.metricLabel(tsActs)) + '</b>. As 7 modalidades oficiais estão listadas abaixo; subcategorias com menos de 5 decisões por mês ficam preservadas por privacidade (LGPD).</p></div>' +
         pill('7 modalidades oficiais', 'provisorio') +
@@ -589,7 +591,7 @@
           '</summary>' +
           '<div>' +
             '<p><b>Categoria:</b> ' + esc(cellCategory(c)) + '</p>' +
-            '<p class="field-note">Agregado mensal protegido; clique abaixo para inspecionar a ficha documental completa e proveniência.</p>' +
+            '<p class="field-note">Agregado mensal protegido. Consulte abaixo a origem e o significado desta contagem.</p>' +
             '<button type="button" class="button primary compact" data-detalhe="' + esc(cellKey(c)) + '">Ver ficha do agregado →</button>' +
           '</div>' +
         '</details>'
@@ -651,30 +653,13 @@
 
   function coveragePanel() {
     const c = data.cobertura;
-    const totalEd = c.edicoes;
-    const comAtos = c.edicoes_com_atos ?? Math.max(0, totalEd - (c.ausencia_tecnica_edicoes || 0) - (c.inconclusivas || 0));
-    const semAtos = c.ausencia_tecnica_edicoes || 0;
-    const inconc = c.inconclusivas || 0;
-    const p1 = totalEd ? comAtos / totalEd * 100 : 0;
-    const p2 = totalEd ? semAtos / totalEd * 100 : 0;
-    const p3 = totalEd ? inconc / totalEd * 100 : 0;
-
-    const ringSVG = '<div class="coverage-ring-box">' +
-      '<div class="coverage-ring">' +
-        '<svg viewBox="0 0 120 120" role="img" aria-label="Anel de cobertura das ' + esc(totalEd) + ' edições processadas">' +
-          '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--bg)" stroke-width="16"/>' +
-          '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--green)" stroke-width="16" pathLength="100" stroke-dasharray="' + p1 + ' ' + (100 - p1) + '" stroke-dashoffset="0"/>' +
-          '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--blue)" stroke-width="16" pathLength="100" stroke-dasharray="' + p2 + ' ' + (100 - p2) + '" stroke-dashoffset="' + (-p1) + '"/>' +
-          '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--orange)" stroke-width="16" pathLength="100" stroke-dasharray="' + p3 + ' ' + (100 - p3) + '" stroke-dashoffset="' + (-(p1 + p2)) + '"/>' +
-        '</svg>' +
-        '<div class="coverage-ring-center"><b>' + esc(totalEd) + '</b><small>edições lidas</small></div>' +
-      '</div>' +
-      '<div class="coverage-ring-legend">' +
-        '<div><i class="swatch" style="--series:var(--green)"></i><span><b>' + esc(comAtos) + ' edições</b> com atos GEDIV extraídos (' + Math.round(p1) + '%)</span></div>' +
-        '<div><i class="swatch" style="--series:var(--blue)"></i><span><b>' + esc(semAtos) + ' edições</b> com ausência técnica proposta (' + Math.round(p2) + '%)</span></div>' +
-        '<div><i class="swatch" style="--series:var(--orange)"></i><span><b>' + esc(inconc) + ' edição</b> com leitura inconclusiva (' + Math.round(p3) + '%)</span></div>' +
-      '</div>' +
-    '</div>';
+    const ringSVG = '<div class="coverage-ring-box"><div class="coverage-ring">' +
+      '<svg viewBox="0 0 120 120" role="img" aria-label="' + esc(c.edicoes) + ' edições processadas; histórico parcial">' +
+      '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--chart-1)" stroke-width="10"/></svg>' +
+      '<div class="coverage-ring-center"><b>' + esc(c.edicoes) + '</b><small>edições lidas</small></div></div>' +
+      '<div class="coverage-ring-legend"><div><b>Acervo processado</b><span>Quantidade de edições da base inteira.</span></div>' +
+      '<div><b>' + esc(c.ausencia_tecnica_edicoes) + ' com ausência técnica proposta</b><span>A detecção automática não confirma ausência de atos.</span></div>' +
+      '<div><b>' + esc(c.inconclusivas) + ' com leitura inconclusiva</b><span>Estas categorias não compõem uma distribuição comprovada.</span></div></div></div>';
 
     return panel(
       'Cobertura de leitura do Diário Oficial (DOE-PB)',
@@ -682,7 +667,7 @@
       '<div class="coverage-visual-grid">' +
         ringSVG +
         '<div class="coverage-stats">' +
-          [['Edições disponíveis', c.edicoes], ['Páginas processadas', c.paginas], ['Edições com atos GEDIV', comAtos], ['Histórico desde 01/01/2026', 'Parcial']].map(([name, v]) => '<div class="coverage-stat"><b>' + esc(v) + '</b><span>' + esc(name) + '</span></div>').join('') +
+          [['Edições disponíveis', c.edicoes], ['Páginas processadas', c.paginas], ['Leituras inconclusivas', c.inconclusivas], ['Histórico desde 01/01/2026', 'Parcial']].map(([name, v]) => '<div class="coverage-stat"><b>' + esc(v) + '</b><span>' + esc(name) + '</span></div>').join('') +
         '</div>' +
       '</div>' +
       '<div class="coverage-notes">' +
@@ -734,9 +719,9 @@
     const c = data.cobertura;
     const year = calendarMonth.slice(0, 4) || today().slice(0, 4), periods = Array.from({ length: 12 }, (_, i) => year + '-' + String(i + 1).padStart(2, '0'));
     const calendarMonths = '<div class="history-months">' + periods.map(p => {
-      const has = data.celulas.some(cell => cell.periodo === p);
+      const has = visible.some(cell => cell.periodo === p);
       const inRange = c.primeira_publicacao && p >= c.primeira_publicacao.slice(0, 7) && p <= c.ultima_publicacao.slice(0, 7);
-      const mDec = has ? filteredMetric(data.celulas.filter(cell => cell.periodo === p), 'decisoes') : null;
+      const mDec = has ? filteredMetric(visible.filter(cell => cell.periodo === p), 'decisoes') : null;
       return '<button type="button" data-calendario="' + p + '" class="' + (has ? 'available' : '') + '">' +
         '<b>' + esc(monthLabel(p)) + '</b>' +
         '<small>' + (has ? ('Agregados: ' + M.metricLabel(mDec) + ' dec.') : inRange ? 'Cobertura diária não informada' : 'Não verificado') + '</small>' +
@@ -747,13 +732,13 @@
     const histKPIs = '<div class="support-cards">' +
       '<div class="support-card"><span>Início histórico previsto</span><b>01/01/2026</b><small>Meta de retrospectiva documental</small></div>' +
       '<div class="support-card"><span>Janela lida atualmente</span><b>' + esc(dayLabel(c.primeira_publicacao) + ' – ' + dayLabel(c.ultima_publicacao)) + '</b><small>Janela da projeção inteira</small></div>' +
-      '<div class="support-card"><span>Edições processadas</span><b>' + esc(c.edicoes) + ' edições</b><small>' + esc((c.edicoes - c.ausencia_tecnica_edicoes - c.inconclusivas) + ' com atos · ' + c.ausencia_tecnica_edicoes + ' sem atos') + '</small></div>' +
+      '<div class="support-card"><span>Edições processadas</span><b>' + esc(c.edicoes) + ' edições</b><small>Cobertura da base inteira; não representa todos os dias</small></div>' +
       '<div class="support-card"><span>Páginas processadas</span><b>' + esc(c.paginas) + ' págs.</b><small>' + esc(c.inconclusivas) + ' edição inconclusiva</small></div>' +
     '</div>';
     return section('Histórico e cobertura', 'Histórico previsto desde 01/01/2026. Lacunas nunca são apresentadas como ausência de atos.', 'Cobertura documental parcial') +
       histKPIs +
       coveragePanel() +
-      panel('Mapa dos meses de ' + esc(year), 'Selecione um mês para inspecionar seu calendário diário ou aplicar aos indicadores.', calendarMonths) +
+      panel('Mapa dos meses de ' + esc(year), 'Agregados dos filtros ativos. Selecione um mês para consultar sua cobertura ou aplicar aos indicadores.', calendarMonths) +
       panel('Calendário de conferência diária (' + esc(monthLabel(calendarMonth)) + ')', 'A projeção pública contém agregados mensais; selecione uma data para inspecionar sua situação.', '<div class="calendar-controls"><button class="button" type="button" data-mover-mes="-1" aria-label="Mês anterior">‹ Anterior</button><label>Mês <input type="month" id="mesCalendario" min="2026-01" value="' + calendarMonth + '"></label><button class="button" type="button" data-mover-mes="1" aria-label="Próximo mês">Próximo ›</button><button class="button primary compact" type="button" data-mes="' + calendarMonth + '">Aplicar ' + esc(monthLabel(calendarMonth)) + ' aos indicadores</button></div><div class="calendar">' + ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(x => '<span class="weekday">' + x + '</span>').join('') + cells + '</div><p class="data-note">Não verificado = sem confirmação diária nesta projeção. Não significa “sem publicação”. Não há calendário de edições ausentes homologado disponível.</p>') +
       evolution(true) +
       recordsPanel();
@@ -763,7 +748,7 @@
     const c = data.cobertura;
     const inWindow = c.primeira_publicacao && c.ultima_publicacao && selectedDay >= c.primeira_publicacao && selectedDay <= c.ultima_publicacao;
     const dayKPIs = '<div class="support-cards">' +
-      '<div class="support-card"><span>Data selecionada</span><b>' + esc(dayLabel(selectedDay)) + '</b><small>' + (inWindow ? 'Dentro da janela documental lida' : 'Fora da janela lida (01/10 a 14/11/2026)') + '</small></div>' +
+      '<div class="support-card"><span>Data selecionada</span><b>' + esc(dayLabel(selectedDay)) + '</b><small>' + (inWindow ? 'Dentro da janela documental lida' : 'Fora da janela lida (' + dayLabel(c.primeira_publicacao) + ' a ' + dayLabel(c.ultima_publicacao) + ')') + '</small></div>' +
       '<div class="support-card"><span>Última publicação da base</span><b>' + esc(dayLabel(c.ultima_publicacao)) + '</b><small>Primeira lida: ' + esc(dayLabel(c.primeira_publicacao)) + '</small></div>' +
       '<div class="support-card"><span>Granularidade pública</span><b>Mensal (faixas)</b><small>Nenhum total mensal é atribuído ao dia</small></div>' +
       '<div class="support-card"><span>Acervo processado</span><b>' + esc(c.edicoes + ' ed. · ' + c.paginas + ' págs.') + '</b><small>Fonte: DOE-PB (A União)</small></div>' +
@@ -862,30 +847,29 @@
 
   function sources() {
     const c = data.cobertura;
-    const comAtos = c.edicoes - c.ausencia_tecnica_edicoes - c.inconclusivas;
     const covCards = '<div class="support-cards">' +
       '<div class="support-card"><span>Edições processadas</span><b>' + esc(c.edicoes) + ' edições</b><small>Janela: ' + esc(dayLabel(c.primeira_publicacao) + ' a ' + dayLabel(c.ultima_publicacao)) + '</small></div>' +
       '<div class="support-card"><span>Páginas lidas do DOE-PB</span><b>' + esc(c.paginas) + ' páginas</b><small>Extração real sem dados simulados</small></div>' +
-      '<div class="support-card"><span>Edições com atos GEDIV</span><b>' + esc(comAtos) + ' edições</b><small>' + esc(c.ausencia_tecnica_edicoes) + ' ausências técnicas · ' + esc(c.inconclusivas) + ' inconclusiva</small></div>' +
+      '<div class="support-card"><span>Ausência técnica proposta</span><b>' + esc(c.ausencia_tecnica_edicoes) + ' edições</b><small>Detecção automática; não confirma ausência de atos</small></div>' +
       '<div class="support-card"><span>Proteção LGPD ativa</span><b>Limiar ≥ ' + esc(data.privacidade.limiar) + '</b><small>Faixas de ' + esc(data.privacidade.faixa) + ' · sem dados nominais</small></div>' +
     '</div>';
     return section('Edições e fontes', 'Confira de onde vêm os números, a cobertura documental e as regras de proteção.', 'Proveniência dos dados') +
       covCards +
       coveragePanel() +
-      panel('Matriz dos 10 indicadores executivos solicitados', 'Diagnóstico de existência na base, segurança LGPD e conexão com o frontend público (`dados.json`).',
+      panel('Quais informações podem ser consultadas?', 'Disponibilidade, origem e limites das contagens públicas.',
         tableHTML(
-          ['#', 'Indicador executivo', 'Disponibilidade atual', 'Fonte / Camada', 'Conexão no painel público'],
+          ['#', 'Informação', 'Disponibilidade', 'Origem', 'Onde consultar'],
           [
-            ['1', 'Total de processos distintos', 'Pendente na projeção v1', 'Base gerencial SQLite (`processo`)', 'Card de acompanhamento · aguarda contagem agregada sem expor SAD-PSE'],
-            ['2', 'Total de atos (resenhas indisponíveis)', 'Ativo: ' + M.metricLabel(data.resumo.atos), '`dados.json` → `resumo.atos` e `celulas[].atos`', 'Card executivo principal e fichas de agregados mensais'],
-            ['3', 'Total de decisões individuais', 'Ativo: ' + M.metricLabel(M.sumMetrics([data.resumo.conferidos, data.resumo.provisorios])), '`dados.json` → `resumo` e `celulas[].decisoes`', 'Card executivo principal, gráficos de evolução, rosca e barras'],
-            ['4', 'Total de deferimentos', 'Em conferência administrativa', 'Base canônica (mérito em revisão)', 'Matriz de 10 indicadores e painel de resultados por área'],
-            ['5', 'Total de indeferimentos', 'Em conferência administrativa', 'Base canônica (mérito em revisão)', 'Matriz de 10 indicadores e painel de resultados por área'],
-            ['6', 'Total de atos refeitos', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Matriz de 10 indicadores e aba Alterações / Refeitos'],
-            ['7', 'Total de atos tornados sem efeito', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Matriz de 10 indicadores (separado de indeferimentos)'],
-            ['8', 'Total de republicações por incorreção', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Matriz de 10 indicadores (separado de atos refeitos)'],
-            ['9', 'Outros resultados', 'Em conferência administrativa', 'Base canônica (mérito em revisão)', 'Matriz de 10 indicadores e tabela alternativa de resultados'],
-            ['10', 'Edições e páginas processadas', 'Ativo: ' + c.edicoes + ' edições · ' + c.paginas + ' págs.', '`dados.json` → `cobertura.edicoes` e `cobertura.paginas`', 'Card executivo de cobertura, anel SVG e aba Edições e fontes']
+            ['1', 'Total de processos distintos', 'Pendente na projeção v1', 'Área gerencial restrita', 'Ainda não disponível na consulta pública'],
+            ['2', 'Total de atos (resenhas indisponíveis)', 'Ativo: ' + M.metricLabel(data.resumo.atos), 'Contagem agregada da base pública', 'Indicadores e detalhes dos agregados mensais'],
+            ['3', 'Total de decisões individuais', 'Ativo: ' + M.metricLabel(M.sumMetrics([data.resumo.conferidos, data.resumo.provisorios])), 'Contagem agregada da base pública', 'Indicadores, gráficos e tabelas'],
+            ['4', 'Total de deferimentos', 'Em conferência administrativa', 'Base de origem (mérito em revisão)', 'Indicadores em preparação e painel de resultados por área'],
+            ['5', 'Total de indeferimentos', 'Em conferência administrativa', 'Base de origem (mérito em revisão)', 'Indicadores em preparação e painel de resultados por área'],
+            ['6', 'Total de atos refeitos', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Indicadores em preparação e aba Alterações / Refeitos'],
+            ['7', 'Total de atos tornados sem efeito', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Indicadores em preparação (separado de indeferimentos)'],
+            ['8', 'Total de republicações por incorreção', 'Vínculos em revisão', 'Eventos modificadores (base gerencial)', 'Indicadores em preparação (separado de atos refeitos)'],
+            ['9', 'Outros resultados', 'Em conferência administrativa', 'Base de origem (mérito em revisão)', 'Indicadores em preparação e tabela alternativa de resultados'],
+            ['10', 'Edições e páginas processadas', 'Ativo: ' + c.edicoes + ' edições · ' + c.paginas + ' págs.', 'Resumo documental da base inteira', 'Card executivo de cobertura, resumo de cobertura e aba Edições e fontes']
           ]
         )
       ) +
@@ -893,7 +877,6 @@
         tableHTML(
           ['Situação documental', 'Quantidade na base', 'Significado operacional'],
           [
-            ['Edições com atos GEDIV extraídos', String(comAtos), 'Edições lidas onde foram identificadas publicações pertinentes à GEDIV'],
             ['Ausência técnica proposta', String(c.ausencia_tecnica_edicoes), 'Edições lidas sem detecção automática de atos GEDIV (sujeito à revisão)'],
             ['Leitura inconclusiva', String(c.inconclusivas), 'Edição com pendência técnica de leitura/interpretação'],
             ['Verificada por revisão humana', 'Não verificado por edição', 'Fonte e leitura documental homologadas administrativamente'],
@@ -981,9 +964,14 @@
     fitPlots();
     $('pagina').setAttribute('aria-busy', 'false');
     document.querySelectorAll('#abas a, #menuApoio a').forEach(a => {
-      if (a.hash === '#' + page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      if (a.hash.slice(1).split('?')[0] === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     $('contextoCurto').textContent = pages[page];
+    if ($('localConsulta')) $('localConsulta').textContent = 'Consulta pública / ' + pages[page];
+    if ($('voltarConsulta')) {
+      $('voltarConsulta').hidden = page === 'geral' && navigationStep === 0;
+      $('voltarConsulta').closest('.section-location').hidden = $('voltarConsulta').hidden;
+    }
     $('situacaoResumo').textContent = state.situacao === 'conferido' ? 'Consulta de dados conferidos' : 'Dados reais · conferência parcial';
     document.title = pages[page] + ' | Observatório do Diário Oficial · GEDIV';
     cards();
@@ -1011,7 +999,12 @@
     M.CAMPOS.forEach(k => { if (state[k]) params.set(k, state[k]); });
     state.subcategorias.forEach(s => params.append('servico', s));
     const hash = '#' + page + (params.size ? '?' + params.toString() : '');
-    if (location.hash !== hash) window.history[replace ? 'replaceState' : 'pushState'](null, '', hash);
+    if (location.hash !== hash) {
+      if (!replace) navigationStep += 1;
+      window.history[replace ? 'replaceState' : 'pushState']({ gedivStep: navigationStep }, '', hash);
+    } else if (!Number.isInteger(window.history.state?.gedivStep)) {
+      window.history.replaceState({ gedivStep: navigationStep }, '', hash);
+    }
     document.querySelectorAll('#abas a, #menuApoio a, .brand, footer a').forEach(a => {
       const target = a.hash.slice(1).split('?')[0];
       if (Object.hasOwn(pages, target)) a.href = '#' + target + (params.size ? '?' + params.toString() : '');
@@ -1044,6 +1037,8 @@
   }
 
   function route(initial = false) {
+    if (Number.isInteger(window.history.state?.gedivStep)) navigationStep = window.history.state.gedivStep;
+    else if (!initial) navigationStep += 1;
     const next = location.hash.slice(1).split('?')[0];
     page = Object.hasOwn(pages, next) ? next : 'geral';
     if (location.hash.includes('?')) state = readLocation();
@@ -1095,14 +1090,18 @@
   }
 
   async function savePng(button) {
-    const svg = button.closest('.panel')?.querySelector('svg');
+    const svg = button.closest('.panel')?.querySelector('svg:not(.ui-icon)');
     if (!svg) { notify('Não há gráfico publicável para exportar neste recorte.'); return; }
     const copy = svg.cloneNode(true);
     copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    copy.querySelectorAll('text').forEach(x => { x.setAttribute('fill', '#153452'); x.setAttribute('font-family', 'Arial, sans-serif'); x.setAttribute('font-size', '11'); });
-    copy.querySelectorAll('.grid-line').forEach(x => x.setAttribute('stroke', '#d7e4f1'));
-    copy.querySelectorAll('.line-mark').forEach(x => x.setAttribute('fill', '#fff'));
-    copy.querySelectorAll('.range-tail').forEach(x => x.setAttribute('opacity', '.3'));
+    const nodes = [svg, ...svg.querySelectorAll('*')], clones = [copy, ...copy.querySelectorAll('*')];
+    nodes.forEach((node, i) => {
+      const style = getComputedStyle(node);
+      ['fill', 'stroke', 'color', 'stroke-width', 'stroke-dasharray', 'opacity', 'font-size', 'font-family'].forEach(prop => {
+        clones[i].style.setProperty(prop, style.getPropertyValue(prop));
+      });
+    });
+    const theme = getComputedStyle(document.documentElement), exportBg = theme.getPropertyValue('--surface').trim(), exportInk = theme.getPropertyValue('--ink').trim();
     const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' }));
     try {
       const img = new Image(); img.src = url; await img.decode();
@@ -1117,13 +1116,13 @@
       const headerHeight = 90 + filterLines.length * 24;
       const box = svg.viewBox.baseVal, plotHeight = Math.round(1336 * box.height / box.width);
       canvas.height = headerHeight + plotHeight + 130;
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#153452'; ctx.font = 'bold 24px Arial';
+      ctx.fillStyle = exportBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = exportInk; ctx.font = 'bold 24px Arial';
       ctx.fillText('GEDIV · ' + button.closest('.panel').querySelector('h3').textContent, 32, 40);
       ctx.font = '18px Arial'; filterLines.forEach((line, i) => ctx.fillText(line, 32, 75 + i * 24));
       ctx.drawImage(img, 32, headerHeight, 1336, plotHeight);
       const footerY = headerHeight + plotHeight + 25;
-      series.forEach((item, i) => { const x = 32 + i * 435; ctx.fillStyle = item.color; ctx.fillRect(x, footerY - 14, 16, 16); ctx.fillStyle = '#153452'; ctx.fillText(item.name, x + 25, footerY); });
+      series.forEach((item, i) => { const x = 32 + i * 435; ctx.fillStyle = themeColor(item.color); ctx.fillRect(x, footerY - 14, 16, 16); ctx.fillStyle = exportInk; ctx.fillText(item.name, x + 25, footerY); });
       ctx.font = '16px Arial'; ctx.fillText('Agregados mensais parciais em faixas · partes sólidas: limites inferiores', 32, footerY + 35);
       ctx.fillText('Projeção: ' + timestamp(data.atualizado_em) + ' (Brasília)', 32, footerY + 64);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -1180,6 +1179,7 @@
   function setTheme(dark) {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     $('tema').setAttribute('aria-label', dark ? 'Ativar modo claro' : 'Ativar modo escuro'); $('tema').setAttribute('aria-pressed', String(dark));
+    $('tema').innerHTML = icon(dark ? 'sun' : 'moon') + '<span>' + (dark ? 'Tema claro' : 'Tema escuro') + '</span>';
     try { localStorage.setItem('gediv_tema_publico', dark ? 'dark' : 'light'); } catch (_) { /* armazenamento opcional */ }
   }
   let savedTheme; try { savedTheme = localStorage.getItem('gediv_tema_publico'); } catch (_) { /* armazenamento opcional */ }
@@ -1192,6 +1192,21 @@
       primeiraData: data.cobertura.primeira_publicacao, ultimaData: data.cobertura.ultima_publicacao,
       onApply: patch => { if (patch.inicio === patch.fim && patch.inicio) selectedDay = patch.inicio; setFilters(patch); closeMenu(); }
     });
+  };
+  $('periodoRapido').onclick = () => $('abrirCalendario').click();
+  $('pesquisarConsulta').onclick = () => {
+    if (!data) return;
+    if (!$('buscaLista')) { page = 'geral'; writeLocation(); render(true); }
+    closeMenu(false);
+    $('buscaLista').scrollIntoView({ block: 'center' }); $('buscaLista').focus({ preventScroll: true });
+  };
+  $('verTotais').onclick = () => {
+    const target = document.querySelector('.exec-kpi-section') || $('indicadores');
+    target.tabIndex = -1; target.scrollIntoView({ block: 'start' }); target.focus({ preventScroll: true });
+  };
+  $('voltarConsulta').onclick = () => {
+    if (navigationStep > 0) window.history.back();
+    else { page = 'geral'; writeLocation(); render(true); $('tituloPagina').focus(); }
   };
 
   $('filtros').addEventListener('change', e => {
@@ -1217,6 +1232,10 @@
   $('limpar').onclick = () => { state = M.novoEstado(); page = 'geral'; query = ''; selected = null; queryPage = tablePage = 0; $('fim').setCustomValidity(''); writeLocation(); if (data) render(true); notify('Filtros limpos. Consulta de toda a base disponível.'); };
 
   document.addEventListener('click', e => {
+    if (e.target.closest('.pending-strip-link')) {
+      e.preventDefault(); const monitor = document.querySelector('.indicators-monitor'); monitor.open = true;
+      $('tituloMonitorIndicadores').tabIndex = -1; $('tituloMonitorIndicadores').scrollIntoView({ block: 'start' }); $('tituloMonitorIndicadores').focus({ preventScroll: true }); return;
+    }
     const el = e.target.closest('[data-periodo],[data-mes],[data-grupo],[data-sub],[data-serie],[data-medida],[data-consulta],[data-detalhe],[data-paginar],[data-ordenar],[data-ver-todos],[data-exportar-lista],[data-exportar-item],[data-expandir-lista],[data-calendario],[data-dia],[data-mover-mes],[data-ultima-data],[data-kpi],[data-kpi-extra],[data-png],[data-tipo-evolucao],[data-formato-assunto],[data-dim-resultado],[data-remover-filtro],[data-eixo-rapido]');
     if (!el || !data) return;
     const d = el.dataset;
@@ -1327,15 +1346,25 @@
   window.addEventListener('beforeprint', buildPrint);
   window.addEventListener('hashchange', () => route());
   window.addEventListener('popstate', () => { state = readLocation(); route(); });
+  let compactNavigation;
+  function updateNavigationLayout() {
+    const compact = window.matchMedia('(max-width:780px)').matches;
+    if (compact !== compactNavigation) {
+      $('outrasSecoes').open = $('opcoesExportacao').open = !compact;
+      compactNavigation = compact;
+    }
+  }
+  updateNavigationLayout();
   let resizeTimer;
   window.addEventListener('resize', () => {
+    updateNavigationLayout();
     if (!window.matchMedia('(max-width:780px)').matches) closeMenu(false);
     clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (data) fitPlots(); }, 120);
   });
 
   async function load(manual = false) {
     if (loading) return;
-    loading = true; $('atualizar').disabled = true; $('erro').hidden = true; $('estado').hidden = false;
+    loading = true; $('estado').dataset.kind = 'loading'; $('atualizar').disabled = true; $('erro').hidden = true; $('estado').hidden = false;
     $('pagina').setAttribute('aria-busy', 'true');
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000);
     try {
@@ -1343,6 +1372,7 @@
       if (!response.ok) throw new Error('A projeção pública não está disponível (HTTP ' + response.status + '). Use Tentar novamente.');
       data = M.validateProjection(await response.json());
       populate();
+      $('estado').dataset.kind = 'success';
       $('estado').innerHTML = '<span aria-hidden="true">✓</span><div><b>Projeção real carregada · contagens protegidas em faixas</b><p>Use os filtros laterais ou clique nas barras e fatias dos gráficos para refinar a consulta.</p></div>';
       $('exportarCsv').disabled = $('imprimir').disabled = false;
       $('exportarPdf').disabled = !root.GEDIVPDF; $('exportarXlsx').disabled = !root.GEDIVXLSX;
@@ -1362,9 +1392,11 @@
   }
   $('atualizar').onclick = () => load(true);
   $('tentarNovamente').onclick = () => load(true);
-  const headerObserver = new ResizeObserver(() => {
+  const measureHeader = () => {
     document.documentElement.style.setProperty('--header-height', Math.ceil(document.querySelector('.topbar').getBoundingClientRect().height) + 'px');
-  });
-  headerObserver.observe(document.querySelector('.topbar'));
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(measureHeader).observe(document.querySelector('.topbar'));
+  else window.addEventListener('resize', measureHeader);
+  measureHeader();
   route(true); cards(); load();
 })(typeof window !== 'undefined' ? window : globalThis);

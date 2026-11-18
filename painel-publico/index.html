@@ -2,13 +2,15 @@
 <html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<meta name="gediv-version" content="2026.11.18-clareza-r1">
 <meta name="description" content="Observatório do Diário Oficial da Paraíba — Painel Público GEDIV/SEAD-PB. Indicadores, gráficos e consultas de Progressão Funcional e Tempo de Serviço.">
 <title>Observatório do Diário Oficial · Painel GEDIV | SEAD-PB</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%2307366e'/%3E%3Cpath d='M11 11h18v18H11zM16 17h8M16 22h8' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="./calendario.css?v=462b47f14680"><script src="./calendario.js?v=dd7c56bfd738" defer></script>
-<link rel="stylesheet" href="./estilo.css?v=fab3bc6cfc7f"><script src="./xlsx.js?v=ef50dd8ae97d" defer></script><script src="./pdf.js?v=d3a1cab5dc40" defer></script><script src="./modelo.js?v=2ad0e9ee1df9" defer></script><script src="./app.js?v=8a821d8f39b8" defer></script>
+<link rel="stylesheet" href="./calendario.css?v=98c83f9589df"><script src="./calendario.js?v=dd7c56bfd738" defer></script>
+<link rel="stylesheet" href="./estilo.css?v=ff4aa7fa6c9c"><script src="./xlsx.js?v=ef50dd8ae97d" defer></script><script src="./pdf.js?v=d3a1cab5dc40" defer></script><script src="./modelo.js?v=2ad0e9ee1df9" defer></script><script src="./app.js?v=f77f49f187f8" defer></script>
 </head>
 <body>
+<svg class="icon-sprite" aria-hidden="true" width="0" height="0" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="icon-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol><symbol id="icon-progress" viewBox="0 0 24 24"><path d="M3 18h5v-5h5V8h8M15 3h6v6"/></symbol><symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 4h2m4 0h2m-8 3h2"/></symbol><symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2.6 7M3 5v6h6m3-4v5l3 2"/></symbol><symbol id="icon-changes" viewBox="0 0 24 24"><path d="M4 7h15l-4-4m5 14H5l4 4M4 7v5m16 5v-5"/></symbol><symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8m-8 4h6"/></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zM3 10h18"/></symbol><symbol id="icon-warning" viewBox="0 0 24 24"><path d="m12 3 10 18H2zM12 9v5m0 3v.1"/></symbol><symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol><symbol id="icon-back" viewBox="0 0 24 24"><path d="m10 5-7 7 7 7M3 12h18"/></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></symbol><symbol id="icon-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol><symbol id="icon-print" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H3V9h18v8h-4M7 14h10v7H7zM17 11h1"/></symbol><symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v7m0-10v.1"/></symbol><symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20 15.5A9 9 0 0 1 8.5 4a9 9 0 1 0 11.5 11.5z"/></symbol><symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol><symbol id="icon-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol></defs></svg>
 <a class="skip-link" href="#conteudo">Ir para o conteúdo principal</a>
 <header class="topbar">
   <a class="brand" href="#geral" aria-label="GEDIV, voltar à visão geral">
@@ -17,8 +19,8 @@
     <span class="brand-inst"><b>SEAD · GEDIV</b><small>Gerência Executiva de Concessão<br>de Direitos e Vantagens</small></span>
   </a>
   <div class="header-title">
-    <h1>Observatório do Diário Oficial <span>| Painel GEDIV</span></h1>
-    <p class="topbar-description">Publicações, Progressão Funcional e Tempo de Serviço · Consulta documental e transparência</p>
+    <h1>Diário Oficial da Paraíba <span>· Painel GEDIV</span></h1>
+    <p class="topbar-description">Progressão Funcional e Tempo de Serviço · Consulta pública</p>
   </div>
   <div class="top-actions">
     <div class="updated" title="Data e hora de geração da projeção pública oficial">
@@ -29,22 +31,22 @@
       <span class="coverage-dot" aria-hidden="true"></span>
       <div><b id="coberturaTopoResumo">Carregando cobertura…</b><small>Cobertura parcial · ver fontes</small></div>
     </a>
-    <span class="public-badge">Homologação · 2026.11.17-h1</span>
-    <button id="sobreDados" type="button" class="button header-btn" aria-label="Entenda os dados, a metodologia e as contagens">? <span>Metodologia</span></button>
-    <button id="tema" type="button" class="button header-btn" aria-label="Ativar modo escuro" aria-pressed="false">◐ <span>Tema</span></button>
+    <span class="public-badge">Em avaliação · Clareza r1</span>
+    <button id="sobreDados" type="button" class="button header-btn" aria-label="Entenda os dados, a metodologia e as contagens"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-info"></use></svg><span>Sobre os dados</span></button>
+    <button id="tema" type="button" class="button header-btn" aria-label="Ativar modo escuro" aria-pressed="false"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-moon"></use></svg><span>Tema escuro</span></button>
   </div>
 </header>
 
 <div class="workspace" id="casca">
   <aside class="sidebar" id="menuLateral" aria-label="Menu e filtros">
     <div class="sidebar-head">
-      <div class="sidebar-title"><span class="filter-icon" aria-hidden="true">⌁</span><b>Filtros da consulta</b></div>
-      <button class="button compact collapse-btn" type="button" id="recolherMenu" aria-label="Recolher menu" aria-controls="menuLateral" title="Recolher painel de filtros">« Recolher</button>
+      <div class="sidebar-title"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-filter"></use></svg><b>Filtros da consulta</b></div>
+      <button class="button compact collapse-btn" type="button" id="recolherMenu" aria-label="Recolher menu" aria-controls="menuLateral" title="Recolher painel de filtros"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-back"></use></svg><span>Recolher</span></button>
     </div>
     <nav id="menuApoio" class="side-nav" aria-label="Áreas de apoio">
-      <a href="#cobertura">▤ Edições e fontes</a>
-      <a href="#pendencias">◷ Pendências</a>
-      <a href="#gerencial">◇ Área gerencial</a>
+      <a href="#cobertura"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-folder"></use></svg><span>Edições e fontes</span></a>
+      <a href="#pendencias"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-warning"></use></svg><span>Pendências</span></a>
+      <a href="#gerencial"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-lock"></use></svg><span>Área gerencial</span></a>
     </nav>
     <form id="filtros" autocomplete="off">
       <fieldset>
@@ -54,7 +56,7 @@
           <span aria-hidden="true">→</span>
           <label>Até<input type="date" id="fim" aria-label="Data final" min="2026-01-01"></label>
         </div>
-        <button type="button" class="text-button calendar-button" id="abrirCalendario">▦ Escolher datas no calendário</button>
+        <button type="button" class="text-button calendar-button" id="abrirCalendario"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-calendar"></use></svg><span>Escolher período</span></button>
         <div class="period-shortcuts" aria-label="Períodos rápidos">
           <button type="button" data-periodo="tudo">Toda a base</button>
           <button type="button" data-periodo="2026-11">Nov/2026</button>
@@ -130,35 +132,37 @@
       </details>
     </form>
     <div class="filter-actions">
-      <button class="button primary apply-btn" type="submit" form="filtros">⌕ Aplicar filtros</button>
-      <button class="text-button clear-btn" id="limpar" type="button">Limpar filtros</button>
+      <button class="button primary apply-btn" type="submit" form="filtros"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-filter"></use></svg><span>Aplicar filtros</span></button>
+      <button class="text-button clear-btn" id="limpar" type="button"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-clear"></use></svg><span>Limpar filtros</span></button>
       <p id="filtrosPendentes" class="field-note" role="status"></p>
     </div>
     <p class="sidebar-note">Fonte: Diário Oficial da Paraíba (A União).<br>Dados individuais exigem autenticação no servidor gerencial.</p>
   </aside>
 
   <div class="collapsed-rail" id="trilhoFiltros" aria-label="Barra de filtros recolhida">
-    <button type="button" id="expandirMenuTrilho" class="rail-btn" aria-label="Expandir menu de filtros" title="Abrir filtros">»</button>
+    <button type="button" id="expandirMenuTrilho" class="rail-btn" aria-label="Expandir menu de filtros" title="Abrir filtros"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-filter"></use></svg></button>
     <span>FILTROS</span>
   </div>
 
   <main id="conteudo" tabindex="-1">
     <div class="mobile-toolbar">
-      <button id="abrirMenu" class="button primary" type="button" aria-expanded="true" aria-controls="menuLateral">☷ Menu e filtros</button>
+      <button id="abrirMenu" class="button primary" type="button" aria-expanded="true" aria-controls="menuLateral"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-menu"></use></svg><span>Menu e filtros</span></button>
       <span id="contextoCurto">Visão geral</span>
     </div>
 
     <div class="dashboard-toolbar">
       <nav id="abas" class="tabs" aria-label="Áreas do painel">
-        <a href="#geral" aria-current="page">Visão geral</a>
-        <a href="#progressao">Progressão Funcional</a>
-        <a href="#tempo">Tempo de Serviço</a>
-        <a href="#dia">Publicações do dia</a>
-        <a href="#historico">Histórico</a>
-        <a href="#alteracoes">Alterações / Refeitos</a>
-        <a href="#outras">Outras publicações</a>
-        <a href="#cobertura">Edições e fontes</a>
-        <a href="#pendencias">Pendências</a>
+        <a href="#geral" aria-current="page"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-overview"></use></svg><span>Visão geral</span></a>
+        <a href="#progressao"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-progress"></use></svg><span>Progressão Funcional</span></a>
+        <a href="#tempo"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-clock"></use></svg><span>Tempo de Serviço</span></a>
+        <details class="more-sections" id="outrasSecoes" open><summary>Mais consultas</summary><div class="secondary-links">
+        <a href="#dia"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-calendar"></use></svg><span>Publicações do dia</span></a>
+        <a href="#historico"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-history"></use></svg><span>Histórico</span></a>
+        <a href="#alteracoes"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-changes"></use></svg><span>Alterações / Refeitos</span></a>
+        <a href="#outras"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-file"></use></svg><span>Outras publicações</span></a>
+        <a href="#cobertura"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-folder"></use></svg><span>Edições e fontes</span></a>
+        <a href="#pendencias"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-warning"></use></svg><span>Pendências</span></a>
+        </div></details>
       </nav>
       <div class="actionbar">
         <div class="status-summary">
@@ -167,14 +171,23 @@
           <span id="versaoResumo"></span>
         </div>
         <div class="export-actions">
-          <button class="button" id="atualizar" type="button" title="Reler a projeção pública disponível; não inicia coleta">↻ Atualizar dados</button>
-          <button class="button" id="exportarXlsx" type="button" disabled>↓ Excel</button>
-          <button class="button" id="exportarCsv" type="button" disabled>↓ CSV</button>
-          <button class="button" id="exportarPdf" type="button" disabled>↓ PDF</button>
-          <button class="button" id="imprimir" type="button" disabled>▧ Imprimir</button>
+          <button class="button" id="atualizar" type="button" title="Reler a projeção pública disponível; não inicia coleta"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-history"></use></svg><span>Atualizar dados</span></button>
+          <details class="export-menu" id="opcoesExportacao" open><summary class="button"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-download"></use></svg><span>Exportar</span></summary><div class="export-formats">
+          <button class="button" id="exportarXlsx" type="button" disabled><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-download"></use></svg><span>Excel</span></button>
+          <button class="button" id="exportarCsv" type="button" disabled><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-download"></use></svg><span>CSV</span></button>
+          <button class="button" id="exportarPdf" type="button" disabled><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-download"></use></svg><span>PDF</span></button>
+          <button class="button" id="imprimir" type="button" disabled><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-print"></use></svg><span>Imprimir</span></button>
+          </div></details>
         </div>
       </div>
     </div>
+
+    <div class="quick-actions" aria-label="Ações rápidas da consulta">
+      <button class="button" type="button" id="periodoRapido"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-calendar"></use></svg><span><b>Escolher período</b><small>Datas e meses disponíveis</small></span></button>
+      <button class="button" type="button" id="pesquisarConsulta"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-search"></use></svg><span><b>Pesquisar</b><small>Mês, grupo ou modalidade</small></span></button>
+      <button class="button" type="button" id="verTotais"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-overview"></use></svg><span><b>Ver totais</b><small>Entenda os números da consulta</small></span></button>
+    </div>
+    <div class="section-location"><button class="button" type="button" id="voltarConsulta" hidden><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-back"></use></svg><span>Voltar</span></button><span id="localConsulta">Consulta pública / Visão geral</span></div>
 
     <div class="context-strip">
       <div id="estado" class="notice compact-notice" role="status">
@@ -204,18 +217,19 @@
       <p class="empty-state">Aguardando dados.</p>
     </section>
 
-    <section class="indicators-monitor" aria-labelledby="tituloMonitorIndicadores">
+    <details class="indicators-monitor" aria-labelledby="tituloMonitorIndicadores">
+      <summary class="monitor-summary"><span>Indicadores em preparação</span><span>Processos, resenhas e resultados ainda não divulgados</span></summary>
       <div class="monitor-head">
         <div>
-          <span class="eyebrow">MATRIZ DE INDICADORES GERENCIAIS E SITUAÇÃO DE INTEGRAÇÃO</span>
-          <h2 id="tituloMonitorIndicadores">Painel de acompanhamento dos 10 indicadores oficiais (por tipo documental)</h2>
-          <p>Distingue processos, resenhas, decisões originais, resultados de mérito e eventos modificadores (refeitos, republicações por incorreção e atos tornados sem efeito). Indicadores ainda sem desagregação pública permanecem identificados como pendentes, sem uso de zero falso.</p>
+          <span class="eyebrow">DISPONIBILIDADE DAS INFORMAÇÕES</span>
+          <h2 id="tituloMonitorIndicadores">O que já está disponível e o que falta conferir</h2>
+          <p>Processos, resenhas, decisões e alterações são contagens diferentes. O travessão indica uma informação ainda não disponível nesta base pública.</p>
         </div>
         <span class="pill neutral">Contrato público v1 · LGPD</span>
       </div>
       <div class="cards" id="indicadores" aria-label="Sete indicadores principais" aria-live="polite"></div>
       <div class="cards-secondary" id="indicadoresComplementares" aria-label="Indicadores complementares de eventos, resultados e cobertura"></div>
-    </section>
+    </details>
 
     <footer>
       <img src="./logo.png" width="136" height="42" alt="Governo da Paraíba">
@@ -224,7 +238,7 @@
         <p>Fonte: Diário Oficial do Estado da Paraíba (A União) · Projeção pública protegida em faixas.</p>
         <p>A consulta pública não expõe dados pessoais e não substitui a publicação oficial nem o andamento no SESuite.</p>
       </div>
-      <a href="#geral">Voltar ao topo ↑</a>
+      <a href="#geral"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-overview"></use></svg><span>Visão geral</span></a>
     </footer>
   </main>
 </div>
@@ -233,7 +247,7 @@
 <dialog id="detalhe" aria-labelledby="tituloDetalhe">
   <div class="dialog-head">
     <div><p class="eyebrow">OBSERVATÓRIO DO DIÁRIO OFICIAL · GEDIV</p><h2 id="tituloDetalhe">Detalhes da seleção</h2></div>
-    <button class="button" type="button" id="fecharDetalhe">Fechar ✕</button>
+    <button class="button" type="button" id="fecharDetalhe"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-clear"></use></svg><span>Fechar</span></button>
   </div>
   <div id="corpoDetalhe"></div>
 </dialog>

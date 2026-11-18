@@ -1,0 +1,208 @@
+{
+  "name": "GEDIV Clareza Institucional — tokens implementados",
+  "light": {
+    "bg": "#F3F6FA",
+    "surface": "#FFFFFF",
+    "surface_alt": "#EAF0F6",
+    "surface_hover": "#E0EAF5",
+    "text": "#15283D",
+    "text_subtle": "#4B5F75",
+    "border": "#CDD8E4",
+    "control_border": "#71869D",
+    "primary": "#195B9F",
+    "primary_hover": "#10477F",
+    "on_primary": "#FFFFFF",
+    "focus": "#176ABD",
+    "success": "#17664C",
+    "success_bg": "#E8F5EE",
+    "danger": "#AD2238",
+    "danger_bg": "#FDEDF0",
+    "warning": "#80500C",
+    "warning_bg": "#FFF3DB",
+    "nav_bg": "#102D49",
+    "nav_text": "#FFFFFF",
+    "nav_subtle": "#D8E5F2",
+    "nav_surface": "#24435F",
+    "nav_border": "#63819C",
+    "accent_text": "#164B7F",
+    "disabled_text": "#52677E",
+    "chart_1": "#2469B0",
+    "chart_2": "#187961",
+    "chart_3": "#9A631C",
+    "chart_4": "#6655A6",
+    "chart_5": "#78661B",
+    "chart_6": "#AE4561",
+    "chart_7": "#536D87"
+  },
+  "dark": {
+    "bg": "#0B1421",
+    "surface": "#142338",
+    "surface_alt": "#1B2E45",
+    "surface_hover": "#263D58",
+    "text": "#F1F6FD",
+    "text_subtle": "#BECDDE",
+    "border": "#38516B",
+    "control_border": "#7892AD",
+    "primary": "#9AC8FF",
+    "primary_hover": "#BDDDFF",
+    "on_primary": "#0B1421",
+    "focus": "#B6D9FF",
+    "success": "#82DEBB",
+    "success_bg": "#153B32",
+    "danger": "#FF9EB1",
+    "danger_bg": "#3D2431",
+    "warning": "#FFD18B",
+    "warning_bg": "#392C1B",
+    "nav_bg": "#071321",
+    "nav_text": "#F1F6FD",
+    "nav_subtle": "#BECDDE",
+    "nav_surface": "#1B2D43",
+    "nav_border": "#68829D",
+    "accent_text": "#C7E1FF",
+    "disabled_text": "#B3C1D0",
+    "chart_1": "#8EBEFF",
+    "chart_2": "#69D5B4",
+    "chart_3": "#F2BE71",
+    "chart_4": "#C0ADFF",
+    "chart_5": "#DCCA75",
+    "chart_6": "#FF9BB0",
+    "chart_7": "#A5C1DE"
+  },
+  "test_pairs": [
+    {
+      "foreground": "text",
+      "background": "bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text_subtle",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text_subtle",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "on_primary",
+      "background": "primary",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "on_primary",
+      "background": "primary_hover",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "nav_text",
+      "background": "nav_bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "success",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "danger",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "warning",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "focus",
+      "background": "surface",
+      "minimum": 3.0
+    },
+    {
+      "foreground": "text_subtle",
+      "background": "surface_hover",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "success",
+      "background": "success_bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "danger",
+      "background": "danger_bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "warning",
+      "background": "warning_bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "accent_text",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "disabled_text",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "nav_subtle",
+      "background": "nav_surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "control_border",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_1",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_2",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_3",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_4",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_5",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_6",
+      "background": "surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "chart_7",
+      "background": "surface",
+      "minimum": 3
+    }
+  ]
+}
