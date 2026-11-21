@@ -2,7 +2,7 @@
 
 Esta entrega aproveita o leitor, o catálogo e o dashboard incorporados na linha PR10.1. A `main` e as branches anteriores não são alteradas. O painel privado existente continua separado, com autenticação e revisão; a prévia pública não oferece acesso a registros individuais.
 
-Endereço da prévia: https://painel-diario-oficial-gediv.ylenaluna.chatgpt.site
+Endereço da prévia: [endereço privado removido]
 
 Branch de entrega: `entrega/painel-publico-gediv`.
 

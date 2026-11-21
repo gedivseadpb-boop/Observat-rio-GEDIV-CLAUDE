@@ -16,8 +16,8 @@ Atue **somente no código e dados públicos autorizados do projeto GEDIV**. Não
 - Site oficial: https://gedivseadpb-boop.github.io/Observat-rio-GEDIV-CLAUDE/#geral
 - Homologação: https://gedivseadpb-boop.github.io/gediv-painel-redesign-preview/#geral
 - Repositório: https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE
-- Referência de indicadores e densidade: https://gediv-observatorio-doe.ylenaluna.chatgpt.site/
-- Referência de filtros: https://gediv-revisao-interativa-291026.ylenaluna.chatgpt.site/
+- Referência de indicadores e densidade: [endereço privado removido]
+- Referência de filtros: [endereço privado removido]
 - Candidata H1 informada pela responsável: `2026.11.17-h1`, commit `2a71073`. **Verificar estado real** da branch/preview.
 - O painel tem 2 eixos: Progressão Funcional (Horizontal/Vertical, 16 grupos PCCR) e Tempo de Serviço (TS-01 a TS-07).
 - Dados atuais relatados: 19 edições, 884 páginas, projeção parcial; totais de processos distintos, deferidos/indeferidos, refeitos, sem efeito, republicações dependem de dados conferidos e projeção segura.
