@@ -29,18 +29,27 @@ O endereço do servidor nunca vem da barra de endereços, porque isso permitiria
 As contas ficam num banco separado, `contas.sqlite3`, na pasta de dados. O banco principal não muda.
 
 - **Senha:** scrypt com sal próprio por conta. A senha nunca é guardada nem registrada. Exige no mínimo 10 caracteres e não pode conter o nome de usuário.
-- **Sessão:** token aleatório que dura 8 horas. No banco fica só o SHA-256 do token. No navegador, o token fica só na aba aberta (`sessionStorage`) e é apagado ao sair.
+- **Perfis (RBAC):** cada conta possui papel explícito (`gerencia` por padrão ou `admin` via `--papel admin`), além do perfil `publico` (sem login, apenas agregados conferidos). Rotas administrativas exigem papel `admin`.
+- **Sessão:** token aleatório que dura 8 horas. No banco fica só o SHA-256 do token. O servidor autentica preferencialmente por cookie `HttpOnly` + `SameSite=Strict` (com flag `Secure` em HTTPS) combinado com token CSRF em cabeçalho `X-GEDIV-CSRF` para mutações, mantendo compatibilidade controlada com `Authorization: Bearer` via `sessionStorage` para o cliente estático; o token e os cookies são limpos ao sair.
 - **Bloqueio:** 5 senhas erradas seguidas bloqueiam a conta por 15 minutos.
 - **Mensagens de erro:** são idênticas para usuário inexistente, senha errada, conta bloqueada ou conta desativada.
-- **Autoria:** quem está logado é sempre o responsável pela revisão. O nome enviado pelo navegador é ignorado. Entradas e saídas ficam no histórico (`ENTRAR`/`SAIR`).
-- **Trocas de conta:** trocar a senha ou desativar a conta encerra as sessões abertas.
-- **Acesso a partir de outro site (CORS):** só é liberado para as origens informadas em `--origem-admin`, e só em `/api/`.
-- **Token antigo:** a credencial única `GEDIV_TOKEN_GERENCIA` continua aceita, por compatibilidade.
+- **Autoria:** quem está logado é sempre o responsável pela revisão. O nome enviado pelo navegador é ignorado. Entradas, saídas e alterações de papel/conta ficam na trilha de auditoria (`ENTRAR`/`SAIR`, etc.).
+- **Trocas de conta:** trocar a senha, alterar o papel (`papel`) ou desativar a conta encerra imediatamente as sessões abertas.
+- **Acesso a partir de outro site (CORS):** só é liberado para as origens explicitamente informadas em `--origem-admin` (apenas `https://` válidos, recusando `*`, `null`, HTTP remoto ou `localhost` como origem cross-origin), e só em `/api/`.
+- **Token técnico legado (`GEDIV_TOKEN_GERENCIA`):** **desabilitado por padrão** na CLI (`python -m observatorio.web`). Para compatibilidade excepcional em automações locais, exige ativação explícita (`--habilitar-token-tecnico` ou `GEDIV_HABILITAR_TOKEN_TECNICO=1`) e segredo com **mínimo de 32 caracteres**, comparado em tempo constante (`hmac.compare_digest`), restrito estritamente ao papel `gerencia` (nunca concede privilégios `admin`) e registrado na trilha de auditoria apenas pelo prefixo do hash SHA-256 (jamais o segredo em texto claro).
 
 ## Como criar e administrar as contas (no servidor)
 
 ```bash
-python -m observatorio.web.usuarios --dados dados criar maria.silva --nome "Maria da Silva"
+python -m observatorio.web.usuarios --dados dados criar maria.silva --nome "Maria da Silva" --papel gerencia
+```
+
+```bash
+python -m observatorio.web.usuarios --dados dados criar coord.gediv --nome "Coordenação GEDIV" --papel admin
+```
+
+```bash
+python -m observatorio.web.usuarios --dados dados papel maria.silva admin
 ```
 
 ```bash
@@ -67,7 +76,8 @@ O servidor precisa ficar atrás de um HTTPS institucional (proxy reverso). Depoi
 
 ## Testes
 
-- `tests/test_admin_contas.py` (Python, 14 testes): senhas, sessões, bloqueio, mensagens que não revelam se a conta existe, autoria, CORS e token antigo.
+- `tests/test_admin_contas.py` (Python): senhas, sessões (cookie `HttpOnly` + CSRF e Bearer), bloqueio, mensagens que não revelam se a conta existe, autoria, CORS estrito, token técnico legado desabilitado por padrão/endurecido (>= 32 chars, sem escalonamento para `admin`) e auditoria sem vazamento de segredo.
+- `tests/test_uiux_perfis_rbac.py` (Python): separação de perfis (`publico`, `gerencia`, `admin`), revogação de sessões em mudança de papel e validação preliminar em `/api/admin/lote` sem importação no banco.
 - `tests/test_admin_painel.cjs` (jsdom, 6 testes): a página estática não contém dados, o caso sem servidor configurado, endereço inseguro recusado, login errado e certo, token no cabeçalho, saída, sessão expirada.
 - **Navegador, de ponta a ponta,** com servidor local e dados sintéticos (17 verificações):
   - login errado e certo;
