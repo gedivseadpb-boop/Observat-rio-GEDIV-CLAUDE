@@ -14,7 +14,6 @@ export TZ="${TZ:-America/Sao_Paulo}"
 APP_DIR="${APP_DIR:-/opt/observatorio-gediv}"
 DADOS_DIR="${DADOS_DIR:-/var/lib/gediv/dados}"
 BACKUP_DIR="${BACKUP_DIR:-/var/lib/gediv/backups}"
-SAIDA_PUBLICA="${SAIDA_PUBLICA:-/tmp/gediv-dist-publica}"
 PYTHON_BIN="${PYTHON_BIN:-$APP_DIR/.venv/bin/python}"
 FERIADOS_ARQ="${FERIADOS_ARQ:-/etc/gediv/feriados_oficiais.txt}"
 RETENCAO_DIAS="${RETENCAO_DIAS:-30}"
@@ -55,6 +54,7 @@ fi
 INICIO_JANELA="$(date -d "$DIAS_RECUO days ago" +%F)"
 
 cd "$APP_DIR"
+export PYTHONPATH="${APP_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
 echo "[1/6] Coletando edições oficiais de $INICIO_JANELA até $DATA_HOJE (fuso=$TZ, dia ISO=$DIA_SEMANA)..."
 set +e
@@ -114,19 +114,18 @@ PY
 echo "[5/6] Calculando resumo de cobertura e validando projeção somente-leitura da API para o frontend unificado..."
 COBERTURA_RESUMO="$DADOS_DIR/cobertura_resumo.json"
 "$PYTHON_BIN" - "$DADOS_DIR/observatorio.sqlite3" "$COBERTURA_RESUMO" <<'PY'
-import json, sqlite3, sys
+import json, sys
 from pathlib import Path
 
 from observatorio.nucleo.banco import Banco
 from observatorio.painel import adaptador, indicadores
 
 db, out = Path(sys.argv[1]), Path(sys.argv[2])
-with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as con:
-    con.row_factory = sqlite3.Row
-    inconclusivas = con.execute(
+with Banco.somente_leitura(db) as banco_ro:
+    inconclusivas = banco_ro.con.execute(
         "SELECT COUNT(*) FROM leitura WHERE situacao='ERRO' OR data_edicao IS NULL OR numero_edicao IS NULL"
     ).fetchone()[0]
-    ausencia = con.execute("""
+    ausencia = banco_ro.con.execute("""
         SELECT COUNT(*) FROM leitura l
         WHERE l.situacao != 'ERRO' AND l.data_edicao IS NOT NULL AND l.numero_edicao IS NOT NULL
           AND NOT EXISTS (
@@ -134,11 +133,7 @@ with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as con:
               AND a.eixo IN ('PROGRESSAO', 'TEMPO_SERVICO')
           )
     """).fetchone()[0]
-    out.write_text(json.dumps({"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}, indent=2) + "\n", encoding="utf-8")
 
-    banco_ro = object.__new__(Banco)
-    banco_ro.caminho = db
-    banco_ro.con = con
     p_pub = indicadores.painel(banco_ro, {"escopo": "pendente"}, indicadores.PUBLICO)
     if p_pub["meta"]["escopo"] != "conferido" or p_pub["linhas"] != []:
         raise SystemExit("ERRO DE PRIVACIDADE: perfil público expôs escopo pendente ou linhas individuais!")
@@ -148,6 +143,11 @@ with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as con:
     cats = [c[0] for c in proj_pub.get("categories", [])]
     if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:
         raise SystemExit(f"ERRO DE CONTRATO: categorias inválidas na projeção unificada: {cats}")
+
+resumo = {"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}
+tmp = out.with_name(out.name + ".tmp")
+tmp.write_text(json.dumps(resumo, indent=2) + "\n", encoding="utf-8")
+tmp.replace(out)
 print("Resumo de cobertura e projeção somente-leitura (?mode=ro) da API validados com sucesso (0 linhas individuais públicas; sem build de painel-publico/dados.json obsoleto).")
 PY
 

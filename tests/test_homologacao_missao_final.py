@@ -14,10 +14,13 @@ Comprova de forma reproduzível:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pathlib
 import re
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -25,7 +28,7 @@ import contextlib
 
 from observatorio.nucleo.banco import Banco
 from observatorio.operacao import agendamento
-from observatorio.painel import adaptador
+from observatorio.painel import adaptador, indicadores
 from observatorio.revisao import servico
 
 REPO_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -140,9 +143,18 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
             any("preparar_painel_publico.py" in l for l in linhas_exec),
             "rodar_diario.sh ainda executa scripts/preparar_painel_publico.py para construir o frontend antigo painel-publico!",
         )
+        self.assertNotIn("SAIDA_PUBLICA", sh_txt, "Variável morta SAIDA_PUBLICA deve ter sido removida de rodar_diario.sh!")
+        self.assertNotIn("object.__new__", sh_txt, "Passo [5/6] não deve instanciar Banco via object.__new__!")
+        self.assertIn('export PYTHONPATH="${APP_DIR}${PYTHONPATH:+:$PYTHONPATH}"', sh_txt)
+        self.assertIn("with Banco.somente_leitura(db) as banco_ro:", sh_txt)
         self.assertIn("cobertura_resumo.json", sh_txt)
-        self.assertEqual(sh_txt.count('as_uri() + "?mode=ro"'), 3, "Passos [3/6] e [5/6] devem abrir o SQLite exclusivamente em ?mode=ro!")
+        self.assertEqual(sh_txt.count('as_uri() + "?mode=ro"'), 2, "Passo [3/6] deve abrir os SQLites exclusivamente em ?mode=ro!")
         self.assertNotIn("with Banco(", sh_txt, "Passo [5/6] não deve abrir Banco() em modo leitura-escrita após o backup!")
+        idx_validacoes = sh_txt.index('if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:')
+        idx_tmp_write = sh_txt.index('tmp.write_text(')
+        idx_tmp_replace = sh_txt.index('tmp.replace(out)')
+        self.assertLess(idx_validacoes, idx_tmp_write)
+        self.assertLess(idx_tmp_write, idx_tmp_replace)
         self.assertTrue((DEPLOY_DIR / "recuperar_edicoes_manual.sh").is_file())
 
     def test_04_protecao_contra_exclusao_e_preservacao_revisao_humana(self) -> None:
@@ -188,6 +200,81 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
                 self.assertEqual(chk.execute("SELECT validacao FROM decisao WHERE id=?", (alvo_id,)).fetchone()[0], "CONFERIDO")
             sha_bak = hashlib.sha256(bak_path.read_bytes()).hexdigest()
             self.assertEqual(len(sha_bak), 64)
+
+    def test_05_banco_somente_leitura_e_passo_5_rodar_diario(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_dir = pathlib.Path(tmp)
+            ausente = tmp_dir / "nao_existe.sqlite3"
+            with self.assertRaises(FileNotFoundError):
+                Banco.somente_leitura(ausente)
+            self.assertFalse(ausente.exists())
+
+            db_path = tmp_dir / "observatorio.sqlite3"
+            with Banco(db_path) as banco:
+                adaptador.importar_snapshot_reconciliado(banco, _bootstrap_sintetico())
+            sha_antes = hashlib.sha256(db_path.read_bytes()).hexdigest()
+
+            with Banco.somente_leitura(db_path) as banco_ro:
+                with self.assertRaises(sqlite3.OperationalError):
+                    banco_ro.con.execute("CREATE TABLE tentativa_escrita (x INTEGER)")
+                with self.assertRaises(sqlite3.OperationalError):
+                    banco_ro.con.execute("DELETE FROM decisao")
+                p_pub = indicadores.painel(banco_ro, {"escopo": "pendente"}, indicadores.PUBLICO)
+                self.assertEqual(p_pub["meta"]["escopo"], "conferido")
+                self.assertEqual(p_pub["linhas"], [])
+            with self.assertRaises(sqlite3.ProgrammingError):
+                banco_ro.con.execute("SELECT 1")
+            self.assertEqual(hashlib.sha256(db_path.read_bytes()).hexdigest(), sha_antes)
+
+            sh_txt = (DEPLOY_DIR / "rodar_diario.sh").read_text(encoding="utf-8")
+            match = re.search(
+                r'echo "\[5/6\][^\n]*\nCOBERTURA_RESUMO="\$DADOS_DIR/cobertura_resumo\.json"\n"\$PYTHON_BIN" - "\$DADOS_DIR/observatorio\.sqlite3" "\$COBERTURA_RESUMO" <<\'PY\'\n(.*?)\nPY',
+                sh_txt,
+                flags=re.DOTALL,
+            )
+            self.assertIsNotNone(match, "Bloco Python do passo [5/6] não encontrado em rodar_diario.sh")
+            snippet = match.group(1)
+
+            env = {**os.environ, "PYTHONSAFEPATH": "1", "PYTHONPATH": str(REPO_DIR)}
+            out_json = tmp_dir / "cobertura_resumo.json"
+            res_ok = subprocess.run(
+                [sys.executable, "-c", snippet, str(db_path), str(out_json)],
+                cwd=str(tmp_dir),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res_ok.returncode, 0, res_ok.stderr)
+            self.assertTrue(out_json.is_file())
+            self.assertFalse(out_json.with_name(out_json.name + ".tmp").exists())
+            dados_resumo = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertEqual(set(dados_resumo.keys()), {"ausencia_tecnica_edicoes", "inconclusivas"})
+            self.assertEqual(hashlib.sha256(db_path.read_bytes()).hexdigest(), sha_antes)
+
+            res_ausente = subprocess.run(
+                [sys.executable, "-c", snippet, str(ausente), str(tmp_dir / "ausente.json")],
+                cwd=str(tmp_dir),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(res_ausente.returncode, 0)
+            self.assertFalse((tmp_dir / "ausente.json").exists())
+
+            db_corrompido = tmp_dir / "corrompido.sqlite3"
+            db_corrompido.write_bytes(b"nao e sqlite valido")
+            res_corrompido = subprocess.run(
+                [sys.executable, "-c", snippet, str(db_corrompido), str(tmp_dir / "corrompido.json")],
+                cwd=str(tmp_dir),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(res_corrompido.returncode, 0)
+            self.assertFalse((tmp_dir / "corrompido.json").exists())
 
 
 if __name__ == "__main__":

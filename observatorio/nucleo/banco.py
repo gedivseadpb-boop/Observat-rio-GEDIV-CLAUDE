@@ -503,6 +503,25 @@ class Banco:
             self._fechar_sem_mascarar()
             raise
 
+    @classmethod
+    def somente_leitura(cls, caminho: str | Path) -> "Banco":
+        """Abre um banco SQLite existente estritamente em modo somente-leitura (`?mode=ro` + `PRAGMA query_only = ON`),
+        sem criar arquivos nem aplicar migrações. Deve ser usado com `with Banco.somente_leitura(caminho) as banco:`."""
+        alvo = Path(caminho)
+        if not alvo.is_file():
+            raise FileNotFoundError(f"banco SQLite inexistente: {alvo}")
+        inst = cls.__new__(cls)
+        inst.caminho = alvo
+        inst.backup_da_migracao = None
+        inst.con = sqlite3.connect(alvo.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            inst.con.row_factory = sqlite3.Row
+            inst.con.execute("PRAGMA query_only = ON")
+        except BaseException:
+            inst._fechar_sem_mascarar()
+            raise
+        return inst
+
     def _completar_v8(self) -> None:
         """Preenche, em bancos anteriores à v8, o que a migração estrutural não calcula: revisão da leitura, revisão
         da leitura das classificações já feitas (que vieram da leitura atual) e identidades lógicas; reconcilia as
