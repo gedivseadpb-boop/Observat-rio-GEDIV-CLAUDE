@@ -6,6 +6,7 @@ output/
 private/
 *.fernet
 estado*.json
+!painel-v2/estado-site.json
 liberacoes*.json
 
 # Segredos
