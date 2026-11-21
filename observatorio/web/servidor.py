@@ -18,11 +18,14 @@ dados: tudo vem desta API, depois do login.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import mimetypes
+import os
 import re
 from datetime import date
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -45,16 +48,54 @@ SEGURANCA = {
 }
 
 
+COOKIE_SESSAO = "gediv_sessao"
+MIN_TOKEN_TECNICO_LEGADO = 16
+MIN_TOKEN_TECNICO_PRODUCAO = 32
+
+
 class Erro(Exception):
     def __init__(self, status: int, mensagem: str):
         super().__init__(mensagem)
         self.status, self.mensagem = status, mensagem
 
 
-def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
+def _validar_origens_cors(origens_admin) -> frozenset[str]:
+    """Valida estritamente a lista de origens CORS autorizadas (somente HTTPS explícito,
+    sem curingas '*', sem 'null' e sem localhost/loopback).
+    """
+    validadas: set[str] = set()
+    for bruta in (origens_admin or ()):
+        if not bruta:
+            continue
+        o = str(bruta).strip().rstrip("/")
+        if not o:
+            continue
+        if "*" in o or o.lower() == "null":
+            raise ValueError("CORS não permite curinga '*' nem origem 'null'")
+        u = urlsplit(o)
+        host = (u.hostname or "").lower()
+        if (
+            u.scheme != "https"
+            or not u.netloc
+            or u.path
+            or u.query
+            or u.fragment
+            or u.username
+            or u.password
+            or host in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+        ):
+            raise ValueError(
+                "Origem CORS de administração inválida: exija HTTPS explícito sem localhost, null ou curinga"
+            )
+        validadas.add(o)
+    return frozenset(validadas)
+
+
+def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, origens_admin=()):
     caminho_banco, acervo = pasta_dados / "observatorio.sqlite3", Acervo(pasta_dados / "acervo")
     contas = Contas(pasta_dados / "contas.sqlite3")
-    origens = frozenset(o.rstrip("/") for o in origens_admin if o)
+    origens = _validar_origens_cors(origens_admin)
+    token_legado = (token_gerencia or "").strip()
 
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "PainelGEDIV"
@@ -64,9 +105,81 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             pass
 
         # --- utilidades -------------------------------------------------
-        def _token(self) -> str:
+        def _token_bearer(self) -> str:
             cabecalho = self.headers.get("Authorization", "")
             return cabecalho[7:].strip() if cabecalho.startswith("Bearer ") else ""
+
+        def _token_cookie(self) -> str:
+            bruto = self.headers.get("Cookie", "")
+            if not bruto:
+                return ""
+            try:
+                c = SimpleCookie()
+                c.load(bruto)
+                morsel = c.get(COOKIE_SESSAO)
+                return morsel.value.strip() if morsel else ""
+            except Exception:
+                return ""
+
+        def _token(self) -> str:
+            return self._token_bearer() or self._token_cookie()
+
+        def _tem_credencial(self) -> bool:
+            return bool("Authorization" in self.headers or self._token_cookie())
+
+        def _usando_cookie_sessao(self) -> bool:
+            return bool(not self._token_bearer() and self._token_cookie())
+
+        def _usando_token_tecnico(self) -> bool:
+            tok = self._token_bearer()
+            return bool(token_legado) and bool(tok) and hmac.compare_digest(
+                tok.encode("utf-8"), token_legado.encode("utf-8")
+            )
+
+        def _auditar_token_tecnico_se_usado(self, banco: Banco) -> None:
+            if self._usando_token_tecnico() and not getattr(self, "_token_tecnico_auditado", False):
+                self._token_tecnico_auditado = True
+                fp = hashlib.sha256(self._token_bearer().encode("utf-8")).hexdigest()[:12]
+                with banco.con:
+                    banco.auditar(
+                        "gerencia (credencial_tecnica_legada)",
+                        "USO_TOKEN_TECNICO_LEGADO",
+                        "credencial_tecnica",
+                        urlsplit(self.path).path,
+                        None,
+                        {"metodo": self.command, "token_sha256_prefix": fp},
+                        "Acesso autenticado via credencial técnica legada",
+                    )
+
+        def _verificar_csrf_cookie(self) -> None:
+            if not self._usando_cookie_sessao():
+                return
+            sec_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+            if sec_site == "cross-site":
+                raise Erro(403, "pedido bloqueado por proteção CSRF")
+            if "Origin" in self.headers:
+                orig_req = (self.headers.get("Origin") or "").strip().rstrip("/")
+                host_req = (self.headers.get("Host") or "").strip()
+                if not orig_req or orig_req.lower() == "null" or "*" in orig_req:
+                    raise Erro(403, "origem inválida (proteção CSRF)")
+                if orig_req not in origens and urlsplit(orig_req).netloc != host_req:
+                    raise Erro(403, "origem não autorizada (proteção CSRF)")
+
+        def _cabecalho_cookie_sessao(self, valor: str, max_age: int) -> str:
+            secure = (
+                (self.headers.get("X-Forwarded-Proto") or "").strip().lower() == "https"
+                or os.environ.get("GEDIV_COOKIE_SECURE") == "1"
+            )
+            partes = [
+                f"{COOKIE_SESSAO}={valor}",
+                "HttpOnly",
+                "SameSite=Strict",
+                "Path=/api",
+                f"Max-Age={max_age}",
+            ]
+            if secure:
+                partes.append("Secure")
+            return "; ".join(partes)
 
         def _conta(self) -> dict | None:
             """Sessão de conta individual válida, ou None. Calculada uma vez por pedido."""
@@ -76,17 +189,18 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             return self._conta_cache
 
         def _perfil(self) -> str:
-            token = self._token()
-            if token and hmac.compare_digest(token.encode(), token_gerencia.encode()):
+            if self._usando_token_tecnico():
                 return indicadores.GERENCIA_PERFIL
+            token = self._token()
             if token and self._conta():
                 return indicadores.GERENCIA_PERFIL
             return indicadores.PUBLICO
 
         def _papel(self) -> str:
+            # Credencial técnica legada concede apenas perfil gerencial (NÃO substitui conta nominal admin).
+            if self._usando_token_tecnico():
+                return "gerencia"
             token = self._token()
-            if token and hmac.compare_digest(token.encode(), token_gerencia.encode()):
-                return "admin"
             conta = self._conta() if token else None
             if conta:
                 return str(conta.get("papel") or "gerencia")
@@ -97,17 +211,20 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             return f"{conta['nome']} ({conta['usuario']})" if conta else "gerencia (credencial)"
 
         def _origem_permitida(self) -> str | None:
-            origem = (self.headers.get("Origin") or "").rstrip("/")
+            bruta = (self.headers.get("Origin") or "").strip()
+            if not bruta or bruta.lower() == "null" or "*" in bruta:
+                return None
+            origem = bruta.rstrip("/")
             return origem if origem and origem in origens else None
 
         def _exigir_gerencia(self) -> None:
-            if "Authorization" not in self.headers:
+            if not self._tem_credencial():
                 raise Erro(401, "credencial necessária")
             if self._perfil() != indicadores.GERENCIA_PERFIL:
                 raise Erro(403, "credencial inválida ou sem permissão")
 
         def _exigir_admin(self) -> None:
-            if "Authorization" not in self.headers:
+            if not self._tem_credencial():
                 raise Erro(401, "credencial necessária")
             if self._papel() != "admin":
                 raise Erro(403, "permissão administrativa necessária")
@@ -127,15 +244,18 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             if self.command != "HEAD":
                 self.wfile.write(corpo)
 
-        def _json(self, dados, status: int = 200) -> None:
+        def _json(self, dados, status: int = 200, extras: dict | None = None) -> None:
             self._enviar(status, json.dumps(dados, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8",
-                         {"Cache-Control": "no-store"})
+                         {"Cache-Control": "no-store", **(extras or {})})
 
         def _atender(self, acao) -> None:
             self.__dict__.pop("_conta_cache", None)          # a sessão é verificada de novo a cada pedido
+            self.__dict__.pop("_token_tecnico_auditado", None)
             banco = None
             try:
                 banco = Banco(caminho_banco)
+                if self._usando_token_tecnico() and urlsplit(self.path).path.startswith("/api/"):
+                    self._auditar_token_tecnico_se_usado(banco)
                 acao(banco)
             except Erro as e:
                 self._json({"erro": e.mensagem}, e.status)
@@ -312,13 +432,14 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                     raise Erro(401, "usuário ou senha inválidos, ou acesso bloqueado temporariamente")
                 with banco.con:
                     banco.auditar(f"{sessao['nome']} ({sessao['usuario']})", "ENTRAR", "sessao", sessao["usuario"], None, None, None)
-                return self._json(sessao)
+                return self._json(sessao, extras={"Set-Cookie": self._cabecalho_cookie_sessao(sessao["token"], 28800)})
+            self._verificar_csrf_cookie()
             if rota == "/api/logout":
                 if self._conta():
                     with banco.con:
                         banco.auditar(self._ator(), "SAIR", "sessao", self._conta()["usuario"], None, None, None)
                     contas.sair(self._token())
-                return self._json({"encerrada": True})
+                return self._json({"encerrada": True}, extras={"Set-Cookie": self._cabecalho_cookie_sessao("", 0)})
             if rota == "/api/admin/lote":
                 self._exigir_admin()
                 p = self._corpo_json()
@@ -395,11 +516,17 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
     return Manipulador
 
 
-def criar_servidor(pasta_dados: str | Path, token_gerencia: str, endereco: str = "127.0.0.1", porta: int = 8000,
-                   origens_admin=()) -> ThreadingHTTPServer:
-    if len(token_gerencia) < 16:
-        raise ValueError("a credencial da gerência precisa de pelo menos 16 caracteres")
+def criar_servidor(pasta_dados: str | Path, token_gerencia: str | None = None, endereco: str = "127.0.0.1", porta: int = 8000,
+                   origens_admin=(), *, exigir_token_32: bool = False) -> ThreadingHTTPServer:
+    if token_gerencia is not None and token_gerencia != "":
+        min_len = (
+            MIN_TOKEN_TECNICO_PRODUCAO
+            if (exigir_token_32 or os.environ.get("GEDIV_MODO_PRODUCAO") == "1")
+            else MIN_TOKEN_TECNICO_LEGADO
+        )
+        if len(token_gerencia) < min_len:
+            raise ValueError(f"a credencial da gerência precisa de pelo menos {min_len} caracteres")
     Banco(Path(pasta_dados) / "observatorio.sqlite3").fechar()        # cria ou atualiza o esquema antes de atender
-    servidor = ThreadingHTTPServer((endereco, porta), criar_manipulador(Path(pasta_dados), token_gerencia, origens_admin))
+    servidor = ThreadingHTTPServer((endereco, porta), criar_manipulador(Path(pasta_dados), token_gerencia or "", origens_admin))
     servidor.daemon_threads = True
     return servidor

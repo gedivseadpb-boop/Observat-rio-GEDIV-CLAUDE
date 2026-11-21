@@ -337,6 +337,99 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 self.assertIn(marcador, html_limpo, f"Funcionalidade/estrutura ausente após rebuild: {marcador}")
             self.assertNotIn("TS-08", html_limpo)
 
+    def test_05_seguranca_administrativa_token_legado_cors_sessao_e_rbac(self) -> None:
+        """Passo 2.3: valida desabilitação padrão do token técnico legado, mínimo de 32 caracteres em
+        modo produção, ausência de escalonamento para admin, registro auditável sem expor o segredo,
+        rejeição de origens CORS inseguras ('*', 'null', 'localhost', HTTP) e proteção de cookie/CSRF.
+        """
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            with Banco(pasta / "observatorio.sqlite3") as banco:
+                adaptador.importar_snapshot_reconciliado(banco, _bootstrap_sintetico())
+
+            # 1. Validação estrita de origens CORS na inicialização
+            for origem_invalida in (
+                ["*"],
+                ["null"],
+                ["http://gediv.example.gov.br"],
+                ["https://localhost:8000"],
+                ["https://127.0.0.1:8000"],
+                ["https://gediv.example.gov.br/caminho"],
+            ):
+                with self.subTest(origem_invalida=origem_invalida):
+                    with self.assertRaises(ValueError):
+                        criar_servidor(pasta, None, "127.0.0.1", 0, origens_admin=origem_invalida)
+
+            # 2. Exigência de 32+ caracteres para token técnico em modo produção
+            with self.assertRaises(ValueError):
+                criar_servidor(pasta, "token-curto-de-20-ch", "127.0.0.1", 0, exigir_token_32=True)
+
+            # 3. Servidor sem token técnico legado (desabilitado por padrão)
+            srv_sem_tok = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv_sem_tok.serve_forever, daemon=True).start()
+            base_sem = f"http://127.0.0.1:{srv_sem_tok.server_address[1]}"
+            try:
+                self.assertEqual(_req(f"{base_sem}/api/conflitos", token="qualquer-token-01234567890123456789")[0], 403)
+            finally:
+                srv_sem_tok.shutdown()
+                srv_sem_tok.server_close()
+
+            # 4. Servidor com token técnico forte (>= 32 chars) e origem HTTPS explícita
+            token_forte = "token-tecnico-forte-com-mais-de-32-caracteres-2026"
+            origem_ok = "https://painel.sead.pb.gov.br"
+            contas = Contas(pasta / "contas.sqlite3")
+            contas.criar("analista.ger", "Analista Gerencia", "SenhaGer#2026", papel="gerencia")
+            srv = criar_servidor(pasta, token_forte, "127.0.0.1", 0, origens_admin=[origem_ok], exigir_token_32=True)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{srv.server_address[1]}"
+            try:
+                # Token técnico acessa rota gerencial, mas NÃO possui papel 'admin' (não faz bypass de RBAC)
+                self.assertEqual(_req(f"{base}/api/conflitos", token=token_forte)[0], 200)
+                self.assertEqual(_req(f"{base}/api/admin/usuarios", token=token_forte)[0], 403)
+                self.assertEqual(_req(f"{base}/api/admin/lote", token=token_forte, payload={"rows": [{"id": "x"}]})[0], 403)
+
+                # Auditoria registra uso do token técnico pelo prefixo SHA-256 sem expor o segredo em texto
+                st_aud, aud = _req(f"{base}/api/auditoria", token=token_forte)
+                self.assertEqual(st_aud, 200)
+                texto_aud = json.dumps(aud, ensure_ascii=False)
+                self.assertNotIn(token_forte, texto_aud)
+                self.assertIn("USO_TOKEN_TECNICO_LEGADO", [t["acao"] for t in aud["trilha"]])
+
+                # Cookie HttpOnly emitido no login + proteção CSRF em pedidos POST via cookie
+                req_login = Request(
+                    f"{base}/api/login",
+                    data=json.dumps({"usuario": "analista.ger", "senha": "SenhaGer#2026"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "X-Forwarded-Proto": "https"},
+                    method="POST",
+                )
+                with urlopen(req_login, timeout=10) as r_log:
+                    set_cookie = r_log.headers.get("Set-Cookie") or ""
+                    dados_log = json.loads(r_log.read().decode("utf-8"))
+                self.assertIn("gediv_sessao=", set_cookie)
+                self.assertIn("HttpOnly", set_cookie)
+                self.assertIn("SameSite=Strict", set_cookie)
+                self.assertIn("Secure", set_cookie)
+                cookie_par = set_cookie.split(";", 1)[0]
+
+                # Consulta autenticada usando apenas o cookie HttpOnly
+                req_sess = Request(f"{base}/api/sessao", headers={"Cookie": cookie_par})
+                with urlopen(req_sess, timeout=10) as r_s:
+                    self.assertEqual(json.loads(r_s.read().decode("utf-8"))["usuario"], "analista.ger")
+
+                # Ataque CSRF cross-site usando cookie deve ser recusado com HTTP 403
+                req_csrf = Request(
+                    f"{base}/api/logout",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "cross-site"},
+                    method="POST",
+                )
+                with self.assertRaises(HTTPError) as ctx_csrf:
+                    urlopen(req_csrf, timeout=10)
+                self.assertEqual(ctx_csrf.exception.code, 403)
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
