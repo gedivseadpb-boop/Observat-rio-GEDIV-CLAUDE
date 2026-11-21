@@ -150,6 +150,8 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
         self.assertIn("cobertura_resumo.json", sh_txt)
         self.assertEqual(sh_txt.count('as_uri() + "?mode=ro"'), 2, "Passo [3/6] deve abrir os SQLites exclusivamente em ?mode=ro!")
         self.assertNotIn("with Banco(", sh_txt, "Passo [5/6] não deve abrir Banco() em modo leitura-escrita após o backup!")
+        self.assertIn("indicadores.resumo_cobertura_edicoes(banco_ro)", sh_txt)
+        self.assertIn("proteger_publico=True", sh_txt)
         idx_validacoes = sh_txt.index('if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:')
         idx_tmp_write = sh_txt.index('tmp.write_text(')
         idx_tmp_replace = sh_txt.index('tmp.replace(out)')
@@ -275,6 +277,65 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
             )
             self.assertNotEqual(res_corrompido.returncode, 0)
             self.assertFalse((tmp_dir / "corrompido.json").exists())
+
+    def test_06_cobertura_abono_permanencia_e_units_linux(self) -> None:
+        from observatorio.gerencias.gediv import catalogo as C
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            db_path = pathlib.Path(tmp) / "cobertura_abono.sqlite3"
+            shas = [f"{i:064x}" for i in range(1, 7)]
+            with Banco(db_path) as banco:
+                with banco.con:
+                    for i, sha in enumerate(shas, start=1):
+                        banco.con.execute(
+                            "INSERT INTO arquivo (sha256, tamanho, caminho, guardado_em) VALUES (?,?,?,?)",
+                            (sha, 1024, f"acervo/{sha}.pdf", "2026-04-10T09:00:00Z"),
+                        )
+                        situacao = "ERRO" if i == 6 else "LIDA"
+                        banco.con.execute(
+                            "INSERT INTO leitura (sha256, situacao, versao_leitor, paginas, paginas_sem_texto, numero_edicao, data_edicao, concluida_em) "
+                            "VALUES (?,?,?,?,?,?,?,?)",
+                            (sha, situacao, "1.0", 8, 0, f"20{i}", f"2026-04-0{i}", "2026-04-10T09:00:00Z"),
+                        )
+                    # Edição 1: PROGRESSAO; Edição 2: TEMPO_SERVICO
+                    banco.con.execute(
+                        "INSERT INTO ato (id, gerencia, sha256, tipo, numero, pagina, pagina_final, data_publicacao, vinculo, natureza, eixo, modalidade, grupo, resultado, texto, versao_regras) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        ("a" * 20, "GEDIV", shas[0], "RESENHA", "001/2026", 1, 1, "2026-04-01", "EXPRESSO", "ORIGINAL", "PROGRESSAO", "VERTICAL", "MAG", "DEFERIDO", "Resenha", C.VERSAO_REGRAS),
+                    )
+                    banco.con.execute(
+                        "INSERT INTO ato (id, gerencia, sha256, tipo, numero, pagina, pagina_final, data_publicacao, vinculo, natureza, eixo, subcategoria, resultado, texto, versao_regras) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        ("b" * 20, "GEDIV", shas[1], "RESENHA", "002/2026", 2, 2, "2026-04-02", "EXPRESSO", "ORIGINAL", "TEMPO_SERVICO", "TS-01", "DEFERIDO", "Resenha", C.VERSAO_REGRAS),
+                    )
+                    # Edição 3: SOMENTE Abono de Permanência em outra_publicacao -> NÃO deve contar como ausência técnica
+                    banco.con.execute(
+                        "INSERT INTO outra_publicacao (id, gerencia, sha256, tipo, pagina, data_publicacao, titulo, vinculo, trecho) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
+                        ("c" * 20, "GEDIV", shas[2], "PORTARIA", 5, "2026-04-03", "Portaria 55/2026 - Abono de Permanência", "EXPRESSO", "Concede Abono de Permanência."),
+                    )
+                    # Edição 4: SOMENTE distrator "Abono Natalino" -> DEVE contar como ausência técnica
+                    banco.con.execute(
+                        "INSERT INTO outra_publicacao (id, gerencia, sha256, tipo, pagina, data_publicacao, titulo, vinculo, trecho) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
+                        ("d" * 20, "GEDIV", shas[3], "PORTARIA", 6, "2026-04-04", "Portaria 56/2026 - Abono Natalino", "EXPRESSO", "Dispõe sobre Abono Natalino."),
+                    )
+                    # Edição 5: leitura válida sem ato e sem Abono -> ausência técnica
+
+            sha_antes = hashlib.sha256(db_path.read_bytes()).hexdigest()
+            with Banco.somente_leitura(db_path) as banco_ro:
+                res = indicadores.resumo_cobertura_edicoes(banco_ro)
+            self.assertEqual(res, {"ausencia_tecnica_edicoes": 2, "inconclusivas": 1})
+            self.assertEqual(hashlib.sha256(db_path.read_bytes()).hexdigest(), sha_antes)
+
+        # Valida scripts LF e units systemd preparados para Linux
+        for script_nome in ("rodar_diario.sh", "recuperar_edicoes_manual.sh", "verificar_ambiente_linux.sh"):
+            arq = DEPLOY_DIR / script_nome
+            self.assertTrue(arq.is_file(), f"Script ausente: {script_nome}")
+            self.assertEqual(arq.read_bytes().count(b"\r\n"), 0, f"{script_nome} deve usar apenas LF")
+        ver_linux = (DEPLOY_DIR / "verificar_ambiente_linux.sh").read_text(encoding="utf-8")
+        self.assertIn("systemd-analyze verify", ver_linux)
+        self.assertIn("PYTHONSAFEPATH=1", ver_linux)
 
 
 if __name__ == "__main__":

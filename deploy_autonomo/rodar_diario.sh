@@ -122,29 +122,24 @@ from observatorio.painel import adaptador, indicadores
 
 db, out = Path(sys.argv[1]), Path(sys.argv[2])
 with Banco.somente_leitura(db) as banco_ro:
-    inconclusivas = banco_ro.con.execute(
-        "SELECT COUNT(*) FROM leitura WHERE situacao='ERRO' OR data_edicao IS NULL OR numero_edicao IS NULL"
-    ).fetchone()[0]
-    ausencia = banco_ro.con.execute("""
-        SELECT COUNT(*) FROM leitura l
-        WHERE l.situacao != 'ERRO' AND l.data_edicao IS NOT NULL AND l.numero_edicao IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM ato a WHERE a.sha256 = l.sha256 AND a.gerencia = 'GEDIV'
-              AND a.eixo IN ('PROGRESSAO', 'TEMPO_SERVICO')
-          )
-    """).fetchone()[0]
-
-    p_pub = indicadores.painel(banco_ro, {"escopo": "pendente"}, indicadores.PUBLICO)
-    if p_pub["meta"]["escopo"] != "conferido" or p_pub["linhas"] != []:
-        raise SystemExit("ERRO DE PRIVACIDADE: perfil público expôs escopo pendente ou linhas individuais!")
+    resumo = indicadores.resumo_cobertura_edicoes(banco_ro)
+    p_pub = indicadores.painel(
+        banco_ro,
+        {"escopo": "pendente", "inicio": "2026-01-01"},
+        indicadores.PUBLICO,
+        proteger_publico=True,
+    )
+    if p_pub["meta"]["escopo"] != "conferido" or p_pub["linhas"] != [] or p_pub["resenhas"] != [] or p_pub["eventos"] != []:
+        raise SystemExit("ERRO DE PRIVACIDADE: perfil público expôs escopo pendente, resenhas, eventos ou linhas individuais!")
+    if p_pub["apoio"]["decisoes_pendentes"] is not None:
+        raise SystemExit("ERRO DE PRIVACIDADE: perfil público expôs fila interna de pendências!")
     proj_pub = adaptador.projetar_para_dashboard_2910(p_pub, [], [])
-    if proj_pub.get("rows"):
-        raise SystemExit("ERRO DE PRIVACIDADE: projeção pública para o dashboard unificado contém linhas individuais!")
+    if proj_pub.get("rows") or proj_pub["dashboard"]["counts"]["unlinkedEvents"] != 0:
+        raise SystemExit("ERRO DE PRIVACIDADE: projeção pública contém linhas individuais ou contadores internos!")
     cats = [c[0] for c in proj_pub.get("categories", [])]
     if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:
         raise SystemExit(f"ERRO DE CONTRATO: categorias inválidas na projeção unificada: {cats}")
 
-resumo = {"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}
 tmp = out.with_name(out.name + ".tmp")
 tmp.write_text(json.dumps(resumo, indent=2) + "\n", encoding="utf-8")
 tmp.replace(out)
