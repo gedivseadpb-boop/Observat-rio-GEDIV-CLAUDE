@@ -383,13 +383,17 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
             threading.Thread(target=srv.serve_forever, daemon=True).start()
             base = f"http://127.0.0.1:{srv.server_address[1]}"
             try:
-                # Token técnico acessa rota gerencial, mas NÃO possui papel 'admin' (não faz bypass de RBAC)
+                # Token técnico acessa rota gerencial, mas NÃO possui papel 'admin' (não faz bypass de RBAC) e não consulta /api/auditoria
                 self.assertEqual(_req(f"{base}/api/conflitos", token=token_forte)[0], 200)
+                self.assertEqual(_req(f"{base}/api/auditoria", token=token_forte)[0], 403)
                 self.assertEqual(_req(f"{base}/api/admin/usuarios", token=token_forte)[0], 403)
                 self.assertEqual(_req(f"{base}/api/admin/lote", token=token_forte, payload={"rows": [{"id": "x"}]})[0], 403)
 
-                # Auditoria registra uso do token técnico pelo prefixo SHA-256 sem expor o segredo em texto
-                st_aud, aud = _req(f"{base}/api/auditoria", token=token_forte)
+                # Conta admin nominal enxerga trilha global (inclusive USO_TOKEN_TECNICO_LEGADO sem expor o segredo)
+                Contas(pasta / "contas.sqlite3").criar("admin.rbac", "Admin RBAC", "AdminForte#2026", papel="admin")
+                st_adm_l, s_adm_l = _req(f"{base}/api/login", payload={"usuario": "admin.rbac", "senha": "AdminForte#2026"})
+                self.assertEqual(st_adm_l, 200)
+                st_aud, aud = _req(f"{base}/api/auditoria", token=s_adm_l["token"])
                 self.assertEqual(st_aud, 200)
                 texto_aud = json.dumps(aud, ensure_ascii=False)
                 self.assertNotIn(token_forte, texto_aud)
@@ -416,16 +420,26 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 with urlopen(req_sess, timeout=10) as r_s:
                     self.assertEqual(json.loads(r_s.read().decode("utf-8"))["usuario"], "analista.ger")
 
-                # Ataque CSRF cross-site usando cookie deve ser recusado com HTTP 403
-                req_csrf = Request(
+                # Ataques CSRF com cookie (cross-site, same-site e ausência de Origin/Sec-Fetch-Site/Referer) -> 403
+                for headers_csrf in (
+                    {"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "cross-site"},
+                    {"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "same-site"},
+                    {"Content-Type": "application/json", "Cookie": cookie_par},
+                ):
+                    req_csrf = Request(f"{base}/api/logout", data=b"{}", headers=headers_csrf, method="POST")
+                    with self.assertRaises(HTTPError) as ctx_csrf:
+                        urlopen(req_csrf, timeout=10)
+                    self.assertEqual(ctx_csrf.exception.code, 403)
+
+                # Pedido same-origin legítimo via cookie -> 200
+                req_ok_csrf = Request(
                     f"{base}/api/logout",
                     data=b"{}",
-                    headers={"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "cross-site"},
+                    headers={"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "same-origin"},
                     method="POST",
                 )
-                with self.assertRaises(HTTPError) as ctx_csrf:
-                    urlopen(req_csrf, timeout=10)
-                self.assertEqual(ctx_csrf.exception.code, 403)
+                with urlopen(req_ok_csrf, timeout=10) as r_out:
+                    self.assertEqual(r_out.status, 200)
             finally:
                 srv.shutdown()
                 srv.server_close()

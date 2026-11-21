@@ -132,10 +132,11 @@ class TesteAPIPrivacidade(TP.Base):
         self.addCleanup(self.servidor.server_close)
         self.addCleanup(self.servidor.shutdown)
         self.url = f"http://127.0.0.1:{self.servidor.server_address[1]}"
-    ROTAS_PUBLICAS = ("/api/painel", "/api/painel?escopo=pendente", "/api/painel?cartao=sem_efeito", "/api/outras",
+    ROTAS_PUBLICAS = ("/api/painel", "/api/painel?escopo=pendente", "/api/painel?cartao=sem_efeito",
                       "/api/saude", "/api/catalogo", "/", "/estatico/app.js")
 
     def test_marcador_nunca_sai_sem_credencial_e_a_gerencia_continua_revisando(self):
+        from observatorio.web.contas import Contas
         eventos = {e["tipo"]: e["id"] for e in self.banco.con.execute("SELECT id, tipo FROM evento")}
         conferir_originais(self.banco)
         # A revisão gerencial pela própria API, com justificativa contendo o marcador.
@@ -151,12 +152,22 @@ class TesteAPIPrivacidade(TP.Base):
                 self.assertNotIn("MARCADOR-PRIVADO-7731", corpo.decode("utf-8"))
                 if rota.startswith("/api/"):
                     self.assertEqual(list(chaves_com_conteudo(json.loads(corpo))), [])
-        # A gerência autenticada vê a justificativa no painel e na trilha de auditoria.
-        for rota in ("/api/painel", "/api/auditoria", "/api/outras"):
+        # /api/outras agora exige autenticação da gerência.
+        self.assertEqual(self.pedir("/api/outras")[0], 401)
+        self.assertEqual(self.pedir("/api/outras", "credencial-errada-0123456789")[0], 403)
+        # Token técnico legado não acessa trilha global de auditoria; gerência vê painel e outras; admin vê auditoria global.
+        self.assertEqual(self.pedir("/api/auditoria", self.TOKEN)[0], 403)
+        for rota in ("/api/painel", "/api/outras"):
             with self.subTest(gerencia=rota):
                 status, _, corpo = self.pedir(rota, self.TOKEN)
                 self.assertEqual(status, 200)
                 self.assertIn("MARCADOR-PRIVADO-7731", corpo.decode("utf-8"))
+        Contas(self.pasta / "contas.sqlite3").criar("adm.priv", "Admin Priv", "SenhaAdmPriv#2026", papel="admin")
+        _, _, body_login = self.pedir("/api/login", corpo={"usuario": "adm.priv", "senha": "SenhaAdmPriv#2026"})
+        tok_adm = json.loads(body_login)["token"]
+        status, _, corpo = self.pedir("/api/auditoria", tok_adm)
+        self.assertEqual(status, 200)
+        self.assertIn("MARCADOR-PRIVADO-7731", corpo.decode("utf-8"))
         # Credencial errada é tratada como público nas rotas abertas: nada privado.
         status, _, corpo = self.pedir("/api/painel", "credencial-errada-0123456789")
         self.assertNotIn("MARCADOR-PRIVADO-7731", corpo.decode("utf-8"))

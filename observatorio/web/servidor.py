@@ -51,6 +51,14 @@ SEGURANCA = {
 COOKIE_SESSAO = "gediv_sessao"
 MIN_TOKEN_TECNICO_LEGADO = 16
 MIN_TOKEN_TECNICO_PRODUCAO = 32
+_ACOES_RESTRITAS_AUDITORIA = frozenset({
+    "RECEBER_LOTE_ADMIN",
+    "USO_TOKEN_TECNICO_LEGADO",
+    "CRIAR_USUARIO",
+    "ALTERAR_PAPEL",
+    "DESATIVAR_USUARIO",
+    "ATIVAR_USUARIO",
+})
 
 
 class Erro(Exception):
@@ -151,19 +159,39 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                         "Acesso autenticado via credencial técnica legada",
                     )
 
-        def _verificar_csrf_cookie(self) -> None:
-            if not self._usando_cookie_sessao():
-                return
+        def _verificar_origem_post(self, exigir_cabecalho: bool) -> None:
             sec_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
-            if sec_site == "cross-site":
+            host_req = (self.headers.get("Host") or "").strip()
+            if exigir_cabecalho and sec_site and sec_site != "same-origin":
                 raise Erro(403, "pedido bloqueado por proteção CSRF")
             if "Origin" in self.headers:
                 orig_req = (self.headers.get("Origin") or "").strip().rstrip("/")
-                host_req = (self.headers.get("Host") or "").strip()
                 if not orig_req or orig_req.lower() == "null" or "*" in orig_req:
                     raise Erro(403, "origem inválida (proteção CSRF)")
                 if orig_req not in origens and urlsplit(orig_req).netloc != host_req:
                     raise Erro(403, "origem não autorizada (proteção CSRF)")
+                if not exigir_cabecalho and sec_site and sec_site != "same-origin" and orig_req not in origens:
+                    raise Erro(403, "pedido bloqueado por proteção CSRF")
+                return
+            if not exigir_cabecalho:
+                if sec_site and sec_site not in ("same-origin", "none"):
+                    raise Erro(403, "pedido bloqueado por proteção CSRF")
+                return
+            if sec_site == "same-origin":
+                return
+            ref = (self.headers.get("Referer") or "").strip()
+            if ref:
+                u = urlsplit(ref)
+                orig_ref = f"{u.scheme}://{u.netloc}" if u.scheme and u.netloc else ""
+                if u.scheme in ("http", "https") and (orig_ref in origens or u.netloc == host_req):
+                    return
+                raise Erro(403, "referência de origem não autorizada (proteção CSRF)")
+            raise Erro(403, "origem não verificável (proteção CSRF)")
+
+        def _verificar_csrf_cookie(self) -> None:
+            if not self._usando_cookie_sessao():
+                return
+            self._verificar_origem_post(exigir_cabecalho=True)
 
         def _cabecalho_cookie_sessao(self, valor: str, max_age: int) -> str:
             secure = (
@@ -312,10 +340,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
             if rota == "/api/catalogo":
                 return self._json(catalogo.como_dicionario())
             if rota == "/api/painel":
-                return self._json(indicadores.painel(banco, consulta, perfil))
+                return self._json(indicadores.painel(banco, consulta, perfil, proteger_publico=(perfil != indicadores.GERENCIA_PERFIL)))
             if rota == "/api/data":
                 escopo_padrao = "pendente" if perfil == indicadores.GERENCIA_PERFIL else "conferido"
-                p_resp = indicadores.painel(banco, {**consulta, "escopo": consulta.get("escopo") or escopo_padrao}, perfil)
+                p_resp = indicadores.painel(
+                    banco,
+                    {**consulta, "escopo": consulta.get("escopo") or escopo_padrao},
+                    perfil,
+                    proteger_publico=(perfil != indicadores.GERENCIA_PERFIL),
+                )
                 if perfil == indicadores.GERENCIA_PERFIL:
                     # Carrega ambos os escopos (pendente e conferido) e rejeitados para o perfil autenticado
                     p_pend = p_resp if p_resp["meta"]["escopo"] == "pendente" else indicadores.painel(banco, {"escopo": "pendente"}, perfil)
@@ -353,6 +386,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 resp["backend"]["ehAdmin"] = False
                 return self._json(resp)
             if rota == "/api/outras":
+                self._exigir_gerencia()
                 return self._json({"itens": indicadores.outras_publicacoes(banco, perfil)})
             if rota == "/api/exportar":
                 self._exigir_gerencia()
@@ -400,7 +434,19 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                                    "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV", catalogo.VERSAO_REGRAS)})
             if rota == "/api/auditoria":
                 self._exigir_gerencia()
-                return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})
+                if self._usando_token_tecnico():
+                    raise Erro(403, "consulta de auditoria exige conta nominal")
+                if self._papel() == "admin":
+                    return self._json({"escopo": "global", "trilha": [dict(t) for t in banco.trilha(limite=300)]})
+                ator = self._ator()
+                return self._json({
+                    "escopo": "proprio",
+                    "trilha": [
+                        dict(t)
+                        for t in banco.trilha(limite=300)
+                        if t["autor"] == ator and t["acao"] not in _ACOES_RESTRITAS_AUDITORIA
+                    ],
+                })
             if rota == "/api/admin/usuarios":
                 self._exigir_admin()
                 return self._json({"usuarios": contas.listar()})
@@ -425,6 +471,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
         def _post(self, banco: Banco) -> None:
             rota = urlsplit(self.path).path
             if rota == "/api/login":
+                self._verificar_origem_post(exigir_cabecalho=False)
                 p = self._corpo_json()
                 try:
                     sessao = contas.entrar(str(p.get("usuario", ""))[:80], str(p.get("senha", ""))[:200])
@@ -466,7 +513,10 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
             self._exigir_gerencia()
             p = self._corpo_json()
             # Com conta individual, o responsável é SEMPRE a pessoa logada (o nome enviado pelo navegador é ignorado).
-            responsavel = self._ator() if self._conta() else str(p.get("responsavel", ""))
+            informado = str(p.get("responsavel", "")).strip()[:80]
+            responsavel = self._ator() if self._conta() else (
+                f"credencial_tecnica_legada: {informado}" if informado else ""
+            )
             comuns = (str(p.get("decisao", "")), responsavel, str(p.get("justificativa", "")))
             alvo = p.get("alvo")
             if alvo == "ato":

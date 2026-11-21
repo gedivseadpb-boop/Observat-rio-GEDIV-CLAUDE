@@ -27,6 +27,7 @@ from ..nucleo.banco import Banco
 from . import documental, projecao
 
 GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
+LIMIAR_PUBLICO = 5
 CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
 ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
            "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
@@ -216,15 +217,289 @@ def _fonte(banco: Banco, cache: dict, sha: str, pagina) -> dict:
     return {"url_oficial": f"{url}#page={pagina}" if url else None, "pdf_no_acervo": f"/api/pdf/{sha}#page={pagina}"}
 
 
-def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> dict:
+def _matricula_valida(linha: dict) -> str | None:
+    m = re.sub(r"\D", "", str(linha.get("matricula") or ""))
+    return m if 6 <= len(m) <= 9 and len(set(m)) > 1 else None
+
+
+def _pessoas_distintas(linhas: list[dict]) -> int:
+    return len({m for l in linhas if (m := _matricula_valida(l))})
+
+
+def _proteger_inteiro(valor: int | None, pessoas: int) -> int | None:
+    if valor is None:
+        return None
+    if valor == 0:
+        return 0
+    if valor < LIMIAR_PUBLICO or pessoas < LIMIAR_PUBLICO:
+        return None
+    return (valor // LIMIAR_PUBLICO) * LIMIAR_PUBLICO
+
+
+def _mes_competencia(data: str | None) -> str:
+    txt = str(data or "").strip()
+    return txt[:7] if len(txt) >= 7 and txt[4:5] == "-" else "SEM_DATA"
+
+
+def _contar_publico(linhas: list[dict]) -> dict:
+    total = len(linhas)
+    if total == 0:
+        return {"total": 0, "deferido": 0, "indeferido": 0, "nao_informado": 0}
+    pessoas = _pessoas_distintas(linhas)
+    total_prot = _proteger_inteiro(total, pessoas)
+    if total_prot is None:
+        return {"total": None, "deferido": None, "indeferido": None, "nao_informado": None}
+    partes = {
+        k: [l for l in linhas if l.get("resultado") == r]
+        for k, r in (("deferido", "DEFERIDO"), ("indeferido", "INDEFERIDO"), ("nao_informado", "NAO_INFORMADO"))
+    }
+    sub_prot = {k: _proteger_inteiro(len(itens), _pessoas_distintas(itens)) for k, itens in partes.items()}
+    # Supressao complementar: se qualquer desfecho positivo ficar < LIMIAR, oculta os demais para impedir subtracao.
+    if any(len(itens) > 0 and sub_prot[k] is None for k, itens in partes.items()):
+        return {"total": total_prot, "deferido": None, "indeferido": None, "nao_informado": None}
+    return {"total": total_prot, **sub_prot}
+
+
+def _suprimir_secundaria(itens: list[dict], positivos: int) -> None:
+    """Se exatamente 1 item positivo foi suprimido numa dimensão agregada, suprime também o menor visível."""
+    visiveis = [it for it in itens if (it.get("total") or 0) > 0]
+    if positivos - len(visiveis) == 1 and visiveis:
+        menor = min(visiveis, key=lambda x: x["total"])
+        for campo in ("total", "deferido", "indeferido", "nao_informado", "vertical", "horizontal", "tempo"):
+            if campo in menor:
+                menor[campo] = None
+
+
+def _aplicar_protecao_publica(
+    originais: list[dict],
+    logico: dict,
+    refeitos_logicos: set,
+    sem_efeito_logicos: set,
+    conferido: bool,
+    cob: dict,
+    meta_base: dict,
+) -> dict:
+    """Agrega dados públicos com k-anonymity (>= 5 decisões E >= 5 matrículas), faixas de largura 5,
+    granularidade temporal mensal e supressão complementar/secundária, removendo resenhas/eventos/filas internas."""
+    pessoas_total = _pessoas_distintas(originais)
+    total_dec = len(originais)
+    total_prot = _proteger_inteiro(total_dec, pessoas_total)
+    proc_prot = _proteger_inteiro(len({l["processo"] for l in originais if l["processo"]}), pessoas_total)
+    res_prot = _proteger_inteiro(len({logico.get(l["ato_id"], l["ato_id"]) for l in originais}), pessoas_total)
+
+    def_lin = [l for l in originais if l["resultado"] == "DEFERIDO"]
+    ind_lin = [l for l in originais if l["resultado"] == "INDEFERIDO"]
+    def_prot = _proteger_inteiro(len(def_lin), _pessoas_distintas(def_lin))
+    ind_prot = _proteger_inteiro(len(ind_lin), _pessoas_distintas(ind_lin))
+    if (len(def_lin) > 0 and def_prot is None) or (len(ind_lin) > 0 and ind_prot is None):
+        def_prot, ind_prot = None, None
+
+    ref_lin = [l for l in originais if logico.get(l["ato_id"], l["ato_id"]) in refeitos_logicos]
+    se_lin = [l for l in originais if logico.get(l["ato_id"], l["ato_id"]) in sem_efeito_logicos]
+    ref_prot = _proteger_inteiro(len(refeitos_logicos), _pessoas_distintas(ref_lin)) if conferido else None
+    se_prot = _proteger_inteiro(len(sem_efeito_logicos), _pessoas_distintas(se_lin)) if conferido else None
+
+    indicadores_pub = {
+        "processos": proc_prot,
+        "resenhas": res_prot,
+        "decisoes": total_prot,
+        "deferidos": def_prot,
+        "indeferidos": ind_prot,
+        "refeitos": ref_prot,
+        "sem_efeito": se_prot,
+    }
+
+    prog = [l for l in originais if l["eixo"] == C.PROGRESSAO]
+    tempo = [l for l in originais if l["eixo"] == C.TEMPO]
+    verticais = [l for l in prog if l["modalidade"] == C.VERTICAL]
+    horizontais = [l for l in prog if l["modalidade"] == C.HORIZONTAL]
+
+    por_assunto = [
+        {"chave": "VERTICAL", "rotulo": "Progressão Vertical", **_contar_publico(verticais)},
+        {"chave": "HORIZONTAL", "rotulo": "Progressão Horizontal", **_contar_publico(horizontais)},
+        {"chave": "TEMPO_SERVICO", "rotulo": "Tempo de Serviço", **_contar_publico(tempo)},
+    ]
+    _suprimir_secundaria(por_assunto, sum(1 for x in (verticais, horizontais, tempo) if x))
+
+    meses_map: dict[str, list[dict]] = {}
+    for l in originais:
+        meses_map.setdefault(_mes_competencia(l.get("data")), []).append(l)
+    por_data_todos = []
+    for mes in sorted(meses_map):
+        itens_m = meses_map[mes]
+        p_m = _pessoas_distintas(itens_m)
+        t_m = _proteger_inteiro(len(itens_m), p_m)
+        v_lin = [x for x in itens_m if x["modalidade"] == C.VERTICAL]
+        h_lin = [x for x in itens_m if x["modalidade"] == C.HORIZONTAL]
+        tm_lin = [x for x in itens_m if x["eixo"] == C.TEMPO]
+        v_p = _proteger_inteiro(len(v_lin), _pessoas_distintas(v_lin))
+        h_p = _proteger_inteiro(len(h_lin), _pessoas_distintas(h_lin))
+        tm_p = _proteger_inteiro(len(tm_lin), _pessoas_distintas(tm_lin))
+        if t_m is None or any(len(s) > 0 and sp is None for s, sp in ((v_lin, v_p), (h_lin, h_p), (tm_lin, tm_p))):
+            v_p = h_p = tm_p = None
+        por_data_todos.append({"data": mes, "vertical": v_p, "horizontal": h_p, "tempo": tm_p, "total": t_m})
+    _suprimir_secundaria(por_data_todos, len(meses_map))
+    por_data = [m for m in por_data_todos if m["total"] is not None]
+
+    def _montar_grupos(chaves_e_linhas, campos_extra_fn):
+        itens, pos = [], 0
+        for chave, lins in chaves_e_linhas:
+            if not lins:
+                continue
+            pos += 1
+            cont = _contar_publico(lins)
+            v_lin = [x for x in lins if x["modalidade"] == C.VERTICAL]
+            h_lin = [x for x in lins if x["modalidade"] == C.HORIZONTAL]
+            v_p = _proteger_inteiro(len(v_lin), _pessoas_distintas(v_lin)) if cont["total"] is not None else None
+            h_p = _proteger_inteiro(len(h_lin), _pessoas_distintas(h_lin)) if cont["total"] is not None else None
+            if (len(v_lin) > 0 and v_p is None) or (len(h_lin) > 0 and h_p is None):
+                v_p, h_p = None, None
+            itens.append({**campos_extra_fn(chave), "horizontal": h_p, "vertical": v_p, **cont})
+        _suprimir_secundaria(itens, pos)
+        return [it for it in itens if it["total"] is not None]
+
+    por_grupo = _montar_grupos(
+        [(c, [l for l in prog if (l["grupo"] or "NAO_INFORMADO") == c]) for c in [g.codigo for g in C.GRUPOS] + ["NAO_INFORMADO"]],
+        lambda codigo: {
+            "grupo": codigo,
+            "nome": C.GRUPO_POR_CODIGO[codigo].nome if codigo in C.GRUPO_POR_CODIGO else "Grupo não informado",
+        },
+    )
+    NOMES_EXP = {
+        "PENDENTE:TEC. ADM": "TEC. ADM · expressão pendente de confirmação (AST)",
+        "PENDENTE:STF": "STF · expressão pendente de confirmação (SFT)",
+    }
+    por_grupo_det = _montar_grupos(
+        [(ch, [l for l in prog if _chave_grupo(l) == ch]) for ch in [g.codigo for g in C.GRUPOS] + ["PENDENTE:TEC. ADM", "PENDENTE:STF", "NAO_INFORMADO"]],
+        lambda chave: {
+            "chave": chave,
+            "grupo": chave if chave in C.GRUPO_POR_CODIGO else None,
+            "expressao_pendente": chave.split(":", 1)[1] if chave.startswith("PENDENTE:") else None,
+            "pendente_confirmacao": chave.startswith("PENDENTE:"),
+            "nome": C.GRUPO_POR_CODIGO[chave].nome if chave in C.GRUPO_POR_CODIGO else NOMES_EXP.get(chave, "Grupo não informado"),
+        },
+    )
+
+    niveis_lista, pos_nv = [], 0
+    for nv in NIVEIS_VERTICAIS:
+        itens_nv = [l for l in verticais if (l.get("nivel_info") or {}).get("nivel") == nv]
+        if itens_nv:
+            pos_nv += 1
+        niveis_lista.append({
+            "nivel": nv,
+            "rotulo": "Nível não identificado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
+            **_contar_publico(itens_nv),
+            "transicoes": [],
+        })
+    _suprimir_secundaria(niveis_lista, pos_nv)
+
+    por_sub, pos_sub = [], 0
+    for s in C.SUBCATEGORIAS:
+        lins = [l for l in tempo if l["subcategoria"] == s.codigo]
+        if lins:
+            pos_sub += 1
+        cont = _contar_publico(lins)
+        sit = None if cont["total"] else ("suprimido por privacidade (< 5)" if lins else (
+            "sem ocorrência confirmada no período verificado" if cob["completa"] else "cobertura pendente"))
+        por_sub.append({"codigo": s.codigo, "nome": s.nome, **cont, "situacao": sit})
+    _suprimir_secundaria(por_sub, pos_sub)
+
+    por_cond, pos_cond = [], 0
+    for c, n in C.CONDICOES.items():
+        lins = [l for l in prog if (l["condicao"] or "NAO_INFORMADA") == c]
+        if lins:
+            pos_cond += 1
+        por_cond.append({"condicao": c, "nome": n, "total": _proteger_inteiro(len(lins), _pessoas_distintas(lins))})
+    _suprimir_secundaria(por_cond, pos_cond)
+
+    sem_mod = [l for l in prog if l["modalidade"] is None]
+    cls_lin = [l for l in verticais if (l.get("nivel_info") or {}).get("nivel") in _CLASSES_VALIDAS]
+    ni_lin = [l for l in verticais if (l.get("nivel_info") or {}).get("nivel") == "NAO_IDENTIFICADO"]
+    cls_p = _proteger_inteiro(len(cls_lin), _pessoas_distintas(cls_lin))
+    ni_p = _proteger_inteiro(len(ni_lin), _pessoas_distintas(ni_lin))
+    if (len(cls_lin) > 0 and cls_p is None) or (len(ni_lin) > 0 and ni_p is None):
+        cls_p = ni_p = None
+
+    apoio_nulo = {
+        "eventos_de_alteracao": None, "eventos_por_tipo": None, "eventos_sem_vinculo": None,
+        "decisoes_pendentes": None, "decisoes_conferidas": None, "decisoes_excluidas_integridade": None,
+        "decisoes_conferidas_com_conflito": None, "decisoes_rejeitadas": None,
+        "conflitos_abertos": None, "classificacoes_desatualizadas": None, "vinculo_nao_expresso_pendente": None,
+    }
+    meta_pub = {
+        **meta_base,
+        "privacidade": {
+            "protegido": True, "limiar": LIMIAR_PUBLICO, "faixa": LIMIAR_PUBLICO,
+            "granularidade_temporal": "mensal", "filtros_dinamicos_bloqueados": True,
+        },
+    }
+    return {
+        "meta": meta_pub,
+        "indicadores": indicadores_pub,
+        "ajuda": {c: ROTULOS[c] for c in CARTOES},
+        "apoio": apoio_nulo,
+        "series": {
+            "por_assunto": por_assunto,
+            "progressao_sem_modalidade": _proteger_inteiro(len(sem_mod), _pessoas_distintas(sem_mod)),
+            "por_data": por_data,
+            "por_grupo": por_grupo,
+            "por_grupo_detalhado": por_grupo_det,
+            "por_nivel_vertical": niveis_lista,
+            "resumo_nivel_vertical": {
+                "total_progressao": _proteger_inteiro(len(prog), _pessoas_distintas(prog)),
+                "total_horizontal": _proteger_inteiro(len(horizontais), _pessoas_distintas(horizontais)),
+                "total_vertical": _proteger_inteiro(len(verticais), _pessoas_distintas(verticais)),
+                "classificados": cls_p,
+                "nao_identificados": ni_p,
+            },
+            "por_subcategoria": por_sub,
+            "por_condicao": por_cond,
+        },
+        "resenhas": [],
+        "linhas": [],
+        "eventos": [],
+    }
+
+
+def resumo_cobertura_edicoes(banco: Banco) -> dict:
+    """Calcula `ausencia_tecnica_edicoes` e `inconclusivas` em somente-leitura, considerando como
+    edicoes com atos relevantes tanto aquelas com atos GEDIV (PROGRESSAO/TEMPO_SERVICO) quanto
+    as que possuem registros reconhecidos de Abono de Permanencia em `outra_publicacao`."""
+    from . import adaptador
+
+    inconclusivas = banco.con.execute(
+        "SELECT COUNT(*) FROM leitura WHERE situacao='ERRO' OR data_edicao IS NULL OR numero_edicao IS NULL"
+    ).fetchone()[0]
+    shas_validos = {
+        r[0] for r in banco.con.execute(
+            "SELECT sha256 FROM leitura WHERE situacao != 'ERRO' AND data_edicao IS NOT NULL AND numero_edicao IS NOT NULL"
+        )
+    }
+    shas_ato = {
+        r[0] for r in banco.con.execute(
+            "SELECT DISTINCT sha256 FROM ato WHERE gerencia = 'GEDIV' AND eixo IN ('PROGRESSAO', 'TEMPO_SERVICO')"
+        )
+    }
+    shas_abono = {
+        r["sha256"] for r in banco.con.execute(
+            "SELECT sha256, tipo, titulo, trecho FROM outra_publicacao WHERE gerencia = 'GEDIV'"
+        )
+        if adaptador._eh_abono_permanencia(dict(r))
+    }
+    ausencia = len(shas_validos - (shas_ato | shas_abono))
+    return {"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}
+
+
+def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO, *, proteger_publico: bool = False) -> dict:
     """Todas as consultas do painel leem o banco num mesmo momento (instantâneo), para que indicadores, séries e tabela
     nunca misturem estados de uma reclassificação em andamento."""
     with banco.instantaneo():
-        return _painel(banco, bruto, perfil)
+        return _painel(banco, bruto, perfil, proteger_publico=proteger_publico)
 
 
-def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
-    f = normalizar_filtros(bruto or {}, perfil)
+def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: bool = False) -> dict:
+    restringir_publico = bool(proteger_publico and perfil != GERENCIA_PERFIL)
+    f = normalizar_filtros({} if restringir_publico else (bruto or {}), perfil)
     estado = "CONFERIDO" if f["escopo"] == "conferido" else "PENDENTE"
     todas = _linhas(banco)
     dim = [l for l in todas if l["validacao"] == estado and _passa(l, f)]
@@ -278,6 +553,23 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
     prog = [l for l in recorte if l["eixo"] == C.PROGRESSAO]
     tempo = [l for l in recorte if l["eixo"] == C.TEMPO]
     cob = cobertura(banco)
+    if restringir_publico:
+        meta_base = {
+            "sistema": "Painel Diário Oficial | GEDIV",
+            "versao_regras": C.VERSAO_REGRAS,
+            "perfil": perfil,
+            "escopo": f["escopo"],
+            "preliminar": not conferido,
+            "rotulo": "Decisões conferidas",
+            "dados_individuais": False,
+            "filtros": f,
+            "cartao": f["cartao"],
+            "cobertura": cob,
+        }
+        resp_pub = _aplicar_protecao_publica(
+            originais, logico, refeitos_logicos, sem_efeito_logicos, conferido, cob, meta_base
+        )
+        return {k: resp_pub[k] for k in projecao.CHAVES_PAINEL}
     conferidas_vigentes = sum(l["validacao"] == "CONFERIDO" for l in todas)
     conferidas_com_conflito = sum(l["validacao"] == "CONFERIDO" and l["conflito_aberto"] for l in todas)
     conferidas_base = banco.con.execute(
