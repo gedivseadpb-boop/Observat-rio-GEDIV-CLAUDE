@@ -251,6 +251,92 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
         self.assertNotIn("Receber e atualizar", html)
         self.assertNotIn("TS-08", html)
 
+    def test_04_reprodutibilidade_frontend_em_ambiente_limpo_e_ausencia_de_pii(self) -> None:
+        """Passo 2.2: reconstrói o painel unificado a partir do modelo base sanitizado versionado,
+        sem qualquer arquivo externo ou variável GEDIV_ORIGEM_HTML, validando ausência de dados
+        pessoais/caminhos/segredos e igualdade byte a byte com o artefato versionado.
+        """
+        from scripts import construir_painel_unificado as builder
+
+        modelo_path = builder.MODELO_BASE_PADRAO
+        self.assertTrue(modelo_path.is_file(), "modelo-base-sanitizado.html ausente do repositório.")
+
+        padroes_proibidos = [
+            ("processo administrativo real", r"SAD-PSE-202\d/\d+"),
+            ("CPF", r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b"),
+            ("e-mail pessoal", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+            ("token ou chave privada", r"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY)"),
+            ("senha de homologação", r"Gediv(?:Homolog|Admin)\d{4}[!]"),
+            ("URL privada chatgpt.site", r"[A-Za-z0-9.-]*\.chatgpt\.site"),
+            ("caminho local Windows", r"[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]+"),
+            ("caminho pessoal Linux", r"/home/(?!\[)[A-Za-z0-9._-]+"),
+            ("nome serializado em JS", r'"server"\s*:\s*"[A-ZÀ-Ú]{3,}'),
+            ("matrícula serializada em JS", r'"registration"\s*:\s*"\d+'),
+            ("processo serializado em JS", r'"process"\s*:\s*"SAD-'),
+        ]
+
+        for rotulo_arq, caminho_arq in (("modelo-base-sanitizado.html", modelo_path), ("unificado/index.html", UNIFICADO_HTML)):
+            conteudo = caminho_arq.read_text(encoding="utf-8")
+            self.assertIn('window.GEDIV_BOOTSTRAP={"rows":[],"events":[', conteudo, f"Bootstrap não vazio em {rotulo_arq}")
+            for nome_regra, regex in padroes_proibidos:
+                self.assertNotRegex(conteudo, re.compile(regex, re.I), f"Violação ({nome_regra}) em {rotulo_arq}")
+
+        # Reconstruir em diretório temporário isolado sem GEDIV_ORIGEM_HTML
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            saida_limpa = pathlib.Path(tmp) / "index_reconstruido.html"
+            env_antigo = os.environ.pop("GEDIV_ORIGEM_HTML", None)
+            try:
+                builder.construir(origem_html=None, destino_html=saida_limpa)
+            finally:
+                if env_antigo is not None:
+                    os.environ["GEDIV_ORIGEM_HTML"] = env_antigo
+
+            self.assertTrue(saida_limpa.is_file())
+            bytes_reconstruido = saida_limpa.read_bytes()
+            bytes_versionado = UNIFICADO_HTML.read_bytes()
+            self.assertEqual(
+                bytes_reconstruido,
+                bytes_versionado,
+                "Build limpo a partir de modelo-base-sanitizado.html divergiu de observatorio/web/unificado/index.html!",
+            )
+
+            html_limpo = bytes_reconstruido.decode("utf-8")
+            # Verificar estrutura, 7 abas, modalidades A–F / Horizontal / TS-01..TS-07 / Abono (sem TS-08),
+            # consultas Por resenha / Por processo, alternância Quantidade / % e 3 perfis RBAC
+            for marcador in (
+                'data-view="geral"',
+                'data-view="vertical"',
+                'data-view="horizontal"',
+                'data-view="tempo"',
+                'data-view="outras"',
+                'data-view="hoje"',
+                'data-view="historico"',
+                'id="byResenha"',
+                'id="byProcess"',
+                'id="resenhaProcessesCard"',
+                'id="selectedProcCard"',
+                'id="docModal"',
+                'id="reviewDialog"',
+                'id="batchDialog"',
+                'data-unit="qty"',
+                'data-unit="pct"',
+                'TS-01',
+                'TS-07',
+                'ABONO_PERMANENCIA',
+                'Abono de Permanência',
+                'PENDENTE:TEC. ADM',
+                'PENDENTE:STF',
+                'parseVerticalLevel',
+                'delicateAcctBtn',
+                'delicateBatchAct',
+                'delicateScopeProxy',
+                'Exportar visualização',
+                'Empilhadas (Mês)',
+                'Linhas (Mês)',
+            ):
+                self.assertIn(marcador, html_limpo, f"Funcionalidade/estrutura ausente após rebuild: {marcador}")
+            self.assertNotIn("TS-08", html_limpo)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,17 +22,22 @@ import pathlib
 import re
 
 REPO_DIR = pathlib.Path(__file__).resolve().parents[1]
+MODELO_BASE_PADRAO = REPO_DIR / "observatorio" / "web" / "unificado" / "modelo-base-sanitizado.html"
 
 
-def construir(origem_html: pathlib.Path | None = None) -> None:
+def construir(
+    origem_html: pathlib.Path | None = None,
+    destino_html: pathlib.Path | None = None,
+) -> pathlib.Path:
     env_origem = os.environ.get("GEDIV_ORIGEM_HTML")
-    src_path = origem_html or (pathlib.Path(env_origem) if env_origem else None)
+    src_path = origem_html or (pathlib.Path(env_origem) if env_origem else MODELO_BASE_PADRAO)
     if src_path is None or not src_path.is_file():
         raise FileNotFoundError(
-            "Informe --origem <caminho_index_homologado.html> ou defina a variável de ambiente GEDIV_ORIGEM_HTML."
+            "Modelo base não encontrado. Informe --origem <arquivo.html> ou utilize "
+            "observatorio/web/unificado/modelo-base-sanitizado.html."
         )
 
-    dest_unificado = REPO_DIR / "observatorio" / "web" / "unificado" / "index.html"
+    dest_unificado = destino_html or (REPO_DIR / "observatorio" / "web" / "unificado" / "index.html")
     dest_paleta = REPO_DIR / "observatorio" / "web" / "unificado" / "paleta-aprovada.json"
 
     html = src_path.read_text(encoding="utf-8")
@@ -1153,16 +1158,23 @@ function openReviewModal(targetType,items){
     assert not re.search(r"SAD-PSE-202\d/\d+", html), "Processo residual encontrado no HTML!"
     assert not re.search(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", html), "CPF residual encontrado no HTML!"
     assert not re.search(r'"server"\s*:\s*"[A-ZÀ-Ú]{3,}', html), "Nome pessoal residual encontrado no HTML!"
+    assert not re.search(r'"registration"\s*:\s*"\d+', html), "Matrícula residual encontrada no HTML!"
+    assert not re.search(r"[A-Za-z0-9.-]*\.chatgpt\.site", html, re.I), "URL privada chatgpt.site encontrada!"
+    assert not re.search(r"[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]+|/home/(?!\[)[A-Za-z0-9._-]+", html, re.I), "Caminho local encontrado!"
+    assert not re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", html), "E-mail encontrado no HTML!"
+    assert not re.search(r"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Gediv(?:Homolog|Admin)\d{4}[!])", html), "Token ou credencial encontrado no HTML!"
 
     dest_unificado.parent.mkdir(parents=True, exist_ok=True)
     dest_unificado.write_text(html, encoding="utf-8")
-    dest_paleta.write_text(
-        json.dumps({"total": len(orig_colors), "cores_hex": sorted(orig_colors)}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    if destino_html is None:
+        dest_paleta.write_text(
+            json.dumps({"total": len(orig_colors), "cores_hex": sorted(orig_colors)}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Paleta salva ({len(orig_colors)} cores HEX): {dest_paleta}")
     print(f"Salvo ({len(html):,} bytes): {dest_unificado}")
-    print(f"Paleta salva ({len(orig_colors)} cores HEX): {dest_paleta}")
     print(f"Verificação de paleta: {len(new_colors)} cores HEX (0 cores novas).")
+    return dest_unificado
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1171,10 +1183,16 @@ def main(argv: list[str] | None = None) -> int:
         "--origem",
         type=pathlib.Path,
         default=None,
-        help="Caminho para o HTML base homologado (ou use GEDIV_ORIGEM_HTML).",
+        help="Caminho opcional para o HTML base (padrão: observatorio/web/unificado/modelo-base-sanitizado.html).",
+    )
+    parser.add_argument(
+        "--saida",
+        type=pathlib.Path,
+        default=None,
+        help="Caminho opcional de saída para o HTML unificado gerado.",
     )
     args = parser.parse_args(argv)
-    construir(args.origem)
+    construir(args.origem, args.saida)
     return 0
 
 
