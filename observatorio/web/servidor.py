@@ -32,10 +32,11 @@ from .contas import AcessoNegado, Contas
 from ..gerencias.gediv import catalogo
 from ..nucleo.acervo import Acervo
 from ..nucleo.banco import Banco
-from ..painel import exportacao, indicadores
+from ..painel import adaptador, documental, exportacao, indicadores
 from ..revisao import servico
 
 ESTATICO = Path(__file__).parent / "estatico"
+UNIFICADO = Path(__file__).parent / "unificado"
 MAX_CORPO = 64 * 1024
 SEGURANCA = {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
@@ -82,6 +83,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                 return indicadores.GERENCIA_PERFIL
             return indicadores.PUBLICO
 
+        def _papel(self) -> str:
+            token = self._token()
+            if token and hmac.compare_digest(token.encode(), token_gerencia.encode()):
+                return "admin"
+            conta = self._conta() if token else None
+            if conta:
+                return str(conta.get("papel") or "gerencia")
+            return "publico"
+
         def _ator(self) -> str:
             conta = self._conta()
             return f"{conta['nome']} ({conta['usuario']})" if conta else "gerencia (credencial)"
@@ -95,6 +105,12 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                 raise Erro(401, "credencial necessária")
             if self._perfil() != indicadores.GERENCIA_PERFIL:
                 raise Erro(403, "credencial inválida ou sem permissão")
+
+        def _exigir_admin(self) -> None:
+            if "Authorization" not in self.headers:
+                raise Erro(401, "credencial necessária")
+            if self._papel() != "admin":
+                raise Erro(403, "permissão administrativa necessária")
 
         def _enviar(self, status: int, corpo: bytes, tipo: str, extras: dict | None = None) -> None:
             self.send_response(status)
@@ -159,11 +175,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             perfil = self._perfil()
             if rota in ("/", "/index.html"):
                 return self._arquivo("index.html")
+            if rota in ("/painel", "/painel/", "/painel/index.html"):
+                return self._arquivo("index.html", UNIFICADO)
+            if rota.startswith("/painel/"):
+                return self._arquivo(rota[len("/painel/"):], UNIFICADO)
             if rota.startswith("/estatico/"):
                 return self._arquivo(rota[len("/estatico/"):])
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
-                                   "cobertura": indicadores.cobertura(banco)})
+                                   "papel": self._papel(), "cobertura": indicadores.cobertura(banco)})
             if rota == "/api/sessao":
                 conta = self._conta()
                 if not conta:
@@ -173,6 +193,45 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                 return self._json(catalogo.como_dicionario())
             if rota == "/api/painel":
                 return self._json(indicadores.painel(banco, consulta, perfil))
+            if rota == "/api/data":
+                escopo_padrao = "pendente" if perfil == indicadores.GERENCIA_PERFIL else "conferido"
+                p_resp = indicadores.painel(banco, {**consulta, "escopo": consulta.get("escopo") or escopo_padrao}, perfil)
+                if perfil == indicadores.GERENCIA_PERFIL:
+                    # Carrega ambos os escopos (pendente e conferido) e rejeitados para o perfil autenticado
+                    p_pend = p_resp if p_resp["meta"]["escopo"] == "pendente" else indicadores.painel(banco, {"escopo": "pendente"}, perfil)
+                    p_conf = p_resp if p_resp["meta"]["escopo"] == "conferido" else indicadores.painel(banco, {"escopo": "conferido"}, perfil)
+                    todas_linhas = list(p_pend.get("linhas") or []) + list(p_conf.get("linhas") or [])
+                    p_combinado = {**p_resp, "linhas": todas_linhas}
+                    outras_resp = indicadores.outras_publicacoes(banco, perfil)
+                    rej_consulta = banco.con.execute(
+                        "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
+                        "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
+                        "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
+                        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
+                        "a.gerencia AS gerencia_painel, SUBSTR(a.texto,1,1200) AS texto_identificacao, l.numero_edicao, l.data_edicao, "
+                        "0 AS conflito_aberto "
+                        "FROM decisao d JOIN ato a ON a.id = d.ato_id JOIN leitura l ON l.sha256 = d.sha256 "
+                        "WHERE a.gerencia = 'GEDIV' AND d.validacao = 'REJEITADO'"
+                    ).fetchall()
+                    rej_linhas = []
+                    for r in rej_consulta:
+                        lr = dict(r)
+                        lr.update(documental.identificar(lr))
+                        lr.pop("texto_identificacao", None)
+                        lr["detalhe"] = json.loads(lr["detalhe"] or "{}")
+                        lr["pendencias"] = json.loads(lr["pendencias"] or "[]")
+                        url_of = banco.url_oficial(lr["sha256"])
+                        lr["url_oficial"] = f"{url_of}#page={lr['pagina']}" if url_of else None
+                        lr["pdf_no_acervo"] = f"/api/pdf/{lr['sha256']}#page={lr['pagina']}"
+                        rej_linhas.append(lr)
+                    resp = adaptador.projetar_para_dashboard_2910(p_combinado, outras_resp, rej_linhas)
+                    resp["backend"]["papel"] = self._papel()
+                    resp["backend"]["ehAdmin"] = self._papel() == "admin"
+                    return self._json(resp)
+                resp = adaptador.projetar_para_dashboard_2910(p_resp, [], [])
+                resp["backend"]["papel"] = self._papel()
+                resp["backend"]["ehAdmin"] = False
+                return self._json(resp)
             if rota == "/api/outras":
                 return self._json({"itens": indicadores.outras_publicacoes(banco, perfil)})
             if rota == "/api/exportar":
@@ -222,6 +281,9 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
             if rota == "/api/auditoria":
                 self._exigir_gerencia()
                 return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})
+            if rota == "/api/admin/usuarios":
+                self._exigir_admin()
+                return self._json({"usuarios": contas.listar()})
             raise Erro(404, "rota inexistente")
 
         def _corpo_json(self) -> dict:
@@ -257,6 +319,24 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                         banco.auditar(self._ator(), "SAIR", "sessao", self._conta()["usuario"], None, None, None)
                     contas.sair(self._token())
                 return self._json({"encerrada": True})
+            if rota == "/api/admin/lote":
+                self._exigir_admin()
+                p = self._corpo_json()
+                itens = p.get("rows") if "rows" in p else (p.get("edicoes") if "edicoes" in p else p.get("lote"))
+                if not isinstance(itens, list) or not itens or not all(isinstance(x, dict) for x in itens):
+                    raise Erro(400, "lote inválido: informe lista não vazia em 'rows', 'edicoes' ou 'lote'")
+                ids = [str(x.get("id") or "").strip() for x in itens if str(x.get("id") or "").strip()]
+                dup = 0
+                if ids:
+                    existentes = {r[0] for r in banco.con.execute("SELECT id FROM decisao")}
+                    dup = sum(1 for i in ids if i in existentes)
+                origem = str(p.get("origem") or "manual")[:80]
+                obs = str(p.get("observacao") or "Recebimento administrativo validado")[:200]
+                with banco.con:
+                    banco.auditar(self._ator(), "RECEBER_LOTE_ADMIN", "lote", origem, None,
+                                  {"recebidos": len(itens), "ja_existentes": dup}, obs)
+                return self._json({"ok": True, "status": "VALIDADO", "recebidos": len(itens),
+                                   "ja_existentes": dup, "novos": len(itens) - dup})
             if rota != "/api/revisao":
                 raise Erro(404, "rota inexistente")
             self._exigir_gerencia()
@@ -294,14 +374,20 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                 raise Erro(400, "alvo inválido")
             self._json(r)
 
-        def _arquivo(self, nome: str) -> None:
-            caminho = (ESTATICO / nome).resolve()
-            if ESTATICO.resolve() not in caminho.parents or not caminho.is_file():
+        def _arquivo(self, nome: str, base_dir: Path = ESTATICO) -> None:
+            caminho = (base_dir / nome).resolve()
+            if base_dir.resolve() not in caminho.parents or not caminho.is_file():
                 raise Erro(404, "arquivo inexistente")
             tipo = mimetypes.guess_type(caminho.name)[0] or "application/octet-stream"
             if tipo.startswith("text/") or tipo in ("application/javascript", "text/javascript"):
                 tipo += "; charset=utf-8"
-            self._enviar(200, caminho.read_bytes(), tipo, {"Cache-Control": "no-cache"})
+            extras = {"Cache-Control": "no-cache"}
+            if base_dir == UNIFICADO:
+                extras["Content-Security-Policy"] = (
+                    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data: blob:; object-src 'none'; frame-src blob:; base-uri 'none'; form-action 'self'"
+                )
+            self._enviar(200, caminho.read_bytes(), tipo, extras)
 
     return Manipulador
 

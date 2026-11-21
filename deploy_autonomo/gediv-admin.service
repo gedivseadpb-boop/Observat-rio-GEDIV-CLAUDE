@@ -1,0 +1,17 @@
+[Unit]
+Description=Observatório GEDIV - Servidor privado da fila de revisão humana
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gediv
+Group=gediv
+WorkingDirectory=/opt/observatorio-gediv
+EnvironmentFile=/etc/gediv/admin.env
+ExecStart=/opt/observatorio-gediv/.venv/bin/python -m observatorio.web --dados /var/lib/gediv/dados --endereco 127.0.0.1 --porta 8000 --origem-admin https://gedivseadpb-boop.github.io
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

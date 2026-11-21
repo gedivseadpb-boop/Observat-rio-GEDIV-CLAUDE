@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 USUARIO = re.compile(r"^[a-z0-9][a-z0-9._-]{2,39}$")
+PAPEIS = ("gerencia", "admin")
 MIN_SENHA = 10
 MAX_FALHAS = 5
 BLOQUEIO_MINUTOS = 15
@@ -30,6 +31,7 @@ ESQUEMA = """
 CREATE TABLE IF NOT EXISTS usuario (
     usuario        TEXT PRIMARY KEY,
     nome           TEXT NOT NULL,
+    papel          TEXT NOT NULL DEFAULT 'gerencia',
     sal            BLOB NOT NULL,
     senha_hash     BLOB NOT NULL,
     ativo          INTEGER NOT NULL DEFAULT 1,
@@ -69,6 +71,9 @@ class Contas:
         self.caminho = Path(caminho)
         with self._conexao() as con:
             con.executescript(ESQUEMA)
+            cols = {r["name"] for r in con.execute("PRAGMA table_info(usuario)").fetchall()}
+            if "papel" not in cols:
+                con.execute("ALTER TABLE usuario ADD COLUMN papel TEXT NOT NULL DEFAULT 'gerencia'")
 
     @contextlib.contextmanager
     def _conexao(self):
@@ -81,20 +86,33 @@ class Contas:
             con.close()
 
     # --- administração (linha de comando) ---------------------------------
-    def criar(self, usuario: str, nome: str, senha: str) -> None:
+    def criar(self, usuario: str, nome: str, senha: str, papel: str = "gerencia") -> None:
         usuario = usuario.strip().lower()
         if not USUARIO.match(usuario):
             raise ValueError("usuário: 3 a 40 caracteres, letras minúsculas, números, ponto, hífen ou sublinhado")
         nome = " ".join(nome.split())
         if not 3 <= len(nome) <= 120:
             raise ValueError("informe o nome da pessoa (3 a 120 caracteres)")
+        papel = (papel or "gerencia").strip().lower()
+        if papel not in PAPEIS:
+            raise ValueError("papel inválido; use 'gerencia' ou 'admin'")
         self._validar_senha(senha, usuario)
         sal = secrets.token_bytes(16)
         with self._conexao() as con:
             if con.execute("SELECT 1 FROM usuario WHERE usuario = ?", (usuario,)).fetchone():
                 raise ValueError("esse usuário já existe")
-            con.execute("INSERT INTO usuario (usuario, nome, sal, senha_hash, criado_em) VALUES (?,?,?,?,?)",
-                        (usuario, nome, sal, _hash_senha(senha, sal), _agora().isoformat(timespec="seconds")))
+            con.execute("INSERT INTO usuario (usuario, nome, papel, sal, senha_hash, criado_em) VALUES (?,?,?,?,?,?)",
+                        (usuario, nome, papel, sal, _hash_senha(senha, sal), _agora().isoformat(timespec="seconds")))
+
+    def definir_papel(self, usuario: str, papel: str) -> None:
+        papel = (papel or "").strip().lower()
+        if papel not in PAPEIS:
+            raise ValueError("papel inválido; use 'gerencia' ou 'admin'")
+        usuario = (usuario or "").strip().lower()
+        with self._conexao() as con:
+            if not con.execute("UPDATE usuario SET papel = ? WHERE usuario = ?", (papel, usuario)).rowcount:
+                raise ValueError("usuário não encontrado")
+            con.execute("DELETE FROM sessao WHERE usuario = ?", (usuario,))
 
     def trocar_senha(self, usuario: str, senha: str) -> None:
         self._validar_senha(senha, usuario)
@@ -115,7 +133,7 @@ class Contas:
 
     def listar(self) -> list[dict]:
         with self._conexao() as con:
-            return [dict(r) for r in con.execute("SELECT usuario, nome, ativo, bloqueado_ate, criado_em, ultimo_acesso FROM usuario ORDER BY usuario")]
+            return [dict(r) for r in con.execute("SELECT usuario, nome, papel, ativo, bloqueado_ate, criado_em, ultimo_acesso FROM usuario ORDER BY usuario")]
 
     @staticmethod
     def _validar_senha(senha: str, usuario: str) -> None:
@@ -144,7 +162,8 @@ class Contas:
                                                                          expira.isoformat(timespec="seconds")))
                     con.execute("UPDATE usuario SET falhas = 0, bloqueado_ate = NULL, ultimo_acesso = ? WHERE usuario = ?",
                                 (agora.isoformat(timespec="seconds"), usuario))
-                    resultado = {"token": token, "usuario": usuario, "nome": u["nome"], "expira_em": expira.isoformat(timespec="seconds")}
+                    resultado = {"token": token, "usuario": usuario, "nome": u["nome"], "papel": u["papel"],
+                                 "expira_em": expira.isoformat(timespec="seconds")}
                 else:
                     falhas = u["falhas"] + 1
                     bloqueio = (agora + timedelta(minutes=BLOQUEIO_MINUTOS)).isoformat(timespec="seconds") if falhas >= MAX_FALHAS else None
@@ -158,11 +177,11 @@ class Contas:
         if not token or len(token) > 200:
             return None
         with self._conexao() as con:
-            s = con.execute("SELECT s.usuario, s.expira_em, u.nome, u.ativo FROM sessao s JOIN usuario u ON u.usuario = s.usuario "
+            s = con.execute("SELECT s.usuario, s.expira_em, u.nome, u.papel, u.ativo FROM sessao s JOIN usuario u ON u.usuario = s.usuario "
                             "WHERE s.token_hash = ?", (_hash_token(token),)).fetchone()
         if s is None or not s["ativo"] or datetime.fromisoformat(s["expira_em"]) <= _agora():
             return None
-        return {"usuario": s["usuario"], "nome": s["nome"], "expira_em": s["expira_em"]}
+        return {"usuario": s["usuario"], "nome": s["nome"], "papel": s["papel"], "expira_em": s["expira_em"]}
 
     def sair(self, token: str) -> None:
         with self._conexao() as con:

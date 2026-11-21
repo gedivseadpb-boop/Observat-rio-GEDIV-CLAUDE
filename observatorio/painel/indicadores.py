@@ -19,6 +19,7 @@ Tornados sem efeito não são calculados. Os cartões não se somam entre si.
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 
 from ..gerencias.gediv import catalogo as C
@@ -29,6 +30,8 @@ GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
 CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
 ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
            "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
+NIVEIS_VERTICAIS = ("A", "B", "C", "D", "E", "F", "NAO_IDENTIFICADO")
+_CLASSES_VALIDAS = frozenset("ABCDEF")
 
 
 def _sem_acento(valor) -> str:
@@ -41,14 +44,70 @@ def _lista(valor) -> list[str]:
     return [v for v in (valor if isinstance(valor, (list, tuple)) else str(valor).split(",")) if v]
 
 
+def classificar_nivel_vertical(linha: dict) -> dict:
+    """Extrai e valida (classe_anterior, classe_posterior, nivel, transicao, motivo) para Progressão Vertical.
+    Lê prioritariamente de `detalhe` (gravado pelo classificador ou PaddleOCR) e aplica fallback determinístico
+    sobre `trecho` quando `detalhe` não contiver par válido A..F com avanço (classe_anterior < classe_posterior).
+    """
+    if linha.get("eixo") != C.PROGRESSAO or linha.get("modalidade") != C.VERTICAL:
+        return {"classe_anterior": None, "classe_posterior": None, "nivel": None, "transicao": None, "motivo": None}
+    if linha.get("resultado") == "INDEFERIDO":
+        return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "indeferido_sem_classe"}
+    det = linha.get("detalhe") if isinstance(linha.get("detalhe"), dict) else {}
+    ca = str(det.get("classe_anterior") or "").strip().upper()
+    cp = str(det.get("classe_posterior") or "").strip().upper()
+    if ca in _CLASSES_VALIDAS and cp in _CLASSES_VALIDAS:
+        if ca < cp:
+            return {"classe_anterior": ca, "classe_posterior": cp, "nivel": cp, "transicao": f"{ca} → {cp}", "motivo": "ok"}
+        return {"classe_anterior": ca, "classe_posterior": cp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "anomalia_ordem_ou_igual"}
+    trecho = str(linha.get("trecho") or "")
+    idx = trecho.upper().find("LINHA")
+    seg = trecho[idx:] if idx >= 0 else trecho
+    seg = re.sub(r"Di[aá]rio\s+Ofi\s*cial[\s\S]*$", "", seg, flags=re.IGNORECASE)
+    seg = re.sub(r"PUBLIQUE-SE[\s\S]*$", "", seg, flags=re.IGNORECASE)
+    limpo = re.sub(r"\s+", " ", seg.replace("\r", " ").replace("\n", " ")).strip()
+    limpo = re.sub(r"[\s$*%]+$", "", limpo).strip()
+    limpo = re.sub(r"\s+\d{1,2}$", "", limpo).strip()
+    m = (re.search(r"(?:^|[\s|\[])([A-F])\s+([A-F])\s*$", limpo, re.IGNORECASE)
+         or re.search(r"(?:^|[\s|\[])([A-F])([A-F])\s*$", limpo, re.IGNORECASE)
+         or re.search(r"\bTECNICO\s+['\"]?\s*([A-F])\s+([A-F])(?:\s+[A-Z]+)*\s+ADMINISTRATIVO\s*$", limpo, re.IGNORECASE))
+    if m:
+        fa, fp = m.group(1).upper(), m.group(2).upper()
+        if fa < fp:
+            return {"classe_anterior": fa, "classe_posterior": fp, "nivel": fp, "transicao": f"{fa} → {fp}", "motivo": "ok"}
+        return {"classe_anterior": fa, "classe_posterior": fp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "anomalia_ordem_ou_igual"}
+    return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+            "motivo": "ocr_ou_incompleto"}
+
+
+def _chave_grupo(linha: dict) -> str:
+    """Chave de agrupamento que preserva a separação normativa de expressões sem grupo homologado (TEC. ADM, STF)."""
+    if linha.get("grupo"):
+        return linha["grupo"]
+    exp = str(linha.get("grupo_expressao") or "").strip().upper()
+    if re.search(r"\bTEC\.?\s*ADM\b", exp):
+        return "PENDENTE:TEC. ADM"
+    if re.search(r"\bSTF\b", exp):
+        return "PENDENTE:STF"
+    return "NAO_INFORMADO"
+
+
 def normalizar_filtros(bruto: dict, perfil: str) -> dict:
+    grupos_aceitos = set(C.GRUPO_POR_CODIGO) | {"NAO_INFORMADO", "PENDENTE:TEC. ADM", "PENDENTE:STF"}
+    nivel_bruto = (bruto.get("nivel") or "").strip().upper()
+    if nivel_bruto == "NI":
+        nivel_bruto = "NAO_IDENTIFICADO"
     f = {
         "escopo": bruto.get("escopo") if bruto.get("escopo") in ("conferido", "pendente") else "conferido",
         "inicio": bruto.get("inicio") or None, "fim": bruto.get("fim") or None,
         "eixo": bruto.get("eixo") if bruto.get("eixo") in C.EIXOS else None,
         "modalidade": bruto.get("modalidade") if bruto.get("modalidade") in C.MODALIDADES else None,
         "condicao": bruto.get("condicao") if bruto.get("condicao") in C.CONDICOES else None,
-        "grupo": [g for g in _lista(bruto.get("grupo")) if g in C.GRUPO_POR_CODIGO or g == "NAO_INFORMADO"],
+        "grupo": [g for g in _lista(bruto.get("grupo")) if g in grupos_aceitos],
+        "nivel": nivel_bruto if nivel_bruto in NIVEIS_VERTICAIS else None,
         "subcategoria": [s for s in _lista(bruto.get("subcategoria")) if s in C.SUBCATEGORIA_POR_CODIGO],
         "resultado": bruto.get("resultado") if bruto.get("resultado") in C.RESULTADOS else None,
         "vinculo": bruto.get("vinculo") if bruto.get("vinculo") in ("EXPRESSO", "NAO_EXPRESSO") else None,
@@ -83,6 +142,7 @@ def _linhas(banco: Banco) -> list[dict]:
         linha.pop("texto_identificacao")
         linha["detalhe"] = json.loads(linha["detalhe"] or "{}")
         linha["pendencias"] = json.loads(linha["pendencias"] or "[]")
+        linha["nivel_info"] = classificar_nivel_vertical(linha)
         linhas.append(linha)
     return linhas
 
@@ -96,8 +156,19 @@ def _passa(linha: dict, f: dict) -> bool:
         return False
     if f["condicao"] and not (linha["eixo"] == C.PROGRESSAO and (linha["condicao"] or "NAO_INFORMADA") == f["condicao"]):
         return False
-    if f["grupo"] and not (linha["eixo"] == C.PROGRESSAO and (linha["grupo"] or "NAO_INFORMADO") in f["grupo"]):
-        return False
+    if f["grupo"]:
+        if linha["eixo"] != C.PROGRESSAO:
+            return False
+        g_efetivo = linha["grupo"] or "NAO_INFORMADO"
+        g_chave = _chave_grupo(linha)
+        if g_efetivo not in f["grupo"] and g_chave not in f["grupo"]:
+            return False
+    if f.get("nivel"):
+        if not (linha["eixo"] == C.PROGRESSAO and linha["modalidade"] == C.VERTICAL):
+            return False
+        info = linha.get("nivel_info") or classificar_nivel_vertical(linha)
+        if info.get("nivel") != f["nivel"]:
+            return False
     if f["subcategoria"] and not (linha["eixo"] == C.TEMPO and linha["subcategoria"] in f["subcategoria"]):
         return False
     if f["resultado"] and linha["resultado"] != f["resultado"]:
@@ -219,9 +290,30 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
     if conferidas_com_conflito:
         cob["parecer"] += (f" {conferidas_com_conflito} decisão(ões) conferida(s) contadas têm conflito aberto "
                            "e aguardam revisão.")
+    verticais = [l for l in prog if l["modalidade"] == C.VERTICAL]
+    niveis_lista = []
+    for nv in NIVEIS_VERTICAIS:
+        itens_nv = [l for l in verticais if (l.get("nivel_info") or {}).get("nivel") == nv]
+        cont_trans: dict[str, int] = {}
+        for it in itens_nv:
+            tr = (it.get("nivel_info") or {}).get("transicao")
+            if tr:
+                cont_trans[tr] = cont_trans.get(tr, 0) + 1
+        transicoes_ord = [{"transicao": k, "total": v}
+                          for k, v in sorted(cont_trans.items(), key=lambda x: (-x[1], x[0]))]
+        niveis_lista.append({
+            "nivel": nv,
+            "rotulo": "Nível não identificado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
+            **conta(itens_nv),
+            "transicoes": transicoes_ord,
+        })
+    NOMES_EXPRESSAO_PENDENTE = {
+        "PENDENTE:TEC. ADM": "TEC. ADM · expressão pendente de confirmação (AST)",
+        "PENDENTE:STF": "STF · expressão pendente de confirmação (SFT)",
+    }
     series = {
         "por_assunto": [
-            {"chave": "VERTICAL", "rotulo": "Progressão Vertical", **conta([l for l in prog if l["modalidade"] == C.VERTICAL])},
+            {"chave": "VERTICAL", "rotulo": "Progressão Vertical", **conta(verticais)},
             {"chave": "HORIZONTAL", "rotulo": "Progressão Horizontal", **conta([l for l in prog if l["modalidade"] == C.HORIZONTAL])},
             {"chave": "TEMPO_SERVICO", "rotulo": "Tempo de Serviço", **conta(tempo)},
         ],
@@ -238,6 +330,27 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
             for codigo in [g.codigo for g in C.GRUPOS] + ["NAO_INFORMADO"]
             for linhas in [[l for l in prog if (l["grupo"] or "NAO_INFORMADO") == codigo]] if linhas
         ],
+        "por_grupo_detalhado": [
+            {"chave": chave,
+             "grupo": chave if chave in C.GRUPO_POR_CODIGO else None,
+             "expressao_pendente": chave.split(":", 1)[1] if chave.startswith("PENDENTE:") else None,
+             "pendente_confirmacao": chave.startswith("PENDENTE:"),
+             "nome": (C.GRUPO_POR_CODIGO[chave].nome if chave in C.GRUPO_POR_CODIGO
+                      else NOMES_EXPRESSAO_PENDENTE.get(chave, "Grupo não informado")),
+             "horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in linhas),
+             "vertical": sum(l["modalidade"] == C.VERTICAL for l in linhas),
+             **conta(linhas)}
+            for chave in [g.codigo for g in C.GRUPOS] + ["PENDENTE:TEC. ADM", "PENDENTE:STF", "NAO_INFORMADO"]
+            for linhas in [[l for l in prog if _chave_grupo(l) == chave]] if linhas
+        ],
+        "por_nivel_vertical": niveis_lista,
+        "resumo_nivel_vertical": {
+            "total_progressao": len(prog),
+            "total_horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in prog),
+            "total_vertical": len(verticais),
+            "classificados": sum((l.get("nivel_info") or {}).get("nivel") in _CLASSES_VALIDAS for l in verticais),
+            "nao_identificados": sum((l.get("nivel_info") or {}).get("nivel") == "NAO_IDENTIFICADO" for l in verticais),
+        },
         # As sete subcategorias aparecem sempre; zero sem cobertura completa é "cobertura pendente", não "inexistente".
         "por_subcategoria": [
             {"codigo": s.codigo, "nome": s.nome, **conta(linhas),
