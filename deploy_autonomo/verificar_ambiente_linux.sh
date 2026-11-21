@@ -16,9 +16,10 @@ if [ "$(uname -s)" != "Linux" ]; then
 fi
 
 echo "[1/4] Verificando sintaxe Bash dos scripts..."
-bash -n "$APP_DIR/deploy_autonomo/rodar_diario.sh"
-bash -n "$APP_DIR/deploy_autonomo/recuperar_edicoes_manual.sh"
-bash -n "$APP_DIR/deploy_autonomo/verificar_ambiente_linux.sh"
+SHELL_BIN="${BASH:-$(command -v bash || command -v sh)}"
+"$SHELL_BIN" -n "$APP_DIR/deploy_autonomo/rodar_diario.sh"
+"$SHELL_BIN" -n "$APP_DIR/deploy_autonomo/recuperar_edicoes_manual.sh"
+"$SHELL_BIN" -n "$APP_DIR/deploy_autonomo/verificar_ambiente_linux.sh"
 
 echo "[2/4] Verificando binários operacionais exigidos..."
 for cmd in flock date; do
@@ -53,6 +54,7 @@ from observatorio.painel import adaptador, indicadores
 from observatorio.web import servidor
 assert hasattr(Banco, "somente_leitura")
 assert hasattr(indicadores, "resumo_cobertura_edicoes")
+assert hasattr(indicadores, "publicar_snapshot_publico")
 assert hasattr(servidor, "criar_servidor")
 print("  OK: módulos GEDIV importados com PYTHONSAFEPATH=1.")
 PY

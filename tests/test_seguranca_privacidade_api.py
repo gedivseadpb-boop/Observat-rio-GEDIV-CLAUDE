@@ -454,6 +454,171 @@ class TestSegurancaPrivacidadeAPI(unittest.TestCase):
         self.assertEqual(st_aud_g, 200)
         self.assertIn("EXPORTAR", [t["acao"] for t in json.loads(body_aud_g)["trilha"]])
 
+    def test_05_snapshot_publico_controlado_anti_inferencia_4_5_e_9_10(self) -> None:
+        """Tarefa 3: comprova que confirmações sequenciais em POST /api/revisao cruzando múltiplos
+        de 5 (4 -> 5 e 9 -> 10) NÃO alteram imediatamente /api/painel nem /api/data públicos antes
+        da publicação controlada do snapshot, e que snapshots inválidos são rejeitados sem substituir o anterior."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            rows = []
+            # 12 decisões sintéticas do grupo SSA (4 inicialmente conferidas, 8 pendentes)
+            for i in range(1, 13):
+                rows.append({
+                    "id": f"dec-seq-{i:03d}",
+                    "resenha": f"Resenha 80{i}/2026",
+                    "date": "2026-05-10",
+                    "page": i,
+                    "url": f"snapshot:seq-{i}",
+                    "process": f"PROC-SEQ-2026/{i:04d}",
+                    "server": f"SERVIDOR SEQUENCIAL {i}",
+                    "registration": f"8800{i:02d}",
+                    "axis": "progressao",
+                    "modality": "Horizontal",
+                    "group": "SSA",
+                    "groupExpression": "SSA",
+                    "merit": "deferido",
+                    "validation": "conferido" if i <= 4 else "pendente",
+                    "evidence": f"Progressão sequencial {i}.",
+                })
+            with Banco(pasta / "observatorio.sqlite3") as banco:
+                adaptador.importar_snapshot_reconciliado(banco, {"rows": rows, "events": []})
+                indicadores.publicar_snapshot_publico(banco, pasta / indicadores.ARQUIVO_SNAPSHOT_PUBLICO)
+
+            contas = Contas(pasta / "contas.sqlite3")
+            contas.criar("ger.seq", "Gerente Sequencial", "SenhaSeq#2026", papel="gerencia")
+            contas.criar("adm.seq", "Admin Sequencial", "SenhaAdm#2026", papel="admin")
+
+            srv = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            self.addCleanup(srv.server_close)
+            self.addCleanup(srv.shutdown)
+            base_seq = f"http://127.0.0.1:{srv.server_address[1]}"
+
+            st_g, _, body_g = _http(f"{base_seq}/api/login", payload={"usuario": "ger.seq", "senha": "SenhaSeq#2026"})
+            self.assertEqual(st_g, 200)
+            tok_ger = json.loads(body_g)["token"]
+            st_a, _, body_a = _http(f"{base_seq}/api/login", payload={"usuario": "adm.seq", "senha": "SenhaAdm#2026"})
+            self.assertEqual(st_a, 200)
+            tok_adm = json.loads(body_a)["token"]
+
+            # Estado inicial (4 conferidos < 5): público vê decisoes = None
+            p0 = json.loads(_http(f"{base_seq}/api/painel")[2])
+            d0 = json.loads(_http(f"{base_seq}/api/data")[2])
+            self.assertIsNone(p0["indicadores"]["decisoes"])
+            self.assertIsNone(d0["backend"]["indicadores"]["decisoes"])
+
+            # 1) Cruzar fronteira 4 -> 5 via POST /api/revisao
+            st_r5, _, _ = _http(
+                f"{base_seq}/api/revisao",
+                token=tok_ger,
+                payload={
+                    "alvo": "decisao",
+                    "ids": ["dec-seq-005"],
+                    "decisao": "CONFERIR",
+                    "justificativa": "Cruzando limiar 4 para 5",
+                    "confirma_fonte": True,
+                    "confirma_vinculo": True,
+                },
+            )
+            self.assertEqual(st_r5, 200)
+            # Público NÃO observa mudança imediata (continua None), enquanto gerência vê 5 em tempo real
+            self.assertIsNone(json.loads(_http(f"{base_seq}/api/painel")[2])["indicadores"]["decisoes"])
+            self.assertIsNone(json.loads(_http(f"{base_seq}/api/data")[2])["backend"]["indicadores"]["decisoes"])
+            self.assertEqual(json.loads(_http(f"{base_seq}/api/data", token=tok_ger)[2])["meta"]["conferidos"], 5)
+
+            # 2) Confirmar 6, 7, 8, 9 e cruzar fronteira 9 -> 10 via POST /api/revisao
+            for idx in range(6, 11):
+                st_ri, _, _ = _http(
+                    f"{base_seq}/api/revisao",
+                    token=tok_ger,
+                    payload={
+                        "alvo": "decisao",
+                        "ids": [f"dec-seq-{idx:03d}"],
+                        "decisao": "CONFERIR",
+                        "justificativa": f"Conferência sequencial item {idx}",
+                        "confirma_fonte": True,
+                        "confirma_vinculo": True,
+                    },
+                )
+                self.assertEqual(st_ri, 200)
+                # Em todas as etapas (inclusive 9 -> 10), público segue congelado no snapshot anterior
+                self.assertIsNone(json.loads(_http(f"{base_seq}/api/painel")[2])["indicadores"]["decisoes"])
+                self.assertIsNone(json.loads(_http(f"{base_seq}/api/data")[2])["backend"]["indicadores"]["decisoes"])
+
+            # Gerência enxerga 10 conferidos em tempo real, mas não tem permissão para publicar snapshot público (403)
+            self.assertEqual(json.loads(_http(f"{base_seq}/api/data", token=tok_ger)[2])["meta"]["conferidos"], 10)
+            self.assertEqual(_http(f"{base_seq}/api/admin/snapshot-publico", token=tok_ger, payload={})[0], 403)
+
+            # 3) Publicação controlada do snapshot público pelo admin atualiza para a faixa permitida (10)
+            st_pub, _, body_pub = _http(f"{base_seq}/api/admin/snapshot-publico", token=tok_adm, payload={})
+            self.assertEqual(st_pub, 200, body_pub)
+            self.assertEqual(json.loads(body_pub)["indicadores"]["decisoes"], 10)
+            self.assertEqual(json.loads(_http(f"{base_seq}/api/painel")[2])["indicadores"]["decisoes"], 10)
+            self.assertEqual(json.loads(_http(f"{base_seq}/api/data")[2])["backend"]["indicadores"]["decisoes"], 10)
+
+            # 4) Snapshot inválido é rejeitado e NÃO substitui o arquivo anterior em disco
+            caminho_snap = pasta / indicadores.ARQUIVO_SNAPSHOT_PUBLICO
+            bytes_antes = caminho_snap.read_bytes()
+            snap_valido = json.loads(bytes_antes.decode("utf-8"))
+
+            for mutacao in (
+                lambda s: s["painel"]["indicadores"].__setitem__("decisoes", 7),  # fora de múltiplo de 5
+                lambda s: s["painel"]["indicadores"].__setitem__("decisoes", 3),  # abaixo do limiar 5
+                lambda s: s["painel"]["indicadores"].__setitem__("indeferidos", None),  # quebra supressão complementar
+                lambda s: s["painel"]["series"]["por_data"].append({"data": "2026-05-10", "total": 10}),  # data diária
+                lambda s: s["data"]["rows"].append({"id": "vazamento"}),  # linha individual
+            ):
+                candidato = json.loads(bytes_antes.decode("utf-8"))
+                mutacao(candidato)
+                with self.assertRaises(ValueError):
+                    indicadores.publicar_snapshot_publico(None, caminho_snap, snapshot=candidato)
+                self.assertEqual(caminho_snap.read_bytes(), bytes_antes)
+                self.assertEqual(
+                    indicadores.carregar_snapshot_publico(caminho_snap)["painel"]["indicadores"]["decisoes"],
+                    snap_valido["painel"]["indicadores"]["decisoes"],
+                )
+
+    def test_06_ciclo_sessao_cookie_httponly_sem_bearer(self) -> None:
+        """Tarefa 2: comprova autenticação integral via cookie HttpOnly (sem cabeçalho Authorization),
+        retorno 401 quando a sessão do cookie expira ou é encerrada, e invalidação no logout."""
+        _, cookie = self._login("ger1.gediv", "SenhaGer1#2026")
+        host_local = self.base.replace("http://", "")
+        hdrs_get = {"Cookie": cookie}
+        hdrs_post = {"Cookie": cookie, "Sec-Fetch-Site": "same-origin", "Origin": f"http://{host_local}"}
+
+        # 1. Sessão e rotas protegidas funcionam apenas com o cookie HttpOnly (sem Bearer)
+        st_s, _, body_s = _http(f"{self.base}/api/sessao", headers=hdrs_get)
+        self.assertEqual(st_s, 200)
+        self.assertEqual(json.loads(body_s)["usuario"], "ger1.gediv")
+
+        st_d, _, body_d = _http(f"{self.base}/api/data", headers=hdrs_get)
+        self.assertEqual(st_d, 200)
+        d_cookie = json.loads(body_d)
+        self.assertTrue(d_cookie["backend"]["autenticado"])
+        self.assertEqual(d_cookie["backend"]["usuario"], "ger1.gediv")
+        self.assertEqual(d_cookie["backend"]["nome"], "Gerente Um")
+        self.assertGreater(len(d_cookie["rows"]), 0)
+
+        self.assertEqual(_http(f"{self.base}/api/conflitos", headers=hdrs_get)[0], 200)
+        self.assertEqual(_http(f"{self.base}/api/auditoria", headers=hdrs_get)[0], 200)
+
+        # 2. Logout via cookie invalida a sessão no servidor e limpa o cookie (Max-Age=0)
+        st_out, hdrs_out, _ = _http(f"{self.base}/api/logout", payload={}, headers=hdrs_post, method="POST")
+        self.assertEqual(st_out, 200)
+        self.assertIn("Max-Age=0", hdrs_out.get("Set-Cookie") or "")
+
+        # 3. Reutilizar o cookie após logout/expiração retorna 401 nas rotas protegidas e volta /api/data ao modo público
+        self.assertEqual(_http(f"{self.base}/api/sessao", headers=hdrs_get)[0], 401)
+        self.assertEqual(_http(f"{self.base}/api/conflitos", headers=hdrs_get)[0], 401)
+        self.assertEqual(_http(f"{self.base}/api/auditoria", headers=hdrs_get)[0], 401)
+        self.assertEqual(
+            _http(f"{self.base}/api/revisao", payload={"alvo": "decisao"}, headers=hdrs_post, method="POST")[0],
+            401,
+        )
+        d_apos_exp = json.loads(_http(f"{self.base}/api/data", headers=hdrs_get)[2])
+        self.assertFalse(d_apos_exp["backend"]["autenticado"])
+        self.assertEqual(d_apos_exp["rows"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

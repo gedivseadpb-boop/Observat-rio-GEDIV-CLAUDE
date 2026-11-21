@@ -139,11 +139,13 @@ with Banco.somente_leitura(db) as banco_ro:
     cats = [c[0] for c in proj_pub.get("categories", [])]
     if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:
         raise SystemExit(f"ERRO DE CONTRATO: categorias inválidas na projeção unificada: {cats}")
+    snap_arq = db.parent / indicadores.ARQUIVO_SNAPSHOT_PUBLICO
+    indicadores.publicar_snapshot_publico(banco_ro, snap_arq)
 
 tmp = out.with_name(out.name + ".tmp")
 tmp.write_text(json.dumps(resumo, indent=2) + "\n", encoding="utf-8")
 tmp.replace(out)
-print("Resumo de cobertura e projeção somente-leitura (?mode=ro) da API validados com sucesso (0 linhas individuais públicas; sem build de painel-publico/dados.json obsoleto).")
+print("Resumo de cobertura, snapshot público controlado (snapshot_publico.json) e projeção somente-leitura (?mode=ro) da API validados com sucesso (0 linhas individuais públicas; sem build de painel-publico/dados.json obsoleto).")
 PY
 
 echo "[6/6] Encerramento controlado..."

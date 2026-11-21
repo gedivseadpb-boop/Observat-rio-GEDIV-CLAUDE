@@ -312,20 +312,50 @@ body{background:#f3f7fb!important}
 <section class="received-summary is-collapsed" id="receivedSummaryBar" aria-label="Dados recebidos"><div><strong id="receivedTotal">328 registros recebidos</strong><span class="received-meta-pill" id="receivedMetaPill"></span><p id="receivedValidation">327 em conferência · 0 conferidos · 1 rejeitados</p><p id="scopeNotice">PRÉVIA: os resultados extraídos abaixo aguardam conferência documental. Nenhum registro foi homologado por esta visualização.</p></div><label>Dados exibidos no painel <select id="validationScope" aria-label="Situação dos dados no dashboard"><option value="pendente">Em conferência (327)</option><option value="conferido">Conferidos (0)</option></select></label><button type="button" id="toggleReceivedSummary" aria-expanded="false">Expandir detalhes ▾</button></section>
 <dialog id="batchDialog" aria-labelledby="batchDialogTitle"><div class="dialog-head"><div><span class="eyebrow">ADMINISTRAÇÃO · VALIDAÇÃO PRELIMINAR DE LOTE</span><h2 id="batchDialogTitle">Validar lote oficial (sem importação no banco)</h2></div><button type="button" id="closeBatchTop" class="icon-btn" aria-label="Fechar janela">×</button></div><div class="dialog-body"><p>Validação estrutural e verificação de duplicidades com registro em auditoria. <strong>Os registros são apenas validados e NÃO são incorporados ao banco principal nesta etapa (importação definitiva: pendência operacional).</strong></p><input type="file" id="batchFile" accept="application/json,.json" aria-label="Arquivo do lote"><details><summary>Colar conteúdo JSON do lote</summary><textarea id="batchText" aria-label="Lote JSON" placeholder="Cole aqui o JSON do lote oficial..."></textarea></details><p id="batchResult" role="status"></p></div><div class="dialog-footer"><button type="button" id="closeBatch" class="btn-secondary">Fechar</button><button type="button" id="sendBatch">Validar lote (sem importar)</button></div></dialog>
 
-<dialog id="loginDialog" aria-labelledby="loginDialogTitle"><div class="dialog-head"><div><span class="eyebrow">ACESSO RESTRITO · GEDIV / SEAD-PB</span><h2 id="loginDialogTitle">Autenticação da gerência</h2></div><button type="button" id="closeLoginTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="loginForm" class="dialog-body review-form" method="dialog"><p style="margin:0;font-size:11px;color:#405d79">O acesso aos nomes, matrículas, processos, anotações preliminares, PDFs do acervo e ações de revisão documental é exclusivo para contas autorizadas da gerência.</p><div class="review-grid"><label>Usuário da conta<input type="text" id="loginUser" autocomplete="username" placeholder="Ex.: revisor.gediv"></label><label>Senha<input type="password" id="loginPass" autocomplete="current-password" placeholder="Senha da conta"></label></div><details><summary style="cursor:pointer;font-weight:600;color:#175ca8;font-size:11px">Usar credencial técnica (token Bearer da gerência)</summary><label style="margin-top:8px">Token técnico de sessão / gerência<input type="password" id="loginTokenInput" autocomplete="off" placeholder="Cole o token de autorização da gerência"></label></details><p id="loginStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeLoginBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitLoginBtn">Entrar e carregar dados</button></div></form></dialog>
-<dialog id="reviewDialog" aria-labelledby="reviewDialogTitle"><div class="dialog-head"><div><span class="eyebrow">REVISÃO DOCUMENTAL AUDITADA</span><h2 id="reviewDialogTitle">Conferir ou revisar registro</h2></div><button type="button" id="closeReviewTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="reviewForm" class="dialog-body review-form" method="dialog"><input type="hidden" id="revTargetType" value="decisao"><input type="hidden" id="revTargetId" value=""><div id="revContextBox" class="reconcile-note" style="margin:0"></div><div class="review-grid"><label>Decisão de revisão<select id="revDecision"><option value="CONFERIR">CONFERIR (homologar após leitura do PDF)</option><option value="REJEITAR">REJEITAR (excluir dos indicadores)</option><option value="REABRIR">REABRIR (retornar para fila pendente)</option></select></label><label>Responsável pela revisão<input type="text" id="revAuthor" placeholder="Nome do revisor (automático em conta nominal)"></label></div><div id="revEventBox" hidden><label>ID do ato original a vincular (20 caracteres hexadecimais)<input type="text" id="revOriginalActId" placeholder="Obrigatório para VINCULAR evento modificador"></label></div><details id="revCorrectionsDetails"><summary style="cursor:pointer;font-weight:700;color:#175ca8;font-size:11px">Corrigir campos extraídos (preserva valor original na trilha de auditoria)</summary><div class="review-grid" style="margin-top:8px"><label>Processo<input type="text" id="revCorrProcess"></label><label>Matrícula<input type="text" id="revCorrRegistration"></label><label>Servidor<input type="text" id="revCorrServer"></label><label>Resultado<select id="revCorrResult"><option value="">Manter atual</option><option value="DEFERIDO">DEFERIDO</option><option value="INDEFERIDO">INDEFERIDO</option><option value="NAO_INFORMADO">NAO_INFORMADO</option></select></label><label>Classe origem (A–F)<input type="text" id="revCorrClassFrom" maxlength="1" placeholder="A..F"></label><label>Classe destino (A–F)<input type="text" id="revCorrClassTo" maxlength="1" placeholder="A..F"></label></div></details><label class="check-row"><input type="checkbox" id="revConfirmSource"><span>Declaro que consultei o PDF oficial do Diário Oficial na página indicada (<code>confirma_fonte</code>).</span></label><label class="check-row" id="revConfirmLinkRow"><input type="checkbox" id="revConfirmLink"><span>Confirmo o vínculo institucional deste ato com a GEDIV/SEAD-PB, mesmo quando a sigla não consta expressamente no cabeçalho (<code>confirma_vinculo</code>).</span></label><label>Justificativa técnica (obrigatória · mínimo 5 caracteres)<textarea id="revJustification" placeholder="Descreva a verificação realizada no PDF oficial do DOE..."></textarea></label><p id="revStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeReviewBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitReviewBtn">Registrar decisão auditada</button></div></form></dialog>
+<dialog id="loginDialog" aria-labelledby="loginDialogTitle"><div class="dialog-head"><div><span class="eyebrow">ACESSO RESTRITO · GEDIV / SEAD-PB</span><h2 id="loginDialogTitle">Autenticação da gerência</h2></div><button type="button" id="closeLoginTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="loginForm" class="dialog-body review-form" method="dialog"><p style="margin:0;font-size:11px;color:#405d79">O acesso aos nomes, matrículas, processos, anotações preliminares, PDFs do acervo e ações de revisão documental é exclusivo para contas autorizadas da gerência (sessão via cookie <code>HttpOnly</code>).</p><div class="review-grid"><label>Usuário da conta<input type="text" id="loginUser" autocomplete="username" placeholder="Ex.: revisor.gediv"></label><label>Senha<input type="password" id="loginPass" autocomplete="current-password" placeholder="Senha da conta"></label></div><details><summary style="cursor:pointer;font-weight:600;color:#175ca8;font-size:11px">Usar credencial técnica legada (somente memória · sem privilégio admin)</summary><label style="margin-top:8px">Token técnico de sessão / gerência<input type="password" id="loginTokenInput" autocomplete="off" placeholder="Cole o token técnico da gerência"></label></details><p id="loginStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeLoginBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitLoginBtn">Entrar e carregar dados</button></div></form></dialog>
+<dialog id="reviewDialog" aria-labelledby="reviewDialogTitle"><div class="dialog-head"><div><span class="eyebrow">REVISÃO DOCUMENTAL AUDITADA</span><h2 id="reviewDialogTitle">Conferir ou revisar registro</h2></div><button type="button" id="closeReviewTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="reviewForm" class="dialog-body review-form" method="dialog"><input type="hidden" id="revTargetType" value="decisao"><input type="hidden" id="revTargetId" value=""><div id="revContextBox" class="reconcile-note" style="margin:0"></div><div class="review-grid"><label>Decisão de revisão<select id="revDecision"><option value="CONFERIR">CONFERIR (homologar após leitura do PDF)</option><option value="REJEITAR">REJEITAR (excluir dos indicadores)</option><option value="REABRIR">REABRIR (retornar para fila pendente)</option></select></label><label>Responsável pela revisão<input type="text" id="revAuthor" placeholder="Nome do revisor (automático em conta nominal)"></label></div><div id="revEventBox" hidden><label>ID do ato original a vincular (20 caracteres hexadecimais)<input type="text" id="revOriginalActId" placeholder="Obrigatório para VINCULAR evento modificador"></label></div><div id="revActClassBox" hidden><div class="review-grid" style="margin-top:4px"><label>Eixo temático<select id="revActEixo"><option value="PROGRESSAO">PROGRESSAO · Progressão Funcional</option><option value="TEMPO_SERVICO">TEMPO_SERVICO · Tempo de Serviço</option></select></label><label>Modalidade (Progressão)<select id="revActModalidade"><option value="">Não aplicável / Manter</option><option value="VERTICAL">VERTICAL</option><option value="HORIZONTAL">HORIZONTAL</option></select></label><label>Grupo PCCR (Progressão)<input type="text" id="revActGrupo" placeholder="Ex.: MAG, GAJ, ANS, SSA, AST..."></label><label>Assunto (Tempo de Serviço)<select id="revActSubcat"><option value="">Não aplicável / Manter</option><option value="TS-01">TS-01 · Anotação</option><option value="TS-02">TS-02 · Desaverbação</option><option value="TS-03">TS-03 · Licença Interesse Particular</option><option value="TS-04">TS-04 · Desistência de Licença</option><option value="TS-05">TS-05 · Licença Especial</option><option value="TS-06">TS-06 · Conversão Licença Especial</option><option value="TS-07">TS-07 · Conversão de Férias</option></select></label></div></div><details id="revCorrectionsDetails"><summary style="cursor:pointer;font-weight:700;color:#175ca8;font-size:11px">Corrigir campos extraídos (preserva valor original na trilha de auditoria)</summary><div class="review-grid" style="margin-top:8px"><label>Processo<input type="text" id="revCorrProcess"></label><label>Matrícula<input type="text" id="revCorrRegistration"></label><label>Servidor<input type="text" id="revCorrServer"></label><label>Cargo<input type="text" id="revCorrCargo"></label><label>Lotação / Órgão<input type="text" id="revCorrLotacao"></label><label>Resultado<select id="revCorrResult"><option value="">Manter atual</option><option value="DEFERIDO">DEFERIDO</option><option value="INDEFERIDO">INDEFERIDO</option><option value="NAO_INFORMADO">NAO_INFORMADO</option></select></label><label>Classe origem (A–F)<input type="text" id="revCorrClassFrom" maxlength="1" placeholder="A..F"></label><label>Classe destino (A–F)<input type="text" id="revCorrClassTo" maxlength="1" placeholder="A..F"></label></div></details><label class="check-row"><input type="checkbox" id="revConfirmSource"><span>Declaro que consultei o PDF oficial do Diário Oficial na página indicada (<code>confirma_fonte</code>).</span></label><label class="check-row" id="revConfirmLinkRow"><input type="checkbox" id="revConfirmLink"><span>Confirmo o vínculo institucional deste ato com a GEDIV/SEAD-PB, mesmo quando a sigla não consta expressamente no cabeçalho (<code>confirma_vinculo</code>).</span></label><label>Justificativa técnica (obrigatória · mínimo 5 caracteres)<textarea id="revJustification" placeholder="Descreva a verificação realizada no PDF oficial do DOE..."></textarea></label><p id="revStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeReviewBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitReviewBtn">Registrar decisão auditada</button></div></form></dialog>
+<dialog id="conflictsDialog" class="dialog-wide" aria-labelledby="conflictsDialogTitle"><div class="dialog-head"><div><span class="eyebrow">RECONCILIAÇÃO E INTEGRIDADE · D2</span><h2 id="conflictsDialogTitle">Conflitos de leitura e vínculos órfãos</h2></div><button type="button" id="closeConflictsTop" class="icon-btn" aria-label="Fechar janela">×</button></div><div class="dialog-body review-form"><div id="conflictsSummaryBox" class="reconcile-note" style="margin:0">Carregando diagnóstico de conflitos…</div><div class="review-grid"><label>Justificativa para resolução de conflito (mín. 5 caracteres)<input type="text" id="conflictJustificationInput" placeholder="Ex.: Conferido no PDF oficial da edição"></label><label class="check-row" style="align-self:end"><input type="checkbox" id="conflictConfirmSourceInput"><span>Confirmo leitura do PDF oficial (<code>confirma_fonte</code>)</span></label></div><p id="conflictsStatus" class="review-status" role="status"></p><div id="conflictsTableWrap" class="table-scroll"></div><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="refreshConflictsBtn" class="btn-secondary">↻ Atualizar lista</button><button type="button" id="closeConflictsBtn">Fechar</button></div></div></dialog>
+<dialog id="auditDialog" class="dialog-wide" aria-labelledby="auditDialogTitle"><div class="dialog-head"><div><span class="eyebrow">GOVERNANÇA E RASTREABILIDADE · D3</span><h2 id="auditDialogTitle">Trilha de auditoria e histórico</h2></div><button type="button" id="closeAuditTop" class="icon-btn" aria-label="Fechar janela">×</button></div><div class="dialog-body review-form"><div id="auditScopeNote" class="reconcile-note" style="margin:0">Consultando trilha de auditoria…</div><div id="auditAdminActions" hidden><button type="button" id="publishPublicSnapshotBtn" class="btn-secondary">Publicar snapshot público controlado</button><span id="publishSnapshotStatus" style="margin-left:8px;font-size:11px;color:#175a4e;font-weight:600"></span></div><div id="auditTableWrap" class="table-scroll"></div><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="refreshAuditBtn" class="btn-secondary">↻ Atualizar trilha</button><button type="button" id="closeAuditBtn">Fechar</button></div></div></dialog>
 <dialog id="docModal" class="doc-modal" aria-labelledby="docModalTitle"><div class="doc-modal-shell"><div class="doc-modal-top"><span id="docModalId" class="doc-modal-id">Registro documental</span><button type="button" id="closeDocModal" class="doc-close-btn" aria-label="Fechar janela documental">×</button></div><div id="docModalBody" class="doc-modal-body"></div><div id="docModalFoot" class="doc-modal-foot"></div></div></dialog>
 <script>
-window.GEDIV_AUTH={
- token:()=>sessionStorage.getItem('gedivTokenGerencia')||'',
- user:()=>{try{return JSON.parse(sessionStorage.getItem('gedivContaGerencia')||'null');}catch{return null;}},
- set:(tok,usr)=>{if(tok)sessionStorage.setItem('gedivTokenGerencia',tok);else sessionStorage.removeItem('gedivTokenGerencia');if(usr)sessionStorage.setItem('gedivContaGerencia',JSON.stringify(usr));else sessionStorage.removeItem('gedivContaGerencia');},
- headers:(extra={})=>{const tok=window.GEDIV_AUTH.token();return tok?{...extra,Authorization:'Bearer '+tok}:{...extra};}
-};
+(()=>{
+ let _legacyTok='',_usr=null;
+ const _purge=()=>{try{sessionStorage.removeItem('gedivTokenGerencia');sessionStorage.removeItem('gedivContaGerencia');localStorage.removeItem('gedivTokenGerencia');localStorage.removeItem('gedivContaGerencia');}catch{}};
+ _purge();
+ window.GEDIV_AUTH={
+  token:()=>_legacyTok,
+  user:()=>_usr,
+  set:(tok,usr)=>{
+   _purge();
+   _legacyTok=String(tok||'').trim();
+   _usr=usr&&typeof usr==='object'?{usuario:String(usr.usuario||''),nome:String(usr.nome||''),papel:String(usr.papel||'gerencia')}:null;
+  },
+  setSession:(usr)=>{
+   _purge();
+   _legacyTok='';
+   _usr=usr&&typeof usr==='object'?{usuario:String(usr.usuario||''),nome:String(usr.nome||''),papel:String(usr.papel||'gerencia')}:null;
+  },
+  clear:()=>{_purge();_legacyTok='';_usr=null;},
+  headers:(extra={})=>_legacyTok?{...extra,Authorization:'Bearer '+_legacyTok}:{...extra}
+ };
+})();
 window.GEDIV_FETCH_DATA=async()=>{
- const r=await fetch('/api/data',{cache:'no-store',headers:window.GEDIV_AUTH.headers({Accept:'application/json'})});
+ const r=await fetch('/api/data',{cache:'no-store',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({Accept:'application/json'})});
  if(!r.ok)throw new Error('HTTP '+r.status);
- return window.GEDIV_MODEL.acceptSnapshot(await r.json());
+ const snap=window.GEDIV_MODEL.acceptSnapshot(await r.json());
+ if(snap.backend?.autenticado){
+  if(snap.backend.usuario||snap.backend.nome){
+   window.GEDIV_AUTH.setSession({usuario:snap.backend.usuario||'gerencia',nome:snap.backend.nome||'Gerência GEDIV',papel:snap.backend.papel||'gerencia'});
+  }else if(!window.GEDIV_AUTH.user()&&!window.GEDIV_AUTH.token()){
+   try{
+    const rs=await fetch('/api/sessao',{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'}});
+    if(rs.ok){const s=await rs.json();window.GEDIV_AUTH.setSession(s);}
+   }catch{}
+  }
+ }else if(!window.GEDIV_AUTH.token()){
+  window.GEDIV_AUTH.clear();
+ }
+ return snap;
 };
 window.GEDIV_READY=(async()=>{
  let d=window.GEDIV_BOOTSTRAP;
@@ -1033,7 +1063,8 @@ function openDocModal(r,sel){
    ${field('Classe / nível atual',clsAtu)}
    ${field('Origem do tempo',r.origemTempo)}
   </div>
-  ${r.preliminaryReview?`<div class="prelim-note"><b>Nota preliminar:</b> ${esc(r.preliminaryReview)}</div>`:''}`;
+  ${r.preliminaryReview?`<div class="prelim-note"><b>Nota preliminar:</b> ${esc(r.preliminaryReview)}</div>`:''}
+  ${isAuth&&/^[0-9a-f]{20}$/.test(r.act||r.resenha_id||'')?`<div id="docActAuditBox" class="reconcile-note" style="margin-top:10px">Consultando histórico do ato (${esc(r.act||r.resenha_id)})…</div>`:''}`;
  $('#docModalFoot').innerHTML=`
   <div class="doc-foot-left">
    ${doe?`<a class="sel-btn-pri" data-doc-pdf="${esc(doe)}" href="${esc(doe)}" target="_blank" rel="noopener noreferrer">↗ Abrir página ${esc(pageTxt)} no DOE</a>`:`<button type="button" class="sel-btn-pri" disabled title="Documento oficial indisponível neste recorte">↗ Página no DOE indisponível</button>`}
@@ -1044,6 +1075,33 @@ function openDocModal(r,sel){
  $('#docModalReviewBtn')?.addEventListener('click',()=>{$('#docModal').close();openReviewModal('decisao',[r]);});
  const dlg=$('#docModal');if(!dlg.open)dlg.showModal();
  $('#closeDocModal')?.focus();
+ const actId=r.act||r.resenha_id||'';
+ if(isAuth&&/^[0-9a-f]{20}$/.test(actId))loadActAuditBox(actId,r);
+}
+async function loadActAuditBox(actId,r){
+ const box=$('#docActAuditBox');if(!box)return;
+ try{
+  const resp=await fetch('/api/ato/'+encodeURIComponent(actId),{cache:'no-store',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({Accept:'application/json'})});
+  if(resp.status===401||resp.status===403){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+  if(!resp.ok)throw new Error('HTTP '+resp.status);
+  const d=await resp.json();
+  const corrList=d.correcoes||[],confList=d.conflitos||[],trilhaList=(d.trilha||[]).slice(0,10),decs=d.decisoes||[];
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+    <b>Histórico documental do ato (${esc(actId)}) · ${decs.length} decisão(ões)</b>
+    <span style="display:flex;gap:6px;flex-wrap:wrap">
+     <button type="button" id="docReviewWholeActBtn" class="sel-btn-sec" style="min-height:26px;padding:3px 8px;font-size:11px">Conferir ato completo</button>
+     <button type="button" id="docCorrectActClassBtn" class="sel-btn-sec" style="min-height:26px;padding:3px 8px;font-size:11px">Corrigir classificação do ato</button>
+    </span>
+   </div>
+   <div style="font-size:11px;line-height:1.45">
+    <div><b>Correções de campos (${corrList.length}):</b> ${corrList.length?corrList.map(c=>`<code>${esc(c.campo)}</code>: ${esc(c.valor_anterior)} → <b>${esc(c.valor_corrigido)}</b> (${esc(c.autor)} · ${esc(String(c.momento||'').slice(0,16).replace('T',' '))})`).join(' | '):'nenhuma correção registrada.'}</div>
+    <div style="margin-top:4px"><b>Conflitos abertos (${confList.length}):</b> ${confList.length?confList.map(c=>`#${esc(c.id)} <code>${esc(c.campo)}</code> (${esc(c.valor_vigente)} vs ${esc(c.valor_proposto)})`).join(', ')+' · <button type="button" id="docOpenConflictsBtn" class="pdf-link" style="border:0;background:none;padding:0">Resolver conflitos →</button>':'nenhum conflito aberto neste ato.'}</div>
+    <div style="margin-top:4px"><b>Trilha de auditoria (${trilhaList.length}):</b> ${trilhaList.length?trilhaList.map(t=>`<span><b>${esc(t.acao)}</b> por ${esc(t.autor)} em ${esc(String(t.momento||'').slice(0,16).replace('T',' '))}${t.justificativa?` (<i>${esc(t.justificativa)}</i>)`:''}</span>`).join(' · '):'nenhum evento de revisão registrado.'}</div>
+   </div>`;
+  $('#docReviewWholeActBtn')?.addEventListener('click',()=>{$('#docModal').close();openReviewModal('ato',[{...r,id:actId}]);});
+  $('#docCorrectActClassBtn')?.addEventListener('click',()=>{$('#docModal').close();openReviewModal('ato_classificacao',[{...r,id:actId,ato:d.ato}]);});
+  $('#docOpenConflictsBtn')?.addEventListener('click',()=>{$('#docModal').close();openConflictsDialog();});
+ }catch(err){box.textContent='Não foi possível carregar o histórico do ato: '+err.message;}
 }
 function details(sel){
  const host=$('#details');
@@ -1202,6 +1260,45 @@ function toast(s){let el=$('#toast');el.textContent=s;el.classList.add('show');s
 function filterText(){return [S.validation==='pendente'?'EM CONFERÊNCIA · DADOS PRELIMINARES':S.validation==='rejeitado'?'REGISTROS REJEITADOS':'DECISÕES CONFERIDAS',views[S.view][1],S.from?'De '+dt(S.from):'',S.to?'Até '+dt(S.to):'',S.modality,S.group?labelGroup(S.group):'',S.level?(S.level==='NI'?'Nível não identificado':'Nível '+S.level):'',S.category.length?S.category.map(catName).join(', '):'',S.merit,S.query?'Busca: '+S.query:''].filter(Boolean).join(' · ');}
 function exportRows(){let m=model(),list=groups(m.rows);return list.map(x=>{let r=x.items[0];return [S.mode==='resenha'?r.resenha:(r.process||'Não transcrito'),labelRow(r),r.merit,dt(r.date),x.items.length];});}
 function decisionRows(){let m=model();return [['Data da publicação','Resenha','Processo','Servidor','Eixo','Modalidade','Grupo','Nível origem','Nível destino','Serviço','Resultado','Página','Fonte','Conferência'],...m.rows.map(r=>[dt(r.date),r.resenha,r.process||'Não transcrito',r.server,r.axis,r.modality||'',labelGroup(r.group),r.levelFrom||'',r.levelTo||(r.levelStatus==='NI'?'Nível não identificado':''),r.category?catName(r.category):'',r.merit,r.page,r.url,r.validation])];}
+function buildServerExportUrl(formato){
+ const q=new URLSearchParams({formato,escopo:S.validation==='conferido'?'conferido':'pendente'});
+ if(S.from)q.set('inicio',S.from);
+ if(S.to)q.set('fim',S.to);
+ if(S.axis==='progressao')q.set('eixo','PROGRESSAO');
+ else if(S.axis==='tempo')q.set('eixo','TEMPO_SERVICO');
+ if(S.modality==='Vertical')q.set('modalidade','VERTICAL');
+ else if(S.modality==='Horizontal')q.set('modalidade','HORIZONTAL');
+ if(S.group&&!S.group.startsWith('PENDENTE:'))q.set('grupo',S.group);
+ const cats=(S.category||[]).filter(c=>/^TS-0[1-7]$/.test(c));
+ if(cats.length)q.set('subcategoria',cats.join(','));
+ if(S.merit==='deferido')q.set('resultado','DEFERIDO');
+ else if(S.merit==='indeferido')q.set('resultado','INDEFERIDO');
+ if(S.query)q.set('busca',S.query);
+ if(S.card==='processes')q.set('cartao','processos');
+ else if(S.card==='semEfeito')q.set('cartao','sem_efeito');
+ else if(S.card)q.set('cartao',S.card);
+ return '/api/exportar?'+q.toString();
+}
+async function serverAuditedExport(formato,fallbackFn){
+ try{
+  const r=await fetch(buildServerExportUrl(formato),{cache:'no-store',credentials:'same-origin',headers:window.GEDIV_AUTH.headers()});
+  if(r.status===401||r.status===403){if(typeof handleAuthExpiry==='function')await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const blob=await r.blob();
+  const cd=r.headers.get('Content-Disposition')||'';
+  const m=cd.match(/filename="?([^";]+)"?/i);
+  const fname=m?m[1]:(`GEDIV-exportacao.${formato}`);
+  const a=document.createElement('a');
+  const objUrl=URL.createObjectURL(blob);
+  a.href=objUrl;a.download=fname;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(objUrl),2000);
+  toast(`Exportação oficial (.${formato}) concluída e registrada na auditoria.`);
+ }catch(err){
+  if(typeof fallbackFn==='function')fallbackFn();
+  else toast('Falha ao exportar do servidor: '+err.message);
+ }
+}
 function exportXlsx(){
  let isAuth=!!data.backend?.autenticado,m=model();
  let summary=[['Visão',views[S.view][1]],['Escopo',isAuth?m.label:'Público (somente agregados)'],['Filtros',filterText()],['Cobertura',data.meta.coverage],[],['Indicador','Valor'],...Object.entries(m.metrics)];
@@ -1209,23 +1306,45 @@ function exportXlsx(){
   exp.download(exp.xlsx({'Resumo':summary}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-resumo-publico.xlsx');
   toast('Resumo agregado gerado (dados individuais protegidos).');return;
  }
- let list=[['Resenha / processo','Assunto','Resultado','Data','Quantidade'],...exportRows()];
- exp.download(exp.xlsx({'Resumo':summary,'Visão selecionada':list,'Decisões':decisionRows()}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-visao-selecionada.xlsx');
- toast('Planilha da visão selecionada gerada.');
+ const localFallback=()=>{
+  let list=[['Resenha / processo','Assunto','Resultado','Data','Quantidade'],...exportRows()];
+  exp.download(exp.xlsx({'Resumo':summary,'Visão selecionada':list,'Decisões':decisionRows()}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-visao-selecionada.xlsx');
+  toast('Planilha da visão selecionada gerada.');
+ };
+ if(!isStaticHost()){serverAuditedExport('xlsx',localFallback);return;}
+ localFallback();
 }
 function exportCsv(){
  if(!data.backend?.autenticado){toast('Lista individual (.csv) disponível apenas após login gerencial.');return;}
- exp.download(exp.csv(decisionRows()),'text/csv;charset=utf-8','GEDIV-decisoes-filtradas.csv');toast('Lista filtrada gerada.');
+ const localFallback=()=>{exp.download(exp.csv(decisionRows()),'text/csv;charset=utf-8','GEDIV-decisoes-filtradas.csv');toast('Lista filtrada gerada.');};
+ if(!isStaticHost()){serverAuditedExport('csv',localFallback);return;}
+ localFallback();
 }
 function exportPng(){let m=model();exp.png({title:views[S.view][1],filters:filterText(),metrics:m.metrics,records:exportRows(),coverage:data.meta.coverage});toast('Resumo da visão gerado.');}
+async function handleAuthExpiry(msg){
+ window.GEDIV_AUTH.clear();
+ ['#reviewDialog','#conflictsDialog','#auditDialog','#batchDialog','#docModal'].forEach(sel=>{const d=$(sel);if(d?.open)d.close();});
+ await refreshData();
+ S.validation='conferido';S.page=0;S.selected='';renderMeta();render();
+ const notice=msg||'Sessão expirada ou encerrada. Faça login novamente.';
+ $('#connectionState').textContent=notice;
+ toast(notice);
+}
 async function refreshData(){
  if(isStaticHost()){toast('Publicação estática no GitHub Pages: os dados são atualizados por novo lote publicado.');return;}
- const button=$('#refreshData'),label=button.textContent,revision=data.dashboard?.revision;
+ const button=$('#refreshData'),label=button.textContent,revision=data.dashboard?.revision,wasAuth=!!data.backend?.autenticado;
  button.disabled=true;button.textContent='Sincronizando…';
  try{
   const next=await window.GEDIV_FETCH_DATA();
   enrichVerticalLevels(next.rows);
   Object.assign(data,next);
+  if(wasAuth&&!data.backend?.autenticado){
+   window.GEDIV_AUTH.clear();
+   S.validation='conferido';S.page=0;S.selected='';render();
+   $('#connectionState').textContent='Sessão expirada ou encerrada. Faça login novamente.';
+   toast('Sessão expirada ou encerrada. Faça login novamente.');
+   return;
+  }
   if(!['pendente','conferido','rejeitado'].includes(S.validation)||(!data.backend?.autenticado&&S.validation!=='conferido')){
    S.validation=data.dashboard?.defaultScope||'conferido';
   }
@@ -1233,6 +1352,66 @@ async function refreshData(){
   $('#connectionState').textContent='Base sincronizada · '+data.rows.length+' registro(s) carregado(s) · '+(data.meta?.pendentes||0)+' em conferência · '+(revision===data.dashboard.revision?'sem alterações':'dados atualizados');
  }catch(error){$('#connectionState').textContent='Falha ao sincronizar. A base anterior de '+data.rows.length+' registros foi mantida. '+error.message;}
  finally{button.disabled=false;button.textContent=label;}
+}
+async function openConflictsDialog(){
+ if(!data.backend?.autenticado){$('#loginDialog').showModal();return;}
+ const dlg=$('#conflictsDialog'),sumBox=$('#conflictsSummaryBox'),wrap=$('#conflictsTableWrap'),st=$('#conflictsStatus');
+ st.textContent='';st.classList.remove('is-error');
+ if(!dlg.open){
+  sumBox.textContent='Carregando conflitos abertos e diagnóstico de integridade…';
+  wrap.innerHTML='';
+  dlg.showModal();
+ }
+ try{
+  const r=await fetch('/api/conflitos',{cache:'no-store',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({Accept:'application/json'})});
+  if(r.status===401||r.status===403){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const d=await r.json();
+  const confs=d.conflitos||[],orfaos=d.vinculos_orfaos||[],desat=Number(d.classificacoes_desatualizadas)||0;
+  sumBox.innerHTML=`<b>Diagnóstico de reconciliação:</b> <b>${confs.length}</b> conflito(s) aberto(s) · <b>${orfaos.length}</b> vínculo(s) órfão(s) · <b>${desat}</b> classificação(ões) desatualizada(s).`;
+  if(!confs.length){
+   wrap.innerHTML='<div class="empty-small">Nenhum conflito aberto na base no momento.</div>';
+   return;
+  }
+  wrap.innerHTML=`<table class="dialog-table is-cards-sm"><thead><tr><th>ID</th><th>Alvo</th><th>Campo</th><th>Valor vigente</th><th>Valor proposto</th><th>Origem</th><th>Ação auditada</th></tr></thead><tbody>${confs.map(c=>`<tr><td class="nowrap" data-label="ID">#${esc(c.id)}</td><td class="nowrap" data-label="Alvo">${esc(c.alvo_tipo)} · <code>${esc(String(c.alvo_id||'').slice(0,12))}</code></td><td class="nowrap" data-label="Campo"><code>${esc(c.campo)}</code></td><td data-label="Vigente"><b>${esc(c.valor_vigente)}</b></td><td data-label="Proposto"><b>${esc(c.valor_proposto)}</b></td><td class="nowrap" data-label="Origem">${esc(c.origem||'releitura')}</td><td class="nowrap" data-label="Ação"><button type="button" class="sel-btn-sec" style="min-height:26px;padding:3px 8px;margin-right:4px" data-resolve-conflict="${esc(c.id)}" data-decision="MANTER">Manter vigente</button><button type="button" class="sel-btn-pri" style="min-height:26px;padding:3px 8px;flex:none" data-resolve-conflict="${esc(c.id)}" data-decision="ACEITAR">Aceitar proposto</button></td></tr>`).join('')}</tbody></table>`;
+  $$('#conflictsTableWrap [data-resolve-conflict]').forEach(btn=>btn.addEventListener('click',async()=>{
+   const cId=Number(btn.dataset.resolveConflict),dec=btn.dataset.decision;
+   const just=($('#conflictJustificationInput')?.value||'').trim();
+   const confFonte=!!$('#conflictConfirmSourceInput')?.checked;
+   st.classList.remove('is-error');
+   if(just.length<5){st.textContent='Informe a justificativa técnica (mínimo 5 caracteres) antes de resolver o conflito.';st.classList.add('is-error');return;}
+   if(!confFonte){st.textContent='Confirme a consulta ao PDF oficial (confirma_fonte) para resolver o conflito.';st.classList.add('is-error');return;}
+   btn.disabled=true;st.textContent='Registrando resolução do conflito #'+cId+'…';
+   try{
+    const usr=window.GEDIV_AUTH.user();
+    const resp=await fetch('/api/revisao',{method:'POST',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:JSON.stringify({alvo:'conflito',id:cId,decisao:dec,responsavel:usr?`${usr.nome} (${usr.usuario})`:'Revisor GEDIV',justificativa:just,confirma_fonte:confFonte})});
+    if(resp.status===401){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+    const jr=await resp.json().catch(()=>({}));
+    if(!resp.ok)throw new Error(jr.erro||'Falha ao resolver conflito.');
+    toast('Conflito #'+cId+' resolvido ('+dec+') e registrado em auditoria.');
+    await openConflictsDialog();
+    await refreshData();
+   }catch(err){st.textContent=err.message;st.classList.add('is-error');btn.disabled=false;}
+  }));
+ }catch(err){sumBox.textContent='Não foi possível carregar os conflitos: '+err.message;}
+}
+async function openAuditDialog(){
+ if(!data.backend?.autenticado){$('#loginDialog').showModal();return;}
+ const dlg=$('#auditDialog'),note=$('#auditScopeNote'),wrap=$('#auditTableWrap'),admBox=$('#auditAdminActions'),pubSt=$('#publishSnapshotStatus');
+ note.textContent='Carregando trilha de auditoria…';wrap.innerHTML='';
+ if(pubSt)pubSt.textContent='';
+ if(admBox)admBox.hidden=!data.backend?.ehAdmin;
+ if(!dlg.open)dlg.showModal();
+ try{
+  const r=await fetch('/api/auditoria',{cache:'no-store',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({Accept:'application/json'})});
+  if(r.status===401){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){note.textContent=d.erro||('Acesso negado à auditoria (HTTP '+r.status+').');return;}
+  const trilha=d.trilha||[];
+  note.innerHTML=d.escopo==='global'?`<b>Escopo global (Administração):</b> exibindo ${trilha.length} evento(s) auditado(s) de todas as contas.`:`<b>Escopo próprio (Gerência):</b> exibindo ${trilha.length} evento(s) realizados exclusivamente pela sua conta nominal.`;
+  if(!trilha.length){wrap.innerHTML='<div class="empty-small">Nenhum evento de auditoria encontrado neste escopo.</div>';return;}
+  wrap.innerHTML=`<table class="dialog-table is-cards-sm"><thead><tr><th class="nowrap">Momento</th><th>Autor</th><th class="nowrap">Ação</th><th class="nowrap">Alvo</th><th>Justificativa / Detalhe</th></tr></thead><tbody>${trilha.map(t=>`<tr><td class="nowrap" data-label="Momento">${esc(String(t.momento||'').slice(0,19).replace('T',' '))}</td><td data-label="Autor"><b>${esc(t.autor||'—')}</b></td><td class="nowrap" data-label="Ação"><span class="badge t">${esc(t.acao)}</span></td><td class="nowrap" data-label="Alvo">${esc(t.alvo_tipo||'')} · <code>${esc(String(t.alvo_id||'').slice(0,18))}</code></td><td data-label="Justificativa">${esc(t.justificativa||'—')}</td></tr>`).join('')}</tbody></table>`;
+ }catch(err){note.textContent='Falha ao carregar auditoria: '+err.message;}
 }
 function openReviewModal(targetType,items){
  if(!data.backend?.autenticado){$('#loginDialog').showModal();return;}
@@ -1245,6 +1424,7 @@ function openReviewModal(targetType,items){
  $('#revJustification').value='';
  $('#revConfirmSource').checked=false;
  $('#revConfirmLink').checked=false;
+ if($('#revActClassBox'))$('#revActClassBox').hidden=true;
  if(targetType==='evento'){
   $('#reviewDialogTitle').textContent='Vincular ou revisar evento modificador';
   $('#revContextBox').innerHTML=`<b>Evento:</b> ${esc(first.type)} em ${dt(first.date)} (pág. ${esc(first.page||'—')})<br>${esc((first.description||'').slice(0,220))}`;
@@ -1253,6 +1433,27 @@ function openReviewModal(targetType,items){
   $('#revOriginalActId').value=first.act||first.suggestedAct||'';
   $('#revCorrectionsDetails').hidden=true;
   $('#revConfirmLinkRow').hidden=true;
+ }else if(targetType==='ato_classificacao'){
+  $('#reviewDialogTitle').textContent=`Corrigir classificação do ato · ${first.resenha||first.id}`;
+  $('#revContextBox').innerHTML=`<b>Ato ${esc(first.id)}</b> · Resenha ${esc(first.resenha||'')} (${dt(first.date)}, pág. ${esc(first.page||'—')})`;
+  $('#revDecision').innerHTML='<option value="CORRIGIR_ATO">CORRIGIR CLASSIFICAÇÃO DO ATO</option>';
+  $('#revEventBox').hidden=true;
+  $('#revCorrectionsDetails').hidden=true;
+  $('#revConfirmLinkRow').hidden=true;
+  if($('#revActClassBox')){
+   $('#revActClassBox').hidden=false;
+   $('#revActEixo').value=first.axis==='tempo'?'TEMPO_SERVICO':'PROGRESSAO';
+   $('#revActModalidade').value=first.modality==='Vertical'?'VERTICAL':first.modality==='Horizontal'?'HORIZONTAL':'';
+   $('#revActGrupo').value=(first.group&&!String(first.group).startsWith('PENDENTE:'))?first.group:'';
+   $('#revActSubcat').value=(first.category&&/^TS-0[1-7]$/.test(first.category))?first.category:'';
+  }
+ }else if(targetType==='ato'){
+  $('#reviewDialogTitle').textContent=`Revisar ato completo · ${first.resenha||first.id}`;
+  $('#revContextBox').innerHTML=`<b>Ato ${esc(first.id)}</b> · Resenha ${esc(first.resenha||'')} (${dt(first.date)}, pág. ${esc(first.page||'—')}) · Vínculo GEDIV: <b>${esc(mentionLabel(first.sourceMention))}</b>`;
+  $('#revDecision').innerHTML='<option value="CONFERIR">CONFERIR todas as decisões do ato</option><option value="REJEITAR">REJEITAR ato</option><option value="REABRIR">REABRIR ato</option>';
+  $('#revEventBox').hidden=true;
+  $('#revCorrectionsDetails').hidden=true;
+  $('#revConfirmLinkRow').hidden=false;
  }else{
   $('#reviewDialogTitle').textContent=items.length>1?`Revisar ${items.length} decisões da seleção`:`Revisar decisão · ${first.process||first.id}`;
   $('#revContextBox').innerHTML=`<b>Resenha ${esc(first.resenha)}</b> (${dt(first.date)}, pág. ${esc(first.page||'—')}) · Vínculo GEDIV: <b>${esc(mentionLabel(first.sourceMention))}</b><br>${items.length===1?`Servidor: <b>${esc(first.server)}</b> · Processo: <b>${esc(first.process||'Não transcrito')}</b>`:`Lote selecionado com ${items.length} registros.`}`;
@@ -1264,6 +1465,8 @@ function openReviewModal(targetType,items){
    $('#revCorrProcess').value=first.process||'';
    $('#revCorrRegistration').value=first.registration||'';
    $('#revCorrServer').value=first.server||'';
+   if($('#revCorrCargo'))$('#revCorrCargo').value=first.cargo||'';
+   if($('#revCorrLotacao'))$('#revCorrLotacao').value=first.lotacao||'';
    $('#revCorrResult').value='';
    $('#revCorrClassFrom').value=first.levelFrom||'';
    $('#revCorrClassTo').value=first.levelTo||'';
@@ -1291,6 +1494,8 @@ function bind(){
      <div class="delicate-menu-hd"><b id="delicateMenuUser">Visitante (Público)</b><span id="delicateMenuMeta">Apenas indicadores agregados</span></div>
      <button type="button" role="menuitem" id="delicateLoginAct"><span>Entrar na Gerência GEDIV</span></button>
      <button type="button" role="menuitem" id="delicateRefreshAct"><span>↻ Atualizar dados</span></button>
+     <button type="button" role="menuitem" id="delicateConflictsAct" hidden><span>⚖ Conflitos de reconciliação</span></button>
+     <button type="button" role="menuitem" id="delicateAuditAct" hidden><span>📋 Trilha de auditoria</span></button>
      <button type="button" role="menuitem" id="delicateBatchAct" hidden><span>⚙ Administração → Coleta e importação</span></button>
      <button type="button" role="menuitem" id="delicateLogoutAct" class="is-danger" hidden><span>Encerrar sessão</span></button>
     </div>`;
@@ -1302,6 +1507,8 @@ function bind(){
    });
    $('#delicateLoginAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;openLoginModal();});
    $('#delicateRefreshAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;refreshData();});
+   $('#delicateConflictsAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;openConflictsDialog();});
+   $('#delicateAuditAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;openAuditDialog();});
    $('#delicateBatchAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;openAdminBatchDialog();});
    $('#delicateLogoutAct').addEventListener('click',()=>{$('#delicateAcctMenu').hidden=true;$('#logoutBtn')?.click();});
    document.addEventListener('click',e=>{if(!e.target.closest('#delicateHdrControls')){const m=$('#delicateAcctMenu');if(m){m.hidden=true;$('#delicateAcctBtn')?.setAttribute('aria-expanded','false');}}});
@@ -1319,6 +1526,26 @@ function bind(){
  $('#authToggleBtn')?.addEventListener('click',openLoginModal);
  $('#closeLoginTop')?.addEventListener('click',()=>$('#loginDialog').close());
  $('#closeLoginBtn')?.addEventListener('click',()=>$('#loginDialog').close());
+ $('#closeConflictsTop')?.addEventListener('click',()=>$('#conflictsDialog').close());
+ $('#closeConflictsBtn')?.addEventListener('click',()=>$('#conflictsDialog').close());
+ $('#refreshConflictsBtn')?.addEventListener('click',()=>openConflictsDialog());
+ $('#closeAuditTop')?.addEventListener('click',()=>$('#auditDialog').close());
+ $('#closeAuditBtn')?.addEventListener('click',()=>$('#auditDialog').close());
+ $('#refreshAuditBtn')?.addEventListener('click',()=>openAuditDialog());
+ $('#publishPublicSnapshotBtn')?.addEventListener('click',async()=>{
+  const btn=$('#publishPublicSnapshotBtn'),st=$('#publishSnapshotStatus');
+  btn.disabled=true;if(st)st.textContent='Publicando snapshot…';
+  try{
+   const r=await fetch('/api/admin/snapshot-publico',{method:'POST',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:'{}'});
+   if(r.status===401){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d.erro||'HTTP '+r.status);
+   await openAuditDialog();
+   if(st)st.textContent='Snapshot público publicado ('+String(d.gerado_em||'').slice(0,19).replace('T',' ')+').';
+   toast('Snapshot público atualizado com sucesso.');
+  }catch(err){if(st)st.textContent='Falha: '+err.message;}
+  finally{btn.disabled=false;}
+ });
  $('#loginForm')?.addEventListener('submit',async e=>{
   e.preventDefault();
   const st=$('#loginStatus'),btn=$('#submitLoginBtn');
@@ -1326,17 +1553,17 @@ function bind(){
   try{
    const manualTok=$('#loginTokenInput').value.trim();
    if(manualTok){
-    window.GEDIV_AUTH.set(manualTok,{usuario:'token',nome:'Credencial técnica',papel:'admin'});
+    window.GEDIV_AUTH.set(manualTok,{usuario:'token_legado',nome:'Credencial técnica legada',papel:'gerencia'});
    }else{
     const usuario=$('#loginUser').value.trim(),senha=$('#loginPass').value;
     if(!usuario||!senha)throw new Error('Informe usuário e senha ou cole o token técnico.');
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha})});
+    const r=await fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.erro||'Credenciais inválidas.');
-    window.GEDIV_AUTH.set(d.token,{usuario:d.usuario,nome:d.nome,papel:d.papel||'gerencia'});
+    window.GEDIV_AUTH.setSession({usuario:d.usuario,nome:d.nome,papel:d.papel||'gerencia'});
    }
    await refreshData();
-   if(!data.backend?.autenticado){window.GEDIV_AUTH.set('','');throw new Error('Credencial não autorizada pelo servidor.');}
+   if(!data.backend?.autenticado){window.GEDIV_AUTH.clear();throw new Error('Credencial não autorizada pelo servidor.');}
    S.validation='pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
    $('#loginPass').value='';$('#loginTokenInput').value='';
    $('#loginDialog').close();
@@ -1345,8 +1572,8 @@ function bind(){
   finally{btn.disabled=false;}
  });
  $('#logoutBtn')?.addEventListener('click',async()=>{
-  try{await fetch('/api/logout',{method:'POST',headers:window.GEDIV_AUTH.headers()});}catch{}
-  window.GEDIV_AUTH.set('','');
+  try{await fetch('/api/logout',{method:'POST',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:'{}'});}catch{}
+  window.GEDIV_AUTH.clear();
   await refreshData();
   S.validation='conferido';S.page=0;S.selected='';initHistory();renderMeta();render();
   toast('Sessão encerrada.');
@@ -1372,6 +1599,15 @@ function bind(){
    if(alvo==='evento'){
     payload.id=rawIds[0];
     payload.ato_original_id=$('#revOriginalActId').value.trim()||null;
+   }else if(alvo==='ato'){
+    payload.id=rawIds[0];
+   }else if(alvo==='ato_classificacao'){
+    payload.id=rawIds[0];
+    const corrAto={eixo:$('#revActEixo').value};
+    if($('#revActModalidade').value)corrAto.modalidade=$('#revActModalidade').value;
+    if($('#revActGrupo').value.trim())corrAto.grupo=$('#revActGrupo').value.trim().toUpperCase();
+    if($('#revActSubcat').value)corrAto.subcategoria=$('#revActSubcat').value;
+    payload.correcoes=corrAto;
    }else{
     payload.ids=rawIds;
     if(rawIds.length===1&&!$('#revCorrectionsDetails').hidden){
@@ -1379,13 +1615,16 @@ function bind(){
      if($('#revCorrProcess').value.trim())corr.processo=$('#revCorrProcess').value.trim();
      if($('#revCorrRegistration').value.trim())corr.matricula=$('#revCorrRegistration').value.trim();
      if($('#revCorrServer').value.trim())corr.servidor=$('#revCorrServer').value.trim();
+     if($('#revCorrCargo')?.value.trim())corr.cargo=$('#revCorrCargo').value.trim();
+     if($('#revCorrLotacao')?.value.trim())corr.lotacao=$('#revCorrLotacao').value.trim();
      if($('#revCorrResult').value)corr.resultado=$('#revCorrResult').value;
      if($('#revCorrClassFrom').value.trim())corr.classe_anterior=$('#revCorrClassFrom').value.trim().toUpperCase();
      if($('#revCorrClassTo').value.trim())corr.classe_posterior=$('#revCorrClassTo').value.trim().toUpperCase();
      if(Object.keys(corr).length)payload.correcoes=corr;
     }
    }
-   const r=await fetch('/api/revisao',{method:'POST',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+   const r=await fetch('/api/revisao',{method:'POST',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+   if(r.status===401){await handleAuthExpiry('Sessão expirada ou encerrada. Faça login novamente.');return;}
    const d=await r.json().catch(()=>({}));
    if(!r.ok)throw new Error(d.erro||'Não foi possível registrar a revisão.');
    await refreshData();
@@ -1578,10 +1817,10 @@ function renderMeta(){
  if(dDot)dDot.classList.toggle('is-pub',!isAuth);
  if(dLbl)dLbl.textContent=isAuth?(usr?.nome||(isAdm?'Admin GEDIV':'Gerência GEDIV')):'Acesso gerencial';
  if(dTag)dTag.textContent=isAuth?(isAdm?'Admin':'Gerência'):'Público';
- const mu=$('#delicateMenuUser'),mm=$('#delicateMenuMeta'),la=$('#delicateLoginAct'),lo=$('#delicateLogoutAct'),ba=$('#delicateBatchAct');
+ const mu=$('#delicateMenuUser'),mm=$('#delicateMenuMeta'),la=$('#delicateLoginAct'),lo=$('#delicateLogoutAct'),ba=$('#delicateBatchAct'),ca=$('#delicateConflictsAct'),aa=$('#delicateAuditAct');
  if(mu)mu.textContent=isAuth?(usr?`${usr.nome} (${usr.usuario})`:'Sessão autenticada'):'Visitante (Público)';
  if(mm)mm.textContent=isAuth?`${Number(meta.edicoes)||0} edições · perfil ${isAdm?'Administração':'Gerência'}`:'Apenas indicadores agregados';
- if(la)la.hidden=isAuth;if(lo)lo.hidden=!isAuth;if(ba)ba.hidden=!isAdm;
+ if(la)la.hidden=isAuth;if(lo)lo.hidden=!isAuth;if(ba)ba.hidden=!isAdm;if(ca)ca.hidden=!isAuth;if(aa)aa.hidden=!isAuth;
  const totalBase=isAuth?data.rows.length:(pending+confCnt+rej);
  $('#receivedTotal').textContent=totalBase+' registros na base';
  $('#receivedMetaPill').textContent=`${pending} em conferência${rej?' · '+rej+(rej===1?' rejeitado':' rejeitados'):''}`;

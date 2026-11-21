@@ -19,15 +19,18 @@ Tornados sem efeito não são calculados. Os cartões não se somam entre si.
 from __future__ import annotations
 
 import json
+import os
 import re
 import unicodedata
+from pathlib import Path
 
 from ..gerencias.gediv import catalogo as C
-from ..nucleo.banco import Banco
+from ..nucleo.banco import Banco, agora
 from . import documental, projecao
 
 GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
 LIMIAR_PUBLICO = 5
+ARQUIVO_SNAPSHOT_PUBLICO = "snapshot_publico.json"
 CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
 ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
            "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
@@ -488,6 +491,167 @@ def resumo_cobertura_edicoes(banco: Banco) -> dict:
     }
     ausencia = len(shas_validos - (shas_ato | shas_abono))
     return {"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}
+
+
+def _validar_inteiro_publico(valor, contexto: str) -> None:
+    if valor is None:
+        return
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        raise ValueError(f"snapshot público inválido ({contexto}): valor não inteiro {valor!r}")
+    if valor == 0:
+        return
+    if valor < LIMIAR_PUBLICO or (valor % LIMIAR_PUBLICO) != 0:
+        raise ValueError(
+            f"snapshot público inválido ({contexto}): valor {valor} viola limiar/faixa de {LIMIAR_PUBLICO}"
+        )
+
+
+def gerar_snapshot_publico(banco: Banco) -> dict:
+    """Gera a representação pública congelada para `/api/painel` e `/api/data` a partir do banco
+    (compatível com conexões somente-leitura), separada da operação transacional em tempo real."""
+    from . import adaptador
+
+    p_pub = painel(banco, {}, PUBLICO, proteger_publico=True)
+    d_pub = adaptador.projetar_para_dashboard_2910(p_pub, [], [])
+    d_pub["backend"]["papel"] = "publico"
+    d_pub["backend"]["ehAdmin"] = False
+    snap = {
+        "versao_snapshot": 1,
+        "gerado_em": agora(),
+        "painel": p_pub,
+        "data": d_pub,
+    }
+    return validar_snapshot_publico(snap)
+
+
+def validar_snapshot_publico(snap: dict) -> dict:
+    """Valida integralmente um snapshot público contra vazamento de PII, contagens < 5, datas diárias,
+    quebra de supressão complementar e inconsistência de contrato antes de permitir sua publicação."""
+    if not isinstance(snap, dict) or snap.get("versao_snapshot") != 1:
+        raise ValueError("snapshot público inválido: estrutura ou versão incompatível")
+    p_pub = snap.get("painel")
+    d_pub = snap.get("data")
+    if not isinstance(p_pub, dict) or not isinstance(d_pub, dict):
+        raise ValueError("snapshot público inválido: blocos 'painel' e 'data' obrigatórios")
+
+    meta_p = p_pub.get("meta") or {}
+    priv_p = meta_p.get("privacidade") or {}
+    if (
+        meta_p.get("perfil") != PUBLICO
+        or meta_p.get("escopo") != "conferido"
+        or meta_p.get("dados_individuais") is not False
+        or priv_p.get("protegido") is not True
+        or priv_p.get("limiar") != LIMIAR_PUBLICO
+        or priv_p.get("faixa") != LIMIAR_PUBLICO
+        or priv_p.get("granularidade_temporal") != "mensal"
+    ):
+        raise ValueError("snapshot público inválido: metadados de privacidade ausentes ou violados")
+
+    for chave_vazia in ("linhas", "resenhas", "eventos"):
+        if p_pub.get(chave_vazia) != []:
+            raise ValueError(f"snapshot público inválido: painel.{chave_vazia} deve ser lista vazia")
+
+    apoio_p = p_pub.get("apoio")
+    if not isinstance(apoio_p, dict) or any(v is not None for v in apoio_p.values()):
+        raise ValueError("snapshot público inválido: contadores internos em 'apoio' devem ser nulos")
+
+    ind = p_pub.get("indicadores")
+    if not isinstance(ind, dict) or set(ind.keys()) != set(CARTOES):
+        raise ValueError("snapshot público inválido: cartões de indicadores incompletos")
+    for k, v in ind.items():
+        _validar_inteiro_publico(v, f"indicadores.{k}")
+    if (ind.get("deferidos") is None) != (ind.get("indeferidos") is None):
+        raise ValueError("snapshot público inválido: supressão complementar violada em deferidos/indeferidos")
+
+    series = p_pub.get("series")
+    if not isinstance(series, dict):
+        raise ValueError("snapshot público inválido: bloco 'series' ausente")
+    _validar_inteiro_publico(series.get("progressao_sem_modalidade"), "series.progressao_sem_modalidade")
+    for pt in series.get("por_data") or []:
+        dt_val = str(pt.get("data") or "")
+        if not (dt_val == "SEM_DATA" or re.fullmatch(r"\d{4}-\d{2}", dt_val)):
+            raise ValueError(f"snapshot público inválido: data não mensal em por_data ({dt_val!r})")
+        for campo in ("vertical", "horizontal", "tempo", "total"):
+            _validar_inteiro_publico(pt.get(campo), f"por_data[{dt_val}].{campo}")
+
+    for nome_serie in ("por_assunto", "por_grupo", "por_grupo_detalhado", "por_nivel_vertical", "por_subcategoria"):
+        for item in series.get(nome_serie) or []:
+            for campo in ("total", "deferido", "indeferido", "nao_informado", "vertical", "horizontal"):
+                if campo in item:
+                    _validar_inteiro_publico(item.get(campo), f"{nome_serie}.{campo}")
+            if (item.get("deferido") is None) != (item.get("indeferido") is None):
+                raise ValueError(f"snapshot público inválido: supressão complementar violada em {nome_serie}")
+            if nome_serie == "por_nivel_vertical" and item.get("transicoes") not in (None, []):
+                raise ValueError("snapshot público inválido: transições detalhadas expostas em por_nivel_vertical")
+
+    for item in series.get("por_condicao") or []:
+        _validar_inteiro_publico(item.get("total"), "por_condicao.total")
+    res_nv = series.get("resumo_nivel_vertical") or {}
+    for campo in ("total_progressao", "total_horizontal", "total_vertical", "classificados", "nao_identificados"):
+        _validar_inteiro_publico(res_nv.get(campo), f"resumo_nivel_vertical.{campo}")
+
+    if d_pub.get("rows") != [] or d_pub.get("events") != []:
+        raise ValueError("snapshot público inválido: data.rows e data.events devem estar vazios")
+    meta_d = d_pub.get("meta") or {}
+    if any(meta_d.get(c) != 0 for c in ("pendentes", "rejeitados", "eventosPendentes")):
+        raise ValueError("snapshot público inválido: contadores de fila não zerados em data.meta")
+    dash = d_pub.get("dashboard") or {}
+    counts = dash.get("counts") or {}
+    if dash.get("defaultScope") != "conferido" or any(
+        counts.get(c) != 0 for c in ("received", "pending", "confirmed", "rejected", "unlinkedEvents")
+    ):
+        raise ValueError("snapshot público inválido: contadores de data.dashboard.counts inconsistentes")
+    back = d_pub.get("backend") or {}
+    if (
+        back.get("autenticado") is not False
+        or back.get("ehAdmin") is not False
+        or back.get("resenhas") != []
+        or bool(back.get("eventos"))
+        or bool(back.get("outras"))
+        or back.get("indicadores") != ind
+        or any(v is not None for v in (back.get("apoio") or {}).values())
+    ):
+        raise ValueError("snapshot público inválido: bloco data.backend contém dados restritos ou divergentes")
+
+    bruto_json = json.dumps(snap, ensure_ascii=False)
+    if (
+        "pdf_sha256" in bruto_json
+        or "#page=" in bruto_json
+        or re.search(r"SAD-PSE-202\d/\d+", bruto_json)
+        or re.search(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", bruto_json)
+    ):
+        raise ValueError("snapshot público inválido: referência documental individual ou dado pessoal detectado")
+    return snap
+
+
+def publicar_snapshot_publico(
+    banco: Banco | None,
+    caminho_saida: Path | str,
+    *,
+    snapshot: dict | None = None,
+) -> dict:
+    """Valida e publica atomicamente (`.tmp` -> `os.replace`) o snapshot público em disco.
+    Se a validação falhar, levanta `ValueError` sem tocar no arquivo anterior."""
+    destino = Path(caminho_saida)
+    snap = validar_snapshot_publico(snapshot if snapshot is not None else gerar_snapshot_publico(banco))
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destino.parent / f"{destino.name}.tmp"
+    conteudo = json.dumps(snap, ensure_ascii=False, indent=2) + "\n"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(conteudo)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, destino)
+    return snap
+
+
+def carregar_snapshot_publico(caminho: Path | str) -> dict | None:
+    """Carrega e valida o snapshot público congelado em disco, ou retorna `None` se ainda não existir."""
+    arq = Path(caminho)
+    if not arq.is_file():
+        return None
+    bruto = json.loads(arq.read_text(encoding="utf-8"))
+    return validar_snapshot_publico(bruto)
 
 
 def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO, *, proteger_publico: bool = False) -> dict:
