@@ -6,3 +6,8 @@ painel-publico/*.json text eol=lf
 painel-publico/*.png binary
 observatorio/web/unificado/*.html text eol=lf
 observatorio/web/unificado/*.json text eol=lf
+revisao-2910/*.html text eol=lf
+revisao-2910/*.js text eol=lf
+revisao-2910/*.css text eol=lf
+revisao-2910/*.json text eol=lf
+revisao-2910/*.png binary
