@@ -3,110 +3,131 @@
 Observatório automatizado das publicações do Diário Oficial do Estado da Paraíba relacionadas à
 Gerência Executiva de Concessão de Direitos e Vantagens (GEDIV/SEAD-PB).
 
-Dois eixos: **Progressão Funcional** (modalidades Horizontal e Vertical, por grupo do PCCR) e **Tempo de Serviço/Contribuição** (sete subcategorias).
+Abrange dois eixos principais — **Progressão Funcional** (modalidades Horizontal e Vertical A–F, por grupo do PCCR, mantendo expressões não homologadas como `PENDENTE:TEC. ADM` e `PENDENTE:STF` separadas) e **Tempo de Serviço/Contribuição** (subcategorias `TS-01` a `TS-07` e **Abono de Permanência**, sem `TS-08`) — além de **Outros benefícios**, **Publicações do dia** e **Histórico**.
 
-Este é o repositório oficial. Dos projetos anteriores (GEMINI-2, V2) foram aproveitadas regras,
-formatos e o layout aprovado do painel; ver `docs/07`.
+Este é o repositório canônico oficial (`gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE`).
 
-## Situação (10/11/2026, versão 0.4.0)
+---
 
-O fluxo completo está implementado e foi executado de ponta a ponta com documentos sintéticos e,
-em 10/11/2026, com **quatro PDFs oficiais** (edições de 01, 02, 03 e 06/10/2026 — ver [docs/08](docs/08-validacao-com-pdf-oficial.md)):
+## 1. Situação e Estágios de Maturidade
 
-```
-DOE/PB → PDF → leitura por colunas/OCR → classificação GEDIV → banco privado → API → dashboard
-```
+Para total transparência institucional, o projeto distingue estritamente três estágios:
 
-| Parte | Código | Testes automatizados (sintéticos) | Validação com documento oficial | Operação efetiva |
-|---|---|---|---|---|
-| Coleta em lotes, por fonte | Pronto | Aprovados | **Não** (fontes sem resposta) | **Não** |
-| Importação manual de PDFs | Pronto | Aprovados | **Executada** em 4 edições (hash da de 02/10 igual à referência) | **Não** |
-| Leitura por colunas, OCR, qualidade | Pronto | Aprovados | **Executada**: 172 páginas, 7 defeitos reais corrigidos | **Não** |
-| Classificação GEDIV (2 eixos, 16 grupos, 7 subcategorias) | Pronto | Aprovados | **Executada**: 7 resenhas, 49 decisões; amostra conferida pelo desenvolvedor | **Não** |
-| Revisão humana com trilha de auditoria | Pronto | Aprovados | **Não** (nenhum registro real conferido pela GEDIV) | **Não** |
-| API e dashboard (7 indicadores, filtros, gráficos, exportações) | Pronto | Aprovados; conferido em navegador | **Executados** sobre a base real | **Não** |
+**Implementado localmente → Homologado em teste → Ativado em produção**
 
-Os PDFs oficiais vieram da pasta do projeto no Drive: o **download automático nas fontes continua não
-comprovado**. A amostra real é pequena (4 edições) e a conferência pela GEDIV ainda não ocorreu; por
-isso o sistema **não** está declarado como validado para produção. Todo registro produzido pela
-classificação é **candidato**: só entra nos indicadores depois de conferido por uma pessoa.
-Detalhes, evidências e pendências: [docs/07](docs/07-integracao-testes-e-evidencias.md).
-Regras consolidadas (eixos, grupos, indicadores): [docs/06](docs/06-regras-consolidadas.md).
+| Componente / Funcionalidade | Implementado localmente | Homologado em teste | Ativado em produção | Observações e Pendências |
+| :--- | :---: | :---: | :---: | :--- |
+| Coleta DOE-PB por fonte (`auniao`, `cge`) e retomada | Sim | Sim (lotes locais) | **Não** | Requer execução prévia de `observatorio.sonda` na VM Linux definitiva |
+| Agendamento Seg–Sex (09:00 e 14:00 `America/Sao_Paulo`) com bloqueio Sáb/Dom e feriados | Sim | Sim (testes automatizados) | **Não** | Timer `systemd` preparado em `deploy_autonomo/`; não ativado em servidor definitivo |
+| Leitura por colunas, OCR (`tesseract-ocr-por`) e qualidade | Sim | Sim (acervo local) | **Não** | Preserva revisões humanas em releituras |
+| Classificação GEDIV (Vertical A–F, Horizontal, TS-01..TS-07, Abono de Permanência, Outros) | Sim | Sim | **Não** | `TEC. ADM` vs `AST` e `STF` vs `SFT` aguardam deliberação formal da GEDIV |
+| Painel Unificado (`/painel`) com 7 abas e build reproduzível sem dados embutidos | Sim | Sim (4 resoluções) | **Não** | Construído a partir de `observatorio/web/unificado/modelo-base-sanitizado.html` |
+| Controle de acesso RBAC em 3 perfis (`Público`, `Gerência`, `Administração`) | Sim | Sim | **Não** | Contas nominais `scrypt` em `contas.sqlite3` |
+| Revisão documental humana com trilha de auditoria imutável (`POST /api/revisao`) | Sim | Sim (banco descartável) | **Não** | Exige conta autenticada, justificativa e confirmação de fonte/vínculo |
+| Recebimento administrativo de lotes (`POST /api/admin/lote`) | **Somente validação** | **Somente validação** | **Não** | **PENDÊNCIA OPERACIONAL:** valida formato/duplicidades e audita, mas **não importa** no banco principal |
+| Implantação em servidor Linux institucional e consolidação definitiva dos bancos | Preparado | Em banco de teste | **Não** | Bancos oficiais permanecem preservados fora do Git |
 
-## Como usar
+---
 
-Requisito: Python 3.10 ou mais recente; `python -m pip install -r requirements.txt` para ler PDFs.
-O OCR precisa também do Tesseract com o idioma português (sem ele, páginas digitalizadas ficam
-marcadas como `OCR_INDISPONIVEL`, nunca como lidas). A API e o dashboard usam só a biblioteca padrão.
+## 2. Como Usar e Executar Localmente
 
-### Ver o painel funcionando (demonstração, dados fictícios)
+Requisito: Python 3.11 ou superior (`python -m pip install -r requirements.txt` para leitura de PDFs e `python -m pip install -r requirements-dev.txt` para ambiente de testes). O OCR requer `tesseract-ocr` com o pacote de idioma português (`por`). A API HTTP e o painel web utilizam exclusivamente a biblioteca padrão do Python.
 
-```
+### 2.1. Demonstração com dados fictícios (ambiente isolado)
+
+```bash
 python -m pip install -r requirements-dev.txt
 python -m observatorio.operacao demonstracao --dados dados-demo
 python -m observatorio.web --dados dados-demo
 ```
 
-Abra `http://127.0.0.1:8000`. O terminal mostra a credencial da gerência; use o botão
-"Acesso da gerência". Sem credencial, o painel mostra só agregados de registros conferidos.
+Acesse `http://127.0.0.1:8000/painel`. Sem autenticação, o painel opera no perfil **Público** (exibindo apenas indicadores agregados de decisões conferidas, sem nomes, matrículas, processos ou PDFs).
 
-### Com PDFs do Diário Oficial
+### 2.2. Reconstrução reproduzível do frontend (sem dependências externas)
 
-```
-python -m observatorio.operacao executar PASTA_COM_PDFS      # importa, lê e classifica (data no nome: DD-MM-AAAA)
-python -m observatorio.operacao executar ARQUIVO.pdf --data 2026-11-04 --url URL_OFICIAL
-python -m observatorio.operacao validar-real ARQUIVO.pdf --data 2026-10-02 --url URL --saida relatorio.json --amostra amostra.txt
-                                                              # relatório SEM dados pessoais + amostra PRIVADA para conferência
-python -m observatorio.web                                    # painel; a revisão é feita na própria tela
+O painel unificado (`observatorio/web/unificado/index.html`) é gerado de forma determinística a partir do modelo sanitizado versionado (`observatorio/web/unificado/modelo-base-sanitizado.html`) e validado contra a paleta oficial de 240 cores (`observatorio/web/unificado/paleta-aprovada.json`):
+
+```bash
+python scripts/construir_painel_unificado.py
 ```
 
-### Comandos por etapa
+Nenhum dado pessoal, processo, matrícula ou caminho local faz parte do modelo ou do HTML gerado.
 
+### 2.3. Gestão de contas nominais e perfis RBAC (`Público`, `Gerência`, `Administração`)
+
+As contas de acesso são armazenadas com hash `scrypt` e sal individual em `contas.sqlite3` (separado do banco de publicações):
+
+```bash
+# Criar conta de Gerência (consulta documental, PDFs, exportações e revisão auditada)
+python -m observatorio.web.usuarios --dados dados criar nome.analista --nome "Nome do Analista" --papel gerencia
+
+# Criar conta de Administração (inclui gestão de usuários e validação preliminar de lotes)
+python -m observatorio.web.usuarios --dados dados criar nome.gestor --nome "Nome do Gestor" --papel admin
+
+# Alterar papel de conta existente (encerra sessões abertas da conta)
+python -m observatorio.web.usuarios --dados dados papel nome.analista --papel admin
+
+# Listar contas cadastradas
+python -m observatorio.web.usuarios --dados dados listar
 ```
-python -m observatorio.sonda --saida sonda.json              # diagnóstico de acesso às fontes
-python -m observatorio.coleta descobrir --inicio 2026-01-01   # lê as listagens mensais
-python -m observatorio.coleta piloto --fonte auniao           # piloto: até 5 edições de datas diferentes
-python -m observatorio.coleta lote --fonte auniao             # lotes de até 10 (após o piloto DESTA fonte)
+
+### 2.4. Comandos operacionais do pipeline (coleta, leitura, classificação e revisão)
+
+```bash
+python -m observatorio.sonda --saida sonda.json
+python -m observatorio.coleta descobrir --inicio 2026-01-01
+python -m observatorio.coleta piloto --fonte auniao
+python -m observatorio.coleta lote --fonte auniao
 python -m observatorio.coleta progresso | inventario | conferir
-python -m observatorio.leitura processar [--refazer]          # lê os PDFs do acervo (refaz erros e pendências)
-python -m observatorio.leitura validar --saida validacao.json # relatório sem texto das publicações
+python -m observatorio.leitura processar [--refazer]
+python -m observatorio.leitura validar --saida validacao.json
 python -m observatorio.gerencias.gediv classificar [--refazer] | situacao | catalogo
-python -m observatorio.revisao fila | ato ID … | decisao ID … | evento ID … | trilha
-python -m unittest discover -s tests -t .                     # testes (não usam internet)
+python -m observatorio.revisao fila | ato ID ... | decisao ID ... | evento ID ... | trilha
 ```
 
-Todos os comandos podem ser interrompidos e repetidos: o que já foi feito não é refeito, e o que
-já passou por revisão humana nunca é sobrescrito por uma nova classificação.
-O banco (`observatorio.sqlite3`) e os PDFs ficam na pasta `dados/`, que **não** é enviada ao GitHub.
+### 2.5. Execução das suítes de testes
 
-### Acesso e privacidade
+```bash
+# Suíte completa Python (sem acesso à internet e sem tocar em bancos oficiais)
+python -m unittest discover -s tests -t . -v
 
-- Sem credencial: apenas indicadores agregados de registros conferidos.
-- Com a credencial da gerência (`GEDIV_TOKEN_GERENCIA`, 16+ caracteres): nomes, matrículas, processos,
-  fila de pendências, revisão, PDFs do acervo e exportações (Excel/CSV).
-- O servidor escuta só em `127.0.0.1`. Não o exponha à internet sem HTTPS e autenticação institucional.
+# Testes JavaScript do pacote estático de referência (quando Node.js 20+ estiver instalado)
+npm ci --ignore-scripts --no-audit --no-fund
+npm test
+node --test tests/test_revisao_2910.cjs
+```
 
-## Regras deste repositório
+---
 
-- Não versionar PDFs, banco, backups, dados pessoais, senhas ou chaves.
-- Uma branch por etapa; integração à `main` somente com os testes aprovados.
-- Toda afirmação de "funciona" na documentação indica onde e como foi testada.
+## 3. Segurança, Sessões, CORS e Controle de Acesso
 
-## Documentação
+1. **Separação estrita de perfis no backend (`observatorio/web/servidor.py`):**
+   - **Público:** recebe exclusivamente indicadores agregados confirmados (`rows: []`, `events: []`); exportação individual `.csv` e rotas documentais retornam `HTTP 401`.
+   - **Gerência (`papel = "gerencia"`):** consulta individualizada (`Por resenha` e `Por processo`), PDFs oficiais (`/api/pdf/<sha256>`), exportações completas, revisão documental auditada (`POST /api/revisao`) e trilha de auditoria (`GET /api/auditoria`). Não possui acesso a rotas administrativas (`HTTP 403`).
+   - **Administração (`papel = "admin"`):** possui acesso às rotas administrativas (`GET /api/admin/usuarios` e `POST /api/admin/lote`).
+2. **Token técnico legado (`GEDIV_TOKEN_GERENCIA`):**
+   - **Desabilitado por padrão** na inicialização do servidor (`python -m observatorio.web`).
+   - Só pode ser ativado mediante flag explícita `--habilitar-token-tecnico` (ou `GEDIV_HABILITAR_TOKEN_TECNICO=1`) com segredo de no mínimo **32 caracteres**.
+   - Comparado em tempo constante (`hmac.compare_digest`), restrito ao papel `gerencia` (nunca concede papel `admin`) e todo uso é registrado na tabela `auditoria` (`USO_TOKEN_TECNICO_LEGADO`) identificando apenas o prefixo SHA-256 do token.
+3. **Sessões e armazenamento no cliente:**
+   - O servidor emite cookie de sessão `gediv_sessao` com `HttpOnly; SameSite=Strict; Path=/api; Max-Age=28800` (e `Secure` sob HTTPS / `X-Forwarded-Proto: https`), aplicando validação anti-CSRF (`Sec-Fetch-Site` e `Origin`) em requisições `POST` autenticadas por cookie.
+   - Por compatibilidade com a interface SPA atual, o frontend também mantém suporte ao cabeçalho `Authorization: Bearer` em `sessionStorage` (nunca em `localStorage`). Como `sessionStorage` permanece acessível a JavaScript em caso de XSS, a migração para autenticação exclusivamente via cookie `HttpOnly + Secure` atrás de proxy HTTPS institucional está documentada como etapa recomendada de produção.
+   - As sessões expiram em 8 horas e são revogadas imediatamente no logout, na desativação do usuário, na troca de senha ou na alteração de papel.
+4. **Política CORS:**
+   - Desabilitada por padrão; quando configurada via `--origem-admin`, aceita exclusivamente origens `https://` explícitas, rejeitando curingas (`*`), `null`, `http://` e `localhost`/`127.0.0.1`.
 
-1. [Recuperação e diagnóstico dos projetos anteriores](docs/01-recuperacao-diagnostico.md)
-2. [Plano de desenvolvimento](docs/02-plano-desenvolvimento.md)
-3. [Etapa 1 — resultados de validação](docs/03-etapa1-resultados.md)
-4. [Coleta em lotes e início da leitura de PDFs](docs/04-coleta-em-lotes-e-leitura.md)
-5. [Leitura, validação e fontes independentes](docs/05-leitura-validacao-e-fontes-independentes.md)
-6. [Regras consolidadas: eixos, grupos, subcategorias e indicadores](docs/06-regras-consolidadas.md)
-7. [Integração, testes e evidências](docs/07-integracao-testes-e-evidencias.md)
-8. [Validação com PDFs oficiais (10/11/2026)](docs/08-validacao-com-pdf-oficial.md)
-9. [Etapa 03 — regras definitivas e correções de leitura (12/11/2026)](docs/09-etapa03-regras-definitivas-e-leitura.md)
-10. [Etapa 04 — PDFs difíceis: diagramação, OCR por região e medição por campo](docs/10-etapa04-pdfs-dificeis.md)
-11. [Etapa 05.1 — integração das Etapas 04 e 05](docs/11-etapa05-1-integracao.md)
-12. [Etapa 05.3.1 — segurança, SQLite, validação e códigos de saída](docs/12-etapa05-3-pr01-seguranca-ci-validacao.md)
-13. [Etapa 05.3.2 — integridade da coleta, cobertura e retomada](docs/13-etapa05-3-pr02-coleta-cobertura.md)
-14. [Etapa 05.3.3 — leitura, banco, reclassificação e revisão humana](docs/14-etapa05-3-pr03-leitura-banco-revisao.md)
-15. [Etapa 05.3.4 — extração de PDFs difíceis, OCR e classificação dos atos](docs/15-etapa05-3-pr04-extracao-ocr-classificacao.md)
-16. [Etapa 05.3.5 — homologação geral](docs/16-etapa05-3-pr05-homologacao-geral.md) · [questões pendentes da GEDIV](docs/homologacao/questoes-pendentes-gediv.md) · [roteiro de conferência documental](docs/homologacao/roteiro-conferencia-documental.md)
+---
+
+## 4. Pendências Operacionais e de Produção
+
+1. **Importação definitiva de lotes (`POST /api/admin/lote` — PENDÊNCIA OPERACIONAL):**
+   - A rota `POST /api/admin/lote` e o modal administrativo correspondente (`Validar lote oficial (sem importação no banco)`) executam **exclusivamente a validação preliminar** de estrutura e verificação de IDs já existentes, registrando a tentativa na trilha de auditoria (`modo: SOMENTE_VALIDACAO`, `importado: false`), **sem gravar registros no banco principal**. A incorporação de novos documentos continua ocorrendo exclusivamente pelo pipeline oficial de coleta e leitura de PDFs.
+2. **Deliberações normativas da GEDIV:** ver [docs/homologacao/questoes-pendentes-gediv.md](docs/homologacao/questoes-pendentes-gediv.md) (`Q1` a `Q10`, incluindo vínculo normativo de `TEC. ADM` com `AST` e de `STF` com `SFT`).
+3. **Implantação, agendamento Seg–Sex e backup/restauração:** ver [deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md](deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md).
+
+---
+
+## 5. Regras deste Repositório
+
+- **Nunca versionar** a pasta `dados/`, bancos `.sqlite3`, backups, PDFs do acervo, exportações `.xlsx`/`.csv`, arquivos `.env`, senhas, tokens ou dados pessoais.
+- Integração por branch dedicada e Pull Request revisado após aprovação integral da suíte de testes.

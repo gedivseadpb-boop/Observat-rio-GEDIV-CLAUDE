@@ -135,6 +135,38 @@ hospeda, pela responsável. O procedimento é o mesmo:
 
 Por decisão da responsável, nada foi alterado neles.
 
+### 6.4 Correção: o interruptor do item 6.1 não estava no repositório
+
+O `.gitignore` ignora `estado*.json`, para não versionar estados locais de coleta. Essa regra também barrava
+`painel-v2/estado-site.json`, que por isso nunca foi versionado. Na prática o painel-v2 ficava sempre ativo, porque
+um arquivo ausente equivale a "ativo", e não havia interruptor para editar.
+
+A correção é uma exceção exclusiva para `painel-v2/estado-site.json`, que passa a ser versionado com `"ativo": true`.
+A regra geral continua valendo para os demais arquivos de estado.
+
+### 6.5 Ferramenta de despublicação da branch `entrega/painel-completo-referencias` — não integrada
+
+A branch `entrega/painel-completo-referencias` tem 2 commits que não estão nesta linha de integração:
+`19652f0` e `70da290`, de 17/11. Eles trazem `observatorio/sites/` e `config/sites-gediv.json`, uma ferramenta que
+retira um site do GitHub Pages pela API (`DELETE /pages`), com backup, plano e autorização prévia.
+
+**Decisão técnica: não integrar agora.** A branch fica preservada, sem alteração, para uso futuro. Motivos:
+1. **A operação é destrutiva e remota.** Ela apaga a configuração do Pages de um repositório. Uma ferramenta assim
+   precisa de revisão e homologação próprias, não deve entrar junto com uma consolidação.
+2. **A configuração está presa à própria branch.** A "fonte oficial" em `config/sites-gediv.json` aponta para
+   `raw.githubusercontent.com/.../entrega/painel-completo-referencias/painel-publico/dados.json`. Ao arquivar ou
+   apagar essa branch, a referência quebra.
+3. **Não há segundo site cadastrado.** O próprio documento da ferramenta registra que ainda não existe um dashboard
+   secundário para desativar. As prévias antigas já foram despublicadas manualmente.
+4. **As opções A, B e C do item 6.2 já cobrem a necessidade atual.** São reversíveis, com um passo para cada lado,
+   e não apagam nada.
+
+Para integrá-la no futuro:
+- reaplicar o conteúdo num commit novo, com autoria institucional e sem URLs privadas;
+- trocar a fonte oficial por um endereço estável;
+- renumerar o documento (o número 24 já existe);
+- passar por PR próprio, com testes e aprovação expressa.
+
 ## 7. Para publicar (decisão pendente)
 
 A nova interface **não foi publicada**. Para substituí-la no lugar do painel atual é preciso uma aprovação

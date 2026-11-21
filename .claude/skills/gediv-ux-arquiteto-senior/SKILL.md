@@ -19,8 +19,8 @@ Branch-base reportada: `entrega/painel-completo-referencias`, referência `c3f1e
 
 Painel público: `https://gedivseadpb-boop.github.io/Observat-rio-GEDIV-CLAUDE/`
 Referências funcionais: 
-- `https://gediv-conferencia-privada-20261031.ylenaluna.chatgpt.site/dashboard`
-- `https://visualizacao-gediv-claude-20261110.ylenaluna.chatgpt.site/`
+- `[endereço privado removido]`
+- `[endereço privado removido]`
 
 Leia os arquivos relevantes do repositório antes de alterar: `painel-publico/index.html`, `estilo.css`, `app.js`, `modelo.js`, contrato `dados.json` e testes existentes. Verifique URLs no ambiente disponível. Se um site/preview não abrir, **não invente conclusões visuais**; prossiga com código, capturas já disponíveis no contexto do projeto e navegador local, identificando a limitação.
 

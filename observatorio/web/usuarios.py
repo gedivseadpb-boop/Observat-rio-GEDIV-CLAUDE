@@ -30,6 +30,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dados", default="dados")
     sub = ap.add_subparsers(dest="acao", required=True)
     c = sub.add_parser("criar"); c.add_argument("usuario"); c.add_argument("--nome", required=True)
+    c.add_argument("--papel", choices=["gerencia", "admin"], default="gerencia")
+    p = sub.add_parser("papel"); p.add_argument("usuario"); p.add_argument("--papel", choices=["gerencia", "admin"], required=True)
     for nome in ("senha", "desativar", "ativar"):
         sub.add_parser(nome).add_argument("usuario")
     sub.add_parser("listar")
@@ -39,8 +41,11 @@ def main(argv=None) -> int:
     contas = Contas(pasta / "contas.sqlite3")
     try:
         if a.acao == "criar":
-            contas.criar(a.usuario, a.nome, _pedir_senha())
-            print(f"Conta criada: {a.usuario.lower()}")
+            contas.criar(a.usuario, a.nome, _pedir_senha(), papel=a.papel)
+            print(f"Conta criada: {a.usuario.lower()} ({a.papel})")
+        elif a.acao == "papel":
+            contas.definir_papel(a.usuario, a.papel)
+            print(f"Papel da conta {a.usuario}: {a.papel} (sessões abertas encerradas)")
         elif a.acao == "senha":
             contas.trocar_senha(a.usuario, _pedir_senha())
             print("Senha trocada; as sessões abertas foram encerradas.")
@@ -49,7 +54,7 @@ def main(argv=None) -> int:
             print(f"Conta {a.usuario}: {'ativa' if a.acao == 'ativar' else 'desativada (sessões encerradas)'}")
         else:
             for u in contas.listar():
-                print(f"{u['usuario']:<24} {'ativa' if u['ativo'] else 'desativada':<11} {u['nome']}  (último acesso: {u['ultimo_acesso'] or '—'})")
+                print(f"{u['usuario']:<24} {u.get('papel','gerencia'):<10} {'ativa' if u['ativo'] else 'desativada':<11} {u['nome']}  (último acesso: {u['ultimo_acesso'] or '—'})")
     except ValueError as e:
         print(f"Não foi possível: {e}", file=sys.stderr)
         return 2

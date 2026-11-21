@@ -101,3 +101,17 @@ A resposta é registrada neste arquivo e só então a regra é programada, numa 
 | Portaria 8/2026-DEREH | 10/11/2026 | Torna sem efeito ato de 1999, fora da base: a que ato ela se liga? |
 
 - **Estado:** PENDENTE DE DELIBERAÇÃO GEDIV
+
+---
+
+## Q11 — Pendências operacionais e técnicas para produção (registradas em 21/11/2026)
+
+- **1. Importação definitiva de lotes (`POST /api/admin/lote`):**
+  - **Como o sistema opera hoje:** o endpoint `POST /api/admin/lote` (restrito ao perfil `admin`) e o modal `Validar lote oficial (sem importação no banco)` executam **somente validação preliminar** de formato e contagem de duplicidades com registro em `auditoria` (`modo: SOMENTE_VALIDACAO`, `importado: false`), **sem gravar nem alterar registros no banco principal**.
+  - **Estado:** **PENDÊNCIA OPERACIONAL** (a entrada oficial de atos permanece via coleta e leitura de PDFs do DOE-PB).
+- **2. Consolidação definitiva dos bancos locais em produção:**
+  - **Como o sistema opera hoje:** o script `scripts/consolidar_bancos_gediv.py` gera exclusivamente um terceiro banco isolado de teste, preservando intactos os bancos originais fora do Git. A promoção do banco consolidado para produção depende de homologação final das 24 divergências de classificação identificadas.
+  - **Estado:** **PENDENTE DE AUTORIZAÇÃO PARA PRODUÇÃO**.
+- **3. Corte definitivo para autenticação exclusiva por cookie `HttpOnly + Secure` sob HTTPS:**
+  - **Como o sistema opera hoje:** o servidor emite e valida o cookie `gediv_sessao` (`HttpOnly; SameSite=Strict; Path=/api`, `Secure` sob HTTPS e proteção CSRF), mantendo suporte paralelo a `Authorization: Bearer` via `sessionStorage` no cliente SPA.
+  - **Estado:** **RECOMENDADO PARA ATIVAÇÃO EM PRODUÇÃO SOB HTTPS INSTITUCIONAL**.

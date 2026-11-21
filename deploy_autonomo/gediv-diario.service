@@ -1,0 +1,17 @@
+[Unit]
+Description=Observatório GEDIV - Coleta em dias úteis, OCR, classificação, reconciliação e backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gediv
+Group=gediv
+WorkingDirectory=/opt/observatorio-gediv
+Environment=TZ=America/Sao_Paulo
+Environment=PUBLICAR_PAGES=0
+Environment=FERIADOS_ARQ=/etc/gediv/feriados_oficiais.txt
+ExecStart=/bin/bash /opt/observatorio-gediv/deploy_autonomo/rodar_diario.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=1800
