@@ -331,12 +331,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str, origens_admin=()):
                     existentes = {r[0] for r in banco.con.execute("SELECT id FROM decisao")}
                     dup = sum(1 for i in ids if i in existentes)
                 origem = str(p.get("origem") or "manual")[:80]
-                obs = str(p.get("observacao") or "Recebimento administrativo validado")[:200]
+                obs = str(p.get("observacao") or "Validação preliminar de lote administrativo (sem importação no banco)")[:200]
                 with banco.con:
                     banco.auditar(self._ator(), "RECEBER_LOTE_ADMIN", "lote", origem, None,
-                                  {"recebidos": len(itens), "ja_existentes": dup}, obs)
-                return self._json({"ok": True, "status": "VALIDADO", "recebidos": len(itens),
-                                   "ja_existentes": dup, "novos": len(itens) - dup})
+                                  {"modo": "SOMENTE_VALIDACAO", "importado": False,
+                                   "recebidos": len(itens), "ja_existentes": dup, "novos": len(itens) - dup}, obs)
+                return self._json({"ok": True, "status": "VALIDADO", "importado": False,
+                                   "modo": "SOMENTE_VALIDACAO", "recebidos": len(itens),
+                                   "ja_existentes": dup, "novos": len(itens) - dup,
+                                   "mensagem": "Registros validados preliminarmente e tentativa registrada em auditoria; nenhum registro foi importado ou incorporado ao banco principal (PENDENCIA_OPERACIONAL)."})
             if rota != "/api/revisao":
                 raise Erro(404, "rota inexistente")
             self._exigir_gerencia()

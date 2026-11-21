@@ -85,7 +85,7 @@ document.getElementById('sendBatch').onclick=async()=>{
  if(!window.GEDIV_DATA?.backend?.ehAdmin){out.textContent='Permissão administrativa necessária.';out.classList.add('is-error');return;}
  const raw=document.getElementById('batchText').value.trim();
  if(!raw){out.textContent='Selecione um arquivo .json ou cole o JSON do lote antes de enviar.';out.classList.add('is-error');return;}
- b.disabled=true;out.textContent='Validando e registrando lote…';
+ b.disabled=true;out.textContent='Validando lote (sem alterar o banco principal)…';
  try{
   const parsed=JSON.parse(raw);
   if(!parsed||typeof parsed!=='object'||(!Array.isArray(parsed.rows)&&!Array.isArray(parsed.edicoes)&&!Array.isArray(parsed.lote)))throw new Error('JSON precisa conter a lista "rows", "edicoes" ou "lote".');
@@ -93,8 +93,7 @@ document.getElementById('sendBatch').onclick=async()=>{
   const r=await fetch('/api/admin/lote',{method:'POST',headers:hdrs,body:raw});
   let d={};try{d=await r.json();}catch{}
   if(!r.ok)throw new Error(d.erro||d.error||'HTTP '+r.status);
-  out.textContent=`Lote validado (${d.status}): ${d.recebidos} recebido(s) · ${d.novos} novo(s) · ${d.ja_existentes} já existente(s).`;
-  if(typeof refreshData==='function')await refreshData();
+  out.textContent=`Validação concluída (${d.status} · não importado ao banco): ${d.recebidos} analisado(s) · ${d.novos} inédito(s) · ${d.ja_existentes} já existente(s). Os registros foram apenas validados e não incorporados ao banco principal (importação definitiva: pendência operacional).`;
  }catch(e){out.textContent='Falha: '+e.message;out.classList.add('is-error');}
  finally{b.disabled=false;}
 };"""
@@ -121,8 +120,18 @@ document.getElementById('sendBatch').onclick=async()=>{
         flags=re.DOTALL,
     )
     html = html.replace(
-        '<span class="eyebrow">RECEBIMENTO DE LOTE</span>',
-        '<span class="eyebrow">ADMINISTRAÇÃO · COLETA E IMPORTAÇÃO</span>',
+        '<span class="eyebrow">RECEBIMENTO DE LOTE</span><h2 id="batchDialogTitle">Receber lote oficial</h2>',
+        '<span class="eyebrow">ADMINISTRAÇÃO · VALIDAÇÃO PRELIMINAR DE LOTE</span><h2 id="batchDialogTitle">Validar lote oficial (sem importação no banco)</h2>',
+        1,
+    )
+    html = html.replace(
+        '<p>A entrega preserva o histórico e mantém os novos registros pendentes de conferência.</p>',
+        '<p>Validação estrutural e verificação de duplicidades com registro em auditoria. <strong>Os registros são apenas validados e NÃO são incorporados ao banco principal nesta etapa (importação definitiva: pendência operacional).</strong></p>',
+        1,
+    )
+    html = html.replace(
+        '<button type="button" id="sendBatch">Receber e atualizar</button>',
+        '<button type="button" id="sendBatch">Validar lote (sem importar)</button>',
         1,
     )
     html = html.replace(

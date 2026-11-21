@@ -200,8 +200,9 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 self.assertEqual({u["usuario"]: u["papel"] for u in u_resp["usuarios"]},
                                  {"adm.gediv": "admin", "ger.gediv": "gerencia"})
 
-                # Validação de payload no lote admin + prevenção de duplicidade + auditoria
+                # Validação de payload no lote admin + prevenção de duplicidade + auditoria (SOMENTE VALIDAÇÃO, sem alterar banco)
                 self.assertEqual(_req(f"{base}/api/admin/lote", token=tok_adm, payload={"rows": []})[0], 400)
+                total_antes = len(d_adm["rows"])
                 amostra_id = d_adm["rows"][0]["id"]
                 st_ok, l_resp = _req(
                     f"{base}/api/admin/lote",
@@ -210,9 +211,17 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 )
                 self.assertEqual(st_ok, 200)
                 self.assertEqual(l_resp["status"], "VALIDADO")
+                self.assertFalse(l_resp["importado"])
+                self.assertEqual(l_resp["modo"], "SOMENTE_VALIDACAO")
                 self.assertEqual(l_resp["recebidos"], 2)
                 self.assertEqual(l_resp["ja_existentes"], 1)
                 self.assertEqual(l_resp["novos"], 1)
+                self.assertIn("nenhum registro foi importado", l_resp["mensagem"].lower())
+
+                # Comprovar que a rota NÃO alterou nem importou o registro novo no banco principal
+                _, d_apos = _req(f"{base}/api/data", token=tok_adm)
+                self.assertEqual(len(d_apos["rows"]), total_antes)
+                self.assertNotIn("novo-reg-999", {r["id"] for r in d_apos["rows"]})
 
                 st_aud, aud = _req(f"{base}/api/auditoria", token=tok_adm)
                 self.assertEqual(st_aud, 200)
@@ -237,6 +246,9 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
         self.assertIn("Exportar visualização", html)
         self.assertIn("delicateAcctBtn", html)
         self.assertIn("Empilhadas (Mês)", html)
+        self.assertIn("Validar lote (sem importar)", html)
+        self.assertIn("NÃO são incorporados ao banco principal", html)
+        self.assertNotIn("Receber e atualizar", html)
         self.assertNotIn("TS-08", html)
 
 
