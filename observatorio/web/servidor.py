@@ -293,14 +293,14 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
             rota = url.path
             consulta = {k: (v[0] if len(v) == 1 else v) for k, v in parse_qs(url.query).items()}
             perfil = self._perfil()
-            if rota in ("/", "/index.html"):
-                return self._arquivo("index.html")
-            if rota in ("/painel", "/painel/", "/painel/index.html"):
+            if rota in ("/", "/index.html", "/painel", "/painel/", "/painel/index.html"):
                 return self._arquivo("index.html", UNIFICADO)
             if rota.startswith("/painel/"):
                 return self._arquivo(rota[len("/painel/"):], UNIFICADO)
+            if rota in ("/estatico", "/estatico/"):
+                return self._arquivo("index.html", ESTATICO)
             if rota.startswith("/estatico/"):
-                return self._arquivo(rota[len("/estatico/"):])
+                return self._arquivo(rota[len("/estatico/"):], ESTATICO)
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
                                    "papel": self._papel(), "cobertura": indicadores.cobertura(banco)})

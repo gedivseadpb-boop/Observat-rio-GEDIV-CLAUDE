@@ -111,14 +111,18 @@ if '"rows":[{"id":' in html.replace(" ", ""):
 print("Integridade do frontend 29/10 confirmada (0 dados pessoais embutidos).")
 PY
 
-echo "[5/6] Calculando resumo de cobertura e gerando projeção pública agregada..."
+echo "[5/6] Calculando resumo de cobertura e validando projeção somente-leitura da API para o frontend unificado..."
 COBERTURA_RESUMO="$DADOS_DIR/cobertura_resumo.json"
 "$PYTHON_BIN" - "$DADOS_DIR/observatorio.sqlite3" "$COBERTURA_RESUMO" <<'PY'
 import json, sqlite3, sys
 from pathlib import Path
 
+from observatorio.nucleo.banco import Banco
+from observatorio.painel import adaptador, indicadores
+
 db, out = Path(sys.argv[1]), Path(sys.argv[2])
 with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as con:
+    con.row_factory = sqlite3.Row
     inconclusivas = con.execute(
         "SELECT COUNT(*) FROM leitura WHERE situacao='ERRO' OR data_edicao IS NULL OR numero_edicao IS NULL"
     ).fetchone()[0]
@@ -130,18 +134,26 @@ with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as con:
               AND a.eixo IN ('PROGRESSAO', 'TEMPO_SERVICO')
           )
     """).fetchone()[0]
-out.write_text(json.dumps({"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}, indent=2) + "\n", encoding="utf-8")
-PY
+    out.write_text(json.dumps({"ausencia_tecnica_edicoes": int(ausencia), "inconclusivas": int(inconclusivas)}, indent=2) + "\n", encoding="utf-8")
 
-rm -rf "$SAIDA_PUBLICA"
-"$PYTHON_BIN" scripts/preparar_painel_publico.py \
-  --banco "$DADOS_DIR/observatorio.sqlite3" \
-  --cobertura "$COBERTURA_RESUMO" \
-  --saida "$SAIDA_PUBLICA"
+    banco_ro = object.__new__(Banco)
+    banco_ro.caminho = db
+    banco_ro.con = con
+    p_pub = indicadores.painel(banco_ro, {"escopo": "pendente"}, indicadores.PUBLICO)
+    if p_pub["meta"]["escopo"] != "conferido" or p_pub["linhas"] != []:
+        raise SystemExit("ERRO DE PRIVACIDADE: perfil público expôs escopo pendente ou linhas individuais!")
+    proj_pub = adaptador.projetar_para_dashboard_2910(p_pub, [], [])
+    if proj_pub.get("rows"):
+        raise SystemExit("ERRO DE PRIVACIDADE: projeção pública para o dashboard unificado contém linhas individuais!")
+    cats = [c[0] for c in proj_pub.get("categories", [])]
+    if "TS-08" in cats or "ABONO_PERMANENCIA" not in cats:
+        raise SystemExit(f"ERRO DE CONTRATO: categorias inválidas na projeção unificada: {cats}")
+print("Resumo de cobertura e projeção somente-leitura (?mode=ro) da API validados com sucesso (0 linhas individuais públicas; sem build de painel-publico/dados.json obsoleto).")
+PY
 
 echo "[6/6] Encerramento controlado..."
 if [ "$PUBLICAR_PAGES" != "1" ]; then
-  echo "PUBLICAR_PAGES=$PUBLICAR_PAGES (modo seguro local). Projeção pública validada pronta em: $SAIDA_PUBLICA/dados.json"
+  echo "PUBLICAR_PAGES=$PUBLICAR_PAGES (modo seguro local). Banco SQLite atualizado e pronto para consumo pelo painel unificado via API (/ e /painel)."
   exit 0
 fi
 

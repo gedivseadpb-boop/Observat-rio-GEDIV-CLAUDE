@@ -130,12 +130,19 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
         self.assertIn('DIA_SEMANA" -ge 6', sh_txt)
         self.assertIn("FERIADOS_ARQ", sh_txt)
         self.assertIn("America/Sao_Paulo", sh_txt)
-        # Nenhuma linha executável pode apontar para o repositório obsoleto
+        # Nenhuma linha executável pode apontar para o repositório obsoleto nem reconstruir o painel-publico antigo
         linhas_exec = [l for l in sh_txt.splitlines() if l.strip() and not l.strip().startswith("#")]
         self.assertFalse(
             any("gediv-painel-redesign-preview" in l for l in linhas_exec),
             "rodar_diario.sh ainda possui referência executável a gediv-painel-redesign-preview!",
         )
+        self.assertFalse(
+            any("preparar_painel_publico.py" in l for l in linhas_exec),
+            "rodar_diario.sh ainda executa scripts/preparar_painel_publico.py para construir o frontend antigo painel-publico!",
+        )
+        self.assertIn("cobertura_resumo.json", sh_txt)
+        self.assertEqual(sh_txt.count('as_uri() + "?mode=ro"'), 3, "Passos [3/6] e [5/6] devem abrir o SQLite exclusivamente em ?mode=ro!")
+        self.assertNotIn("with Banco(", sh_txt, "Passo [5/6] não deve abrir Banco() em modo leitura-escrita após o backup!")
         self.assertTrue((DEPLOY_DIR / "recuperar_edicoes_manual.sh").is_file())
 
     def test_04_protecao_contra_exclusao_e_preservacao_revisao_humana(self) -> None:
