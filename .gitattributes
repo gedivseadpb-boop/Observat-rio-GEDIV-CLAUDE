@@ -4,3 +4,5 @@ painel-publico/*.js text eol=lf
 painel-publico/*.css text eol=lf
 painel-publico/*.json text eol=lf
 painel-publico/*.png binary
+observatorio/web/unificado/*.html text eol=lf
+observatorio/web/unificado/*.json text eol=lf

@@ -1165,11 +1165,12 @@ function openReviewModal(targetType,items){
     assert not re.search(r"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Gediv(?:Homolog|Admin)\d{4}[!])", html), "Token ou credencial encontrado no HTML!"
 
     dest_unificado.parent.mkdir(parents=True, exist_ok=True)
-    dest_unificado.write_text(html, encoding="utf-8")
+    dest_unificado.write_text(html, encoding="utf-8", newline="\n")
     if destino_html is None:
         dest_paleta.write_text(
             json.dumps({"total": len(orig_colors), "cores_hex": sorted(orig_colors)}, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         print(f"Paleta salva ({len(orig_colors)} cores HEX): {dest_paleta}")
     print(f"Salvo ({len(html):,} bytes): {dest_unificado}")
