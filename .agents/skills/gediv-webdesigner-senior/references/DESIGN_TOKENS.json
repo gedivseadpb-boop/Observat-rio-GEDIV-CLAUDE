@@ -1,0 +1,99 @@
+{
+  "name": "GEDIV Clareza Institucional | draft tokens to validate on actual screenshots",
+  "light": {
+    "bg": "#F4F7FB",
+    "surface": "#FFFFFF",
+    "surface_alt": "#ECF2F8",
+    "text": "#15263A",
+    "text_subtle": "#475569",
+    "border": "#CAD5E2",
+    "primary": "#124E97",
+    "primary_hover": "#0E3F7B",
+    "on_primary": "#FFFFFF",
+    "focus": "#0B69B5",
+    "success": "#17664C",
+    "danger": "#B42335",
+    "warning": "#80500C",
+    "nav_bg": "#112B46",
+    "nav_text": "#FFFFFF"
+  },
+  "dark": {
+    "bg": "#0B1320",
+    "surface": "#142236",
+    "surface_alt": "#1E3046",
+    "text": "#F5F8FC",
+    "text_subtle": "#C7D2E0",
+    "border": "#4C6077",
+    "primary": "#89BDFF",
+    "primary_hover": "#ACD2FF",
+    "on_primary": "#0B1320",
+    "focus": "#B9DCFF",
+    "success": "#65D7B0",
+    "danger": "#FF8C9B",
+    "warning": "#FFCA79",
+    "nav_bg": "#07111F",
+    "nav_text": "#F5F8FC"
+  },
+  "test_pairs": [
+    {
+      "foreground": "text",
+      "background": "bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text_subtle",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "text_subtle",
+      "background": "surface_alt",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "on_primary",
+      "background": "primary",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "on_primary",
+      "background": "primary_hover",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "nav_text",
+      "background": "nav_bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "success",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "danger",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "warning",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "focus",
+      "background": "surface",
+      "minimum": 3.0
+    }
+  ]
+}

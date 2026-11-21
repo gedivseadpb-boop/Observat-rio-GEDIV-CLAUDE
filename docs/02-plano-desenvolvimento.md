@@ -43,7 +43,7 @@ pacote e reutiliza o restante.
 | `observatorio/coleta/` | Fontes, coletor, inventário, importação manual | **Etapa 1 — implementado** |
 | `observatorio/sonda/` | Diagnóstico de acesso às fontes | **Etapa 1 — implementado** |
 | `observatorio/leitura/` | Texto por página e coluna, OCR sob demanda | **Etapa 2 — implementado e testado por simulação**; validação com DOE real pendente |
-| `observatorio/atos/` | Segmentação da edição em atos (órgão, resenha, portaria) | Etapa 3 |
+| `observatorio/gerencias/gediv/` | Segmentação em atos, identificação e classificação GEDIV | **implementado** (ver docs/06 e 07) |
 | `observatorio/gerencias/gediv/` | Identificação, eixos, campos, regras da GEDIV | Etapa 4 |
 | `observatorio/conferencia/` | Segunda leitura independente e comparação | Etapa 4 |
 | `observatorio/revisao/` | Fila, decisões do gerente, auditoria | Etapa 5 |

@@ -1,0 +1,86 @@
+{
+  "versao": "1",
+  "o_que_e": "Conjunto-ouro de edições OFICIAIS do DOE-PB: identidade do arquivo e resultado esperado da classificação GEDIV. Sem nomes, matrículas, números de processo ou trechos. Os PDFs NÃO ficam no repositório: são localizados pelo SHA-256 numa pasta local.",
+  "situacao": "CONFERIDO_TECNICAMENTE — expectativas verificadas em 12/11/2026 contra os documentos oficiais (ver 'conferencia' de cada edição). NÃO homologado pela GEDIV: só vira critério definitivo de aprovação após a conferência da GEDIV.",
+  "regras_de_comparacao": {
+    "atos": "igualdade exata do conjunto (número, eixo, modalidade ou subcategoria, grupo, resultado, vínculo, quantidade de decisões)",
+    "decisoes": "total exato de decisões extraídas",
+    "fora_escopo_inclui": "cada par (número, motivo) listado deve estar registrado em fora_escopo; outros registros são permitidos"
+  },
+  "documentos": [
+    {
+      "data": "2026-10-01",
+      "arquivo": "diario-oficial-01-10-2026-portal.pdf",
+      "url": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-01-10-2026-portal.pdf",
+      "sha256": "bb5b8b65a07243193f7f318ef05a9ed7b1a959d7e22e5bb24da851136330a18d",
+      "numero_edicao": "18683",
+      "paginas": 56,
+      "esperado": {"atos": [], "decisoes": 0, "fora_escopo_inclui": []},
+      "conferencia": "Leitura independente (pypdfium2): nenhuma resenha da DEREH/GEDIV com assunto dos dois eixos."
+    },
+    {
+      "data": "2026-10-02",
+      "arquivo": "diario-oficial-02-10-2026-portal.pdf",
+      "url": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-02-10-2026-portal.pdf",
+      "sha256": "0f437acc186a7e808ae09f348968d99b7086ccdbcb21e87d29b7c529d8562757",
+      "numero_edicao": "18684",
+      "paginas": 40,
+      "esperado": {
+        "atos": [
+          {"numero": "470/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-05", "grupo": null, "resultado": "DEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1},
+          {"numero": "473/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-01", "grupo": null, "resultado": "DEFERIDO", "vinculo": "EXPRESSO", "decisoes": 4},
+          {"numero": "488/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-05", "grupo": null, "resultado": "INDEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1},
+          {"numero": "504/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-04", "grupo": null, "resultado": "DEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1}
+        ],
+        "decisoes": 7,
+        "fora_escopo_inclui": [["505/2026", "LICENCA_SAUDE"], ["506/2026", "LICENCA_SAUDE"]]
+      },
+      "conferencia": "470 e 473: leitura independente (pypdfium2) com 1 e 4 processos. 488 e 504 (fonte sem mapeamento de caracteres, ilegível por qualquer motor de texto): conferidas visualmente na imagem da página 5 — 488 Licença Especial INDEFERIU, 1 processo; 504 Desistência de Licença para Tratar de Interesses Particulares DEFERIU, 1 processo. 505 e 506: licenças por perícia médica (p. 4)."
+    },
+    {
+      "data": "2026-10-03",
+      "arquivo": "diario-oficial-03-10-2026-portal.pdf",
+      "url": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-03-10-2026-portal.pdf",
+      "sha256": "6f436c7f204a50b4a70e727d8e1106765177d3210d123e52b9b8ac9a8d803c13",
+      "numero_edicao": "18685",
+      "paginas": 48,
+      "esperado": {
+        "atos": [
+          {"numero": "524/2026", "eixo": "PROGRESSAO", "classe": "VERTICAL", "grupo": null, "resultado": "DEFERIDO", "vinculo": "NAO_EXPRESSO", "decisoes": 21},
+          {"numero": "527/2026", "eixo": "PROGRESSAO", "classe": "VERTICAL", "grupo": null, "resultado": "DEFERIDO", "vinculo": "NAO_EXPRESSO", "decisoes": 20},
+          {"numero": "512/2026", "eixo": "PROGRESSAO", "classe": "HORIZONTAL", "grupo": "SSA", "resultado": "INDEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1}
+        ],
+        "decisoes": 42,
+        "fora_escopo_inclui": [["117/2026", "OUTRA_GERENCIA"], ["507/2026", "LICENCA_SAUDE"], ["509/2026", "LICENCA_SAUDE"]]
+      },
+      "conferencia": "Leitura independente (pypdfium2): 42 números de processo distintos na p. 5 — 41 das resenhas 524 e 527 (Progressão Vertical, grupo 'TEC. ADM', só DEREH no cabeçalho) e 1 da resenha 117/2026/GOCESP (cessão, outra gerência); 1 processo na p. 6 (resenha 512, Progressão Horizontal, Grupo Saúde). 524 e 527 ficam sem grupo até a GEDIV decidir se 'TEC. ADM' é AST."
+    },
+    {
+      "data": "2026-10-06",
+      "arquivo": "diario-oficial-06-10-2026-portal.pdf",
+      "url": "https://auniao.pb.gov.br/servicos/doe/2026/outubro/diario-oficial-06-10-2026-portal.pdf",
+      "sha256": "915cb793a24056d65f2cd09698d9550b5a1598b2bbfd907fe390951d9579b504",
+      "numero_edicao": "18686",
+      "paginas": 28,
+      "esperado": {"atos": [], "decisoes": 0, "fora_escopo_inclui": []},
+      "conferencia": "Leitura independente (pypdfium2): nenhuma resenha da DEREH/GEDIV."
+    },
+    {
+      "data": "2026-11-04",
+      "arquivo": "diario-oficial-04-11-2026-portal.pdf",
+      "url": "https://auniao.pb.gov.br/servicos/doe/2026/novembro/diario-oficial-04-11-2026-portal.pdf",
+      "sha256": "02cbb8ae5d47ae8a22bc0ef374dac66b31d61a095b44a2893feaea126493c577",
+      "numero_edicao": "18705",
+      "paginas": 60,
+      "esperado": {
+        "atos": [
+          {"numero": "540/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-03", "grupo": null, "resultado": "DEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1},
+          {"numero": "543/2026", "eixo": "TEMPO_SERVICO", "classe": "TS-02", "grupo": null, "resultado": "INDEFERIDO", "vinculo": "EXPRESSO", "decisoes": 1}
+        ],
+        "decisoes": 2,
+        "fora_escopo_inclui": [["541/2026", "LICENCA_SAUDE"], ["544/2026", "LICENCA_SAUDE"], ["568/2026", "VACANCIA"]]
+      },
+      "conferencia": "Leitura independente (pypdfium2 e PyMuPDF): 540 Licença para Tratar de Interesses Particulares DEFERIU, 1 processo (mesma resenha conferida no projeto V2); 543 Desaverbação de Tempo de Serviço INDEFERIR, 1 processo; 541 e 544 licenças por perícia médica; 568/2026/DEREH processos de vacância de cargo (3)."
+    }
+  ]
+}

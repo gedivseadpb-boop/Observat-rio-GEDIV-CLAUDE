@@ -1,0 +1,43 @@
+{
+  "o_que_e": "Comparação entre o classificador deste repositório e a planilha 'Observatorio-GEDIV-Visão-Geral.xlsx' da pasta do projeto no Google Drive (exportação do painel anterior, gerada em 27/10/2026), que traz o trecho literal de cada resenha.",
+  "o_que_nao_e": "NÃO é a leitura de um PDF oficial por este sistema: o texto já estava extraído na planilha. Não valida colunas, OCR nem coleta. Os registros da planilha constavam como 'validado' no painel anterior; essa validação não foi refeita aqui.",
+  "privacidade": "Somente contagens. A planilha contém dados pessoais e não foi copiada para o repositório.",
+  "data": "2026-11-10",
+  "versao_regras": "gediv-2026.11.10-1",
+  "linhas_da_planilha": 330,
+  "edicoes_distintas": 13,
+  "periodo": "2026-09-02 a 2026-10-10",
+  "resenhas_reconhecidas_como_ato": "329 de 329",
+  "eixo_igual": "329 de 329",
+  "modalidade_igual": "295 de 295",
+  "subcategoria_igual": "34 de 34",
+  "numero_da_resenha_igual": "329 de 329",
+  "processo_extraido": "329 de 329",
+  "resultado_igual": "329 de 329",
+  "matricula_igual": "329 de 329",
+  "nome_do_servidor_igual": "322 de 329 (era 308 de 329 antes das correções reveladas pelos PDFs oficiais)",
+  "nome_diferente": "7 — linhas de tabela quebradas em duas; saem marcadas com 'linha_quebrada'",
+  "portaria_tornar_sem_efeito_reconhecida_como_evento": "1 de 1",
+  "com_classe_ou_nivel_extraido": 282,
+  "grupos_identificados": {
+    "AST": 4,
+    "FAP": 3,
+    "GAJ": 59,
+    "MAG": 7,
+    "SAUDE": 22,
+    "SFT": 2,
+    "TEC-ADM": 198
+  },
+  "progressao_sem_grupo_identificado": 0,
+  "vinculo_gediv": {
+    "expresso_no_trecho": 126,
+    "nao_expresso_so_dereh": 203
+  },
+  "defeitos_encontrados_e_corrigidos_nesta_rodada": [
+    "portaria de 'tornar sem efeito' não era reconhecida: o texto real traz um caractere invisível (hífen discricionário) no meio de palavras",
+    "classe/nível não era extraído quando a célula do cargo quebra em duas linhas",
+    "nome ficava vazio quando a linha seguinte era a nota 'Publicado no D.O.E.'",
+    "dias com separador de milhar (2.450) não eram lidos",
+    "variante 'Grupo STF - AUDITOR FISCAL TRIBUTARIO' não era associada ao grupo SFT"
+  ]
+}

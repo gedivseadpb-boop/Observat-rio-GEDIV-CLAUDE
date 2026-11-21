@@ -1,0 +1,429 @@
+"""Projeção do painel: os sete indicadores gerenciais, séries, tabela e cobertura.
+
+Contrato dos indicadores (Especificação V3, seção 6):
+
+| Cartão              | Unidade                                   | Data usada                      |
+|---------------------|-------------------------------------------|---------------------------------|
+| Processos           | processos distintos das decisões originais| publicação original             |
+| Resenhas            | atos (resenhas) originais distintos       | publicação original             |
+| Decisões            | decisões individuais originais            | publicação original             |
+| Deferidos           | decisões originais com resultado deferido | publicação original             |
+| Indeferidos         | decisões originais com resultado indeferido| publicação original            |
+| Refeitos            | atos originais com evento VALIDADO de retificação, correção ou republicação | publicação do EVENTO |
+| Tornados sem efeito | atos originais com evento VALIDADO de "sem efeito" | publicação do EVENTO   |
+
+Só registros CONFERIDOS por revisão humana entram nos indicadores. O escopo "pendente" existe
+apenas para a gerência acompanhar a fila, e é sempre rotulado como preliminar; nele, Refeitos e
+Tornados sem efeito não são calculados. Os cartões não se somam entre si.
+"""
+from __future__ import annotations
+
+import json
+import re
+import unicodedata
+
+from ..gerencias.gediv import catalogo as C
+from ..nucleo.banco import Banco
+from . import documental, projecao
+
+GERENCIA_PERFIL, PUBLICO = projecao.GERENCIA, projecao.PUBLICO
+CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "refeitos", "sem_efeito")
+ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
+           "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
+NIVEIS_VERTICAIS = ("A", "B", "C", "D", "E", "F", "NAO_IDENTIFICADO")
+_CLASSES_VALIDAS = frozenset("ABCDEF")
+
+
+def _sem_acento(valor) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", str(valor or "")) if not unicodedata.combining(c)).lower()
+
+
+def _lista(valor) -> list[str]:
+    if valor is None or valor == "":
+        return []
+    return [v for v in (valor if isinstance(valor, (list, tuple)) else str(valor).split(",")) if v]
+
+
+def classificar_nivel_vertical(linha: dict) -> dict:
+    """Extrai e valida (classe_anterior, classe_posterior, nivel, transicao, motivo) para Progressão Vertical.
+    Lê prioritariamente de `detalhe` (gravado pelo classificador ou PaddleOCR) e aplica fallback determinístico
+    sobre `trecho` quando `detalhe` não contiver par válido A..F com avanço (classe_anterior < classe_posterior).
+    """
+    if linha.get("eixo") != C.PROGRESSAO or linha.get("modalidade") != C.VERTICAL:
+        return {"classe_anterior": None, "classe_posterior": None, "nivel": None, "transicao": None, "motivo": None}
+    if linha.get("resultado") == "INDEFERIDO":
+        return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "indeferido_sem_classe"}
+    det = linha.get("detalhe") if isinstance(linha.get("detalhe"), dict) else {}
+    ca = str(det.get("classe_anterior") or "").strip().upper()
+    cp = str(det.get("classe_posterior") or "").strip().upper()
+    if ca in _CLASSES_VALIDAS and cp in _CLASSES_VALIDAS:
+        if ca < cp:
+            return {"classe_anterior": ca, "classe_posterior": cp, "nivel": cp, "transicao": f"{ca} → {cp}", "motivo": "ok"}
+        return {"classe_anterior": ca, "classe_posterior": cp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "anomalia_ordem_ou_igual"}
+    trecho = str(linha.get("trecho") or "")
+    idx = trecho.upper().find("LINHA")
+    seg = trecho[idx:] if idx >= 0 else trecho
+    seg = re.sub(r"Di[aá]rio\s+Ofi\s*cial[\s\S]*$", "", seg, flags=re.IGNORECASE)
+    seg = re.sub(r"PUBLIQUE-SE[\s\S]*$", "", seg, flags=re.IGNORECASE)
+    limpo = re.sub(r"\s+", " ", seg.replace("\r", " ").replace("\n", " ")).strip()
+    limpo = re.sub(r"[\s$*%]+$", "", limpo).strip()
+    limpo = re.sub(r"\s+\d{1,2}$", "", limpo).strip()
+    m = (re.search(r"(?:^|[\s|\[])([A-F])\s+([A-F])\s*$", limpo, re.IGNORECASE)
+         or re.search(r"(?:^|[\s|\[])([A-F])([A-F])\s*$", limpo, re.IGNORECASE)
+         or re.search(r"\bTECNICO\s+['\"]?\s*([A-F])\s+([A-F])(?:\s+[A-Z]+)*\s+ADMINISTRATIVO\s*$", limpo, re.IGNORECASE))
+    if m:
+        fa, fp = m.group(1).upper(), m.group(2).upper()
+        if fa < fp:
+            return {"classe_anterior": fa, "classe_posterior": fp, "nivel": fp, "transicao": f"{fa} → {fp}", "motivo": "ok"}
+        return {"classe_anterior": fa, "classe_posterior": fp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+                "motivo": "anomalia_ordem_ou_igual"}
+    return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
+            "motivo": "ocr_ou_incompleto"}
+
+
+def _chave_grupo(linha: dict) -> str:
+    """Chave de agrupamento que preserva a separação normativa de expressões sem grupo homologado (TEC. ADM, STF)."""
+    if linha.get("grupo"):
+        return linha["grupo"]
+    exp = str(linha.get("grupo_expressao") or "").strip().upper()
+    if re.search(r"\bTEC\.?\s*ADM\b", exp):
+        return "PENDENTE:TEC. ADM"
+    if re.search(r"\bSTF\b", exp):
+        return "PENDENTE:STF"
+    return "NAO_INFORMADO"
+
+
+def normalizar_filtros(bruto: dict, perfil: str) -> dict:
+    grupos_aceitos = set(C.GRUPO_POR_CODIGO) | {"NAO_INFORMADO", "PENDENTE:TEC. ADM", "PENDENTE:STF"}
+    nivel_bruto = (bruto.get("nivel") or "").strip().upper()
+    if nivel_bruto == "NI":
+        nivel_bruto = "NAO_IDENTIFICADO"
+    f = {
+        "escopo": bruto.get("escopo") if bruto.get("escopo") in ("conferido", "pendente") else "conferido",
+        "inicio": bruto.get("inicio") or None, "fim": bruto.get("fim") or None,
+        "eixo": bruto.get("eixo") if bruto.get("eixo") in C.EIXOS else None,
+        "modalidade": bruto.get("modalidade") if bruto.get("modalidade") in C.MODALIDADES else None,
+        "condicao": bruto.get("condicao") if bruto.get("condicao") in C.CONDICOES else None,
+        "grupo": [g for g in _lista(bruto.get("grupo")) if g in grupos_aceitos],
+        "nivel": nivel_bruto if nivel_bruto in NIVEIS_VERTICAIS else None,
+        "subcategoria": [s for s in _lista(bruto.get("subcategoria")) if s in C.SUBCATEGORIA_POR_CODIGO],
+        "resultado": bruto.get("resultado") if bruto.get("resultado") in C.RESULTADOS else None,
+        "vinculo": bruto.get("vinculo") if bruto.get("vinculo") in ("EXPRESSO", "NAO_EXPRESSO") else None,
+        "cartao": bruto.get("cartao") if bruto.get("cartao") in CARTOES else None,
+        "busca": (bruto.get("busca") or "").strip()[:80] or None,
+    }
+    if perfil != GERENCIA_PERFIL:               # sem autorização: só agregados conferidos, sem busca individual
+        f["escopo"], f["busca"] = "conferido", None
+    return f
+
+
+def _linhas(banco: Banco) -> list[dict]:
+    consulta = banco.con.execute(
+        "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
+        "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
+        "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
+        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
+        "a.gerencia AS gerencia_painel, SUBSTR(a.texto,1,1200) AS texto_identificacao, l.numero_edicao, l.data_edicao, "
+        "EXISTS (SELECT 1 FROM conflito x WHERE x.estado = 'ABERTO' AND "
+        "((x.alvo_tipo = 'decisao' AND x.alvo_id = d.id) OR (x.alvo_tipo = 'ato' AND x.alvo_id = a.id))) AS conflito_aberto "
+        "FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "JOIN leitura l ON l.sha256 = d.sha256 JOIN classificacao c ON c.sha256 = d.sha256 AND c.gerencia = a.gerencia "
+        # Só a representação VIGENTE de cada decisão lógica (Etapa 05.3.3): cópias de outra versão do PDF, ou de uma
+        # releitura, não contam duas vezes; correspondências ambíguas ficam fora até a gerência decidir.
+        "WHERE a.gerencia = 'GEDIV' AND d.vigente = 1 AND l.situacao <> 'ERRO' AND c.versao_regras = ? "
+        "AND (l.revisao IS NULL OR c.revisao_leitura IS l.revisao) "
+        "ORDER BY a.data_publicacao DESC, a.pagina, d.rowid", (C.VERSAO_REGRAS,))
+    linhas = []
+    for l in consulta:
+        linha = dict(l)
+        linha.update(documental.identificar(linha))
+        linha.pop("texto_identificacao")
+        linha["detalhe"] = json.loads(linha["detalhe"] or "{}")
+        linha["pendencias"] = json.loads(linha["pendencias"] or "[]")
+        linha["nivel_info"] = classificar_nivel_vertical(linha)
+        linhas.append(linha)
+    return linhas
+
+
+def _passa(linha: dict, f: dict) -> bool:
+    if f["eixo"] and linha["eixo"] != f["eixo"]:
+        return False
+    # Filtros de uma dimensão são neutros para o eixo ao qual ela não se aplica... a menos que o eixo
+    # tenha sido escolhido: grupo, modalidade e condição só existem na Progressão; subcategoria, no Tempo de Serviço.
+    if f["modalidade"] and not (linha["eixo"] == C.PROGRESSAO and linha["modalidade"] == f["modalidade"]):
+        return False
+    if f["condicao"] and not (linha["eixo"] == C.PROGRESSAO and (linha["condicao"] or "NAO_INFORMADA") == f["condicao"]):
+        return False
+    if f["grupo"]:
+        if linha["eixo"] != C.PROGRESSAO:
+            return False
+        g_efetivo = linha["grupo"] or "NAO_INFORMADO"
+        g_chave = _chave_grupo(linha)
+        if g_efetivo not in f["grupo"] and g_chave not in f["grupo"]:
+            return False
+    if f.get("nivel"):
+        if not (linha["eixo"] == C.PROGRESSAO and linha["modalidade"] == C.VERTICAL):
+            return False
+        info = linha.get("nivel_info") or classificar_nivel_vertical(linha)
+        if info.get("nivel") != f["nivel"]:
+            return False
+    if f["subcategoria"] and not (linha["eixo"] == C.TEMPO and linha["subcategoria"] in f["subcategoria"]):
+        return False
+    if f["resultado"] and linha["resultado"] != f["resultado"]:
+        return False
+    if f["vinculo"] and linha["vinculo"] != f["vinculo"]:
+        return False
+    if f["busca"]:
+        alvo = _sem_acento(" ".join(str(linha.get(c) or "") for c in ("resenha", "processo", "servidor", "matricula", "lotacao", "cargo")))
+        if _sem_acento(f["busca"]) not in alvo:
+            return False
+    return True
+
+
+def _no_periodo(data, f: dict) -> bool:
+    if not f["inicio"] and not f["fim"]:
+        return True
+    return bool(data) and (not f["inicio"] or data >= f["inicio"]) and (not f["fim"] or data <= f["fim"])
+
+
+def cobertura(banco: Banco) -> dict:
+    um = lambda sql: banco.con.execute(sql).fetchone()[0]
+    datas = banco.con.execute(
+        "SELECT MIN(data_publicacao), MAX(data_publicacao) FROM publicacao WHERE sha256 IS NOT NULL").fetchone()
+    edicoes = um("SELECT COUNT(*) FROM arquivo")
+    return {
+        "edicoes_no_acervo": edicoes,
+        "edicoes_lidas": um("SELECT COUNT(*) FROM leitura WHERE situacao <> 'ERRO'"),
+        "edicoes_com_pendencia_de_leitura": um("SELECT COUNT(*) FROM leitura WHERE situacao <> 'LIDA'"),
+        "edicoes_classificadas": um("SELECT COUNT(*) FROM classificacao WHERE gerencia = 'GEDIV'"),
+        "paginas_lidas": um("SELECT COUNT(*) FROM pagina"),
+        "paginas_com_pendencia": um("SELECT COUNT(*) FROM pagina WHERE qualidade NOT IN ('OK', 'VAZIA')"),
+        "primeira_data": datas[0], "ultima_data": datas[1],
+        "ultima_atualizacao": um("SELECT MAX(concluida_em) FROM classificacao"),
+        "completa": False,
+        "parecer": ("Nenhuma edição carregada." if not edicoes else
+                    f"Cobertura parcial: {edicoes} edição(ões) no acervo. O inventário completo do período não foi validado; "
+                    "ausência de registro nesta base não comprova ausência de publicação."),
+    }
+
+
+def _fonte(banco: Banco, cache: dict, sha: str, pagina) -> dict:
+    if sha not in cache:
+        cache[sha] = banco.url_oficial(sha)
+    url = cache[sha]
+    return {"url_oficial": f"{url}#page={pagina}" if url else None, "pdf_no_acervo": f"/api/pdf/{sha}#page={pagina}"}
+
+
+def painel(banco: Banco, bruto: dict | None = None, perfil: str = PUBLICO) -> dict:
+    """Todas as consultas do painel leem o banco num mesmo momento (instantâneo), para que indicadores, séries e tabela
+    nunca misturem estados de uma reclassificação em andamento."""
+    with banco.instantaneo():
+        return _painel(banco, bruto, perfil)
+
+
+def _painel(banco: Banco, bruto: dict | None, perfil: str) -> dict:
+    f = normalizar_filtros(bruto or {}, perfil)
+    estado = "CONFERIDO" if f["escopo"] == "conferido" else "PENDENTE"
+    todas = _linhas(banco)
+    dim = [l for l in todas if l["validacao"] == estado and _passa(l, f)]
+    originais = [l for l in dim if l["natureza"] == C.ORIGINAL and _no_periodo(l["data"], f)]
+
+    # Eventos: somente vínculos VALIDADOS a atos originais do recorte; a data relevante é a do evento.
+    # O ato original é identificado pelo ato LÓGICO: um evento validado contra outra representação do mesmo ato
+    # (outra versão do PDF) conta para ele uma única vez.
+    logico = {a["id"]: (a["chave_logica"] or a["id"]) for a in banco.con.execute("SELECT id, chave_logica FROM ato")}
+    atos_dim = {logico.get(l["ato_id"], l["ato_id"]) for l in dim if l["natureza"] == C.ORIGINAL}
+    eventos = [dict(e) for e in banco.con.execute("SELECT * FROM evento WHERE gerencia = 'GEDIV' ORDER BY data_publicacao, pagina")]
+    arquivos_vigentes = {r[0] for r in banco.con.execute(
+        "SELECT c.sha256 FROM classificacao c JOIN leitura l ON l.sha256 = c.sha256 "
+        "WHERE c.gerencia = 'GEDIV' AND c.versao_regras = ? AND l.situacao <> 'ERRO' "
+        "AND (l.revisao IS NULL OR c.revisao_leitura IS l.revisao)", (C.VERSAO_REGRAS,))}
+    validos = [e for e in eventos if e["estado"] == "VALIDADO" and logico.get(e["ato_original_id"], e["ato_original_id"]) in atos_dim
+               and e["sha256"] in arquivos_vigentes and _no_periodo(e["data_publicacao"], f)]
+    refeitos_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] in C.TIPOS_REFEITO}
+    sem_efeito_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.SEM_EFEITO}
+    refeitos = {l["ato_id"] for l in dim if logico.get(l["ato_id"], l["ato_id"]) in refeitos_logicos}
+    sem_efeito = {l["ato_id"] for l in dim if logico.get(l["ato_id"], l["ato_id"]) in sem_efeito_logicos}
+    conferido = f["escopo"] == "conferido"
+
+    indicadores = {
+        "processos": len({l["processo"] for l in originais if l["processo"]}),
+        "resenhas": len({logico.get(l["ato_id"], l["ato_id"]) for l in originais}),
+        "decisoes": len(originais),
+        "deferidos": sum(l["resultado"] == "DEFERIDO" for l in originais),
+        "indeferidos": sum(l["resultado"] == "INDEFERIDO" for l in originais),
+        "refeitos": len(refeitos_logicos) if conferido else None,
+        "sem_efeito": len(sem_efeito_logicos) if conferido else None,
+    }
+
+    # Clique em um cartão: a tabela e os gráficos mostram exclusivamente o universo daquele indicador.
+    cartao = f["cartao"]
+    if cartao == "processos":
+        recorte = [l for l in originais if l["processo"]]
+    elif cartao in ("deferidos", "indeferidos"):
+        recorte = [l for l in originais if l["resultado"] == ("DEFERIDO" if cartao == "deferidos" else "INDEFERIDO")]
+    elif cartao in ("refeitos", "sem_efeito"):
+        alvo = refeitos if cartao == "refeitos" else sem_efeito
+        recorte = [l for l in dim if l["ato_id"] in alvo and l["natureza"] == C.ORIGINAL] if conferido else []
+    else:
+        recorte = originais
+
+    def conta(linhas):
+        return {"total": len(linhas), "deferido": sum(l["resultado"] == "DEFERIDO" for l in linhas),
+                "indeferido": sum(l["resultado"] == "INDEFERIDO" for l in linhas),
+                "nao_informado": sum(l["resultado"] == "NAO_INFORMADO" for l in linhas)}
+
+    prog = [l for l in recorte if l["eixo"] == C.PROGRESSAO]
+    tempo = [l for l in recorte if l["eixo"] == C.TEMPO]
+    cob = cobertura(banco)
+    conferidas_vigentes = sum(l["validacao"] == "CONFERIDO" for l in todas)
+    conferidas_com_conflito = sum(l["validacao"] == "CONFERIDO" and l["conflito_aberto"] for l in todas)
+    conferidas_base = banco.con.execute(
+        "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "WHERE a.gerencia = 'GEDIV' AND d.validacao = 'CONFERIDO' AND d.vigente = 1").fetchone()[0]
+    excluidas_integridade = conferidas_base - conferidas_vigentes
+    if excluidas_integridade:
+        cob["parecer"] += (f" {excluidas_integridade} decisão(ões) conferida(s) estão fora dos indicadores por "
+                           "classificação desatualizada, até reconciliação.")
+    if conferidas_com_conflito:
+        cob["parecer"] += (f" {conferidas_com_conflito} decisão(ões) conferida(s) contadas têm conflito aberto "
+                           "e aguardam revisão.")
+    verticais = [l for l in prog if l["modalidade"] == C.VERTICAL]
+    niveis_lista = []
+    for nv in NIVEIS_VERTICAIS:
+        itens_nv = [l for l in verticais if (l.get("nivel_info") or {}).get("nivel") == nv]
+        cont_trans: dict[str, int] = {}
+        for it in itens_nv:
+            tr = (it.get("nivel_info") or {}).get("transicao")
+            if tr:
+                cont_trans[tr] = cont_trans.get(tr, 0) + 1
+        transicoes_ord = [{"transicao": k, "total": v}
+                          for k, v in sorted(cont_trans.items(), key=lambda x: (-x[1], x[0]))]
+        niveis_lista.append({
+            "nivel": nv,
+            "rotulo": "Nível não identificado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
+            **conta(itens_nv),
+            "transicoes": transicoes_ord,
+        })
+    NOMES_EXPRESSAO_PENDENTE = {
+        "PENDENTE:TEC. ADM": "TEC. ADM · expressão pendente de confirmação (AST)",
+        "PENDENTE:STF": "STF · expressão pendente de confirmação (SFT)",
+    }
+    series = {
+        "por_assunto": [
+            {"chave": "VERTICAL", "rotulo": "Progressão Vertical", **conta(verticais)},
+            {"chave": "HORIZONTAL", "rotulo": "Progressão Horizontal", **conta([l for l in prog if l["modalidade"] == C.HORIZONTAL])},
+            {"chave": "TEMPO_SERVICO", "rotulo": "Tempo de Serviço", **conta(tempo)},
+        ],
+        "progressao_sem_modalidade": sum(l["modalidade"] is None for l in prog),
+        "por_data": [
+            {"data": data, "vertical": sum(l["modalidade"] == C.VERTICAL for l in grupo), "horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in grupo),
+             "tempo": sum(l["eixo"] == C.TEMPO for l in grupo), "total": len(grupo)}
+            for data in sorted({l["data"] or "" for l in recorte}) for grupo in [[l for l in recorte if (l["data"] or "") == data]]
+        ],
+        "por_grupo": [
+            {"grupo": codigo, "nome": (C.GRUPO_POR_CODIGO[codigo].nome if codigo in C.GRUPO_POR_CODIGO else "Grupo não informado"),
+             "horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in linhas), "vertical": sum(l["modalidade"] == C.VERTICAL for l in linhas),
+             **conta(linhas)}
+            for codigo in [g.codigo for g in C.GRUPOS] + ["NAO_INFORMADO"]
+            for linhas in [[l for l in prog if (l["grupo"] or "NAO_INFORMADO") == codigo]] if linhas
+        ],
+        "por_grupo_detalhado": [
+            {"chave": chave,
+             "grupo": chave if chave in C.GRUPO_POR_CODIGO else None,
+             "expressao_pendente": chave.split(":", 1)[1] if chave.startswith("PENDENTE:") else None,
+             "pendente_confirmacao": chave.startswith("PENDENTE:"),
+             "nome": (C.GRUPO_POR_CODIGO[chave].nome if chave in C.GRUPO_POR_CODIGO
+                      else NOMES_EXPRESSAO_PENDENTE.get(chave, "Grupo não informado")),
+             "horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in linhas),
+             "vertical": sum(l["modalidade"] == C.VERTICAL for l in linhas),
+             **conta(linhas)}
+            for chave in [g.codigo for g in C.GRUPOS] + ["PENDENTE:TEC. ADM", "PENDENTE:STF", "NAO_INFORMADO"]
+            for linhas in [[l for l in prog if _chave_grupo(l) == chave]] if linhas
+        ],
+        "por_nivel_vertical": niveis_lista,
+        "resumo_nivel_vertical": {
+            "total_progressao": len(prog),
+            "total_horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in prog),
+            "total_vertical": len(verticais),
+            "classificados": sum((l.get("nivel_info") or {}).get("nivel") in _CLASSES_VALIDAS for l in verticais),
+            "nao_identificados": sum((l.get("nivel_info") or {}).get("nivel") == "NAO_IDENTIFICADO" for l in verticais),
+        },
+        # As sete subcategorias aparecem sempre; zero sem cobertura completa é "cobertura pendente", não "inexistente".
+        "por_subcategoria": [
+            {"codigo": s.codigo, "nome": s.nome, **conta(linhas),
+             "situacao": None if linhas else ("sem ocorrência confirmada no período verificado" if cob["completa"] else "cobertura pendente")}
+            for s in C.SUBCATEGORIAS for linhas in [[l for l in tempo if l["subcategoria"] == s.codigo]]
+        ],
+        "por_condicao": [{"condicao": c, "nome": n, "total": sum((l["condicao"] or "NAO_INFORMADA") == c for l in prog)}
+                         for c, n in C.CONDICOES.items()],
+    }
+
+    individual = perfil == GERENCIA_PERFIL
+    cache: dict = {}
+    resenhas: dict[str, dict] = {}
+    for l in recorte:
+        r = resenhas.setdefault(l["ato_id"], {
+            "ato_id": l["ato_id"], "resenha": l["resenha"], "sufixo": l["sufixo"], "data": l["data"], "pagina": l["pagina"],
+            "eixo": l["eixo"], "modalidade": l["modalidade"], "condicao": l["condicao"], "grupo": l["grupo"],
+            "subcategoria": l["subcategoria"], "vinculo": l["vinculo"], "natureza": l["natureza"], "decisoes": 0,
+            "deferido": 0, "indeferido": 0, "pendencias": l["pendencias"], "conflito_aberto": False,
+            "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito,
+            **{campo: l[campo] for campo in documental.CAMPOS},
+            **_fonte(banco, cache, l["sha256"], l["pagina"])})
+        r["decisoes"] += 1
+        r["deferido"] += l["resultado"] == "DEFERIDO"
+        r["indeferido"] += l["resultado"] == "INDEFERIDO"
+        r["conflito_aberto"] = r["conflito_aberto"] or bool(l["conflito_aberto"])
+
+    um = lambda sql: banco.con.execute(sql).fetchone()[0]
+    resposta = {
+        "meta": {
+            "sistema": "Painel Diário Oficial | GEDIV", "versao_regras": C.VERSAO_REGRAS, "perfil": perfil, "escopo": f["escopo"],
+            "preliminar": not conferido,
+            "rotulo": "Decisões conferidas" if conferido else "Em conferência · dados preliminares, não homologados",
+            "dados_individuais": individual, "filtros": f, "cartao": cartao, "cobertura": cob,
+        },
+        "indicadores": indicadores,
+        "ajuda": {c: ROTULOS[c] for c in CARTOES},
+        "apoio": {
+            "eventos_de_alteracao": len([e for e in validos if e["tipo"] in C.TIPOS_REFEITO]) if conferido else None,
+            "eventos_por_tipo": {t: sum(e["tipo"] == t for e in validos) for t in C.ALTERACOES} if conferido else None,
+            "eventos_sem_vinculo": sum(e["estado"] in ("PENDENTE_VINCULACAO", "SUGERIDO") for e in eventos),
+            "decisoes_pendentes": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'PENDENTE' AND vigente = 1"),
+            "decisoes_conferidas": conferidas_vigentes,
+            "decisoes_excluidas_integridade": excluidas_integridade,
+            "decisoes_conferidas_com_conflito": conferidas_com_conflito,
+            "decisoes_rejeitadas": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'REJEITADO'"),
+            "conflitos_abertos": um("SELECT COUNT(*) FROM conflito WHERE estado = 'ABERTO'"),
+            "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV", C.VERSAO_REGRAS),
+            "vinculo_nao_expresso_pendente": um(
+                "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id WHERE d.validacao = 'PENDENTE' AND a.vinculo <> 'EXPRESSO'"),
+        },
+        "series": series,
+        "resenhas": [projecao.projetar("resenha", r, perfil)
+                     for r in sorted(resenhas.values(), key=lambda r: (r["data"] or "", r["pagina"]), reverse=True)],
+        "linhas": [{**{k: v for k, v in l.items() if k not in ("sha256", "pendencias")}, **_fonte(banco, cache, l["sha256"], l["pagina"]),
+                    "refeito": l["ato_id"] in refeitos, "sem_efeito": l["ato_id"] in sem_efeito}
+                   for l in recorte] if individual else [],
+        "eventos": [projecao.projetar("evento", {**e, "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
+                                                  "processos_citados": json.loads(e["processos_citados"] or "[]"),
+                                                  **_fonte(banco, cache, e["sha256"], e["pagina"])}, perfil)
+                    for e in eventos if individual or e["estado"] == "VALIDADO"],
+    }
+    return {k: resposta[k] for k in projecao.CHAVES_PAINEL}
+
+
+def outras_publicacoes(banco: Banco, perfil: str = PUBLICO) -> list[dict]:
+    """Página "Outras publicações": republicado por incorreção, portarias, atos normativos, alterações de lei.
+    São resultados de triagem, pendentes de conferência; o trecho só é entregue à gerência."""
+    cache: dict = {}
+    saida = []
+    for o in banco.con.execute("SELECT * FROM outra_publicacao WHERE gerencia = 'GEDIV' ORDER BY data_publicacao DESC, pagina"):
+        item = {"id": o["id"], "tipo": o["tipo"], "nome_tipo": C.OUTRAS.get(o["tipo"], o["tipo"]), "data": o["data_publicacao"],
+                "pagina": o["pagina"], "titulo": o["titulo"], "vinculo": o["vinculo"], "situacao": "triagem, a conferir",
+                "trecho": o["trecho"], **_fonte(banco, cache, o["sha256"], o["pagina"])}
+        saida.append(projecao.projetar("outra_publicacao", item, perfil))
+    return saida

@@ -128,6 +128,10 @@ class TesteTravaDaCargaHistorica(Base):
         self.assertEqual(self.lote(lotes.HISTORICO), {"executado": False, "motivo": "FONTE_SUSPENSA_APOS_RECUSA", "fonte": "auniao"})
         self.assertFalse(lotes.situacao_das_fontes(self.banco, ["auniao"])["auniao"]["carga_historica_liberada"])
         self.s.rotas[rota] = original
+        # Etapa 05.3.2: a recusa suspende a FONTE em todos os caminhos (prazo de 24 h para 403), não só a carga
+        # histórica. Antes do prazo, nem um piloto é feito; uma pessoa pode liberar, com registro na trilha.
+        self.assertEqual(self.lote(lotes.PILOTO)["motivo"], "FONTE_SUSPENSA")
+        self.assertTrue(self.banco.liberar_fonte("auniao", "operadora de teste", "a fonte voltou a responder"))
         self.assertTrue(self.lote(lotes.PILOTO)["aprovado"])        # novo piloto aprovado reabre
         self.assertEqual(self.lote(lotes.HISTORICO)["estado"], "CONCLUIDO")
 

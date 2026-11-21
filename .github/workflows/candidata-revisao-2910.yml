@@ -1,0 +1,48 @@
+name: Candidata Revisão 29-10 (sem deploy)
+on:
+  push:
+    branches: [integracao/revisao-2910-dados-workflows]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar-candidata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verificar integração, limites mensais, exportações e erros
+        run: node --test tests/test_revisao_2910.cjs
+      - name: Validar privacidade e contrato público
+        run: python -m unittest tests.test_privacidade_publica tests.test_distribuicao_publica -q
+      - name: Preparar somente arquivos públicos autorizados
+        run: python scripts/preparar_revisao_2910.py --projecao painel-publico/dados.json --saida "${{ runner.temp }}/candidata-2910"
+      - name: Testar em Chrome real desktop e celular, com capturas
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/candidata-2910
+          BROWSER_EVIDENCE: ${{ runner.temp }}/evidencias-2910
+        run: node tests/test_revisao_2910_browser.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidata-revisao-2910-publica
+          path: ${{ runner.temp }}/candidata-2910
+          include-hidden-files: true
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencias-revisao-2910-publicas
+          path: ${{ runner.temp }}/evidencias-2910
+          retention-days: 14
+      # Sem cron, coleta privada, base SQLite, PDF, merge ou publicação.
+      # Artifact é candidata pública temporária, nunca armazenamento da base principal.

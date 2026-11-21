@@ -1,0 +1,37 @@
+{
+  "comando": "python -m observatorio.operacao demonstracao --dados PASTA",
+  "aviso": "Base de DEMONSTRAÇÃO com documentos sintéticos. Não contém publicações reais.",
+  "resultado": {
+    "leitura": {
+      "LIDA": 3,
+      "LIDA_COM_PENDENCIAS": 0,
+      "ERRO": 0,
+      "na_fila": 0
+    },
+    "classificacao": {
+      "arquivos": 3,
+      "atos": 14,
+      "decisoes": 56,
+      "eventos": 2,
+      "outras": 1,
+      "descartados": 3,
+      "preservadas_por_revisao": 0,
+      "vinculos_sugeridos": 2
+    },
+    "situacao": {
+      "versao_regras": "gediv-2026.11.10-1",
+      "arquivos_classificados": 3,
+      "na_fila": 0,
+      "atos": 14,
+      "decisoes": {
+        "CONFERIDO": 45,
+        "PENDENTE": 11
+      },
+      "eventos": {
+        "VALIDADO": 2
+      },
+      "outras_publicacoes": 1
+    },
+    "aviso": "Base de DEMONSTRAÇÃO com documentos sintéticos. Não contém publicações reais."
+  }
+}

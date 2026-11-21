@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "width": 1440,
+      "passed": true,
+      "checks": "dados, recorte, datas nativas, CSV/XLSX/PNG/PDF, sete visões, reflow, execução JS"
+    },
+    {
+      "width": 390,
+      "passed": true,
+      "checks": "dados, recorte, datas nativas, CSV/XLSX/PNG/PDF, sete visões, reflow, execução JS"
+    }
+  ]
+}

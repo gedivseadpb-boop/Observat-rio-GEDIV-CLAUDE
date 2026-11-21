@@ -154,9 +154,16 @@ class TesteColeta(unittest.TestCase):
         self.assertEqual(resumo["fontes"]["auniao"]["downloads"], {"NOVO": 2, "ADIADA": 3})
         self.assertTrue(coletor.houve_pendencia(resumo))
 
-    def test_periodo_restringe_o_que_e_registrado(self):
+    def test_periodo_restringe_os_downloads_e_o_mes_lido_e_registrado_inteiro(self):
+        # Antes (Etapa 1) o período também restringia o REGISTRO; isso fazia a cobertura declarar "sem publicação" dias
+        # que a listagem lida mostrava (achado real em 14/11/2026, integração 05.1). O contrato passa a ser: o mês lido é
+        # registrado por inteiro e só o período é baixado.
         coletor.coletar([self.auniao], self.banco, self.acervo, date(2026, 1, 8), date(2026, 1, 9), politica=self.s.politica())
-        self.assertEqual(sorted({p["data_publicacao"] for p in self.banco.publicacoes()}), ["2026-01-08", "2026-01-09"])
+        baixadas = sorted({p["data_publicacao"] for p in self.banco.publicacoes() if p["estado"] == "BAIXADA"})
+        self.assertEqual(baixadas, ["2026-01-08", "2026-01-09"])
+        registradas = {p["data_publicacao"] for p in self.banco.publicacoes()}
+        self.assertTrue(registradas > {"2026-01-08", "2026-01-09"})
+        self.assertTrue(all(d.startswith("2026-01") for d in registradas))
 
     def test_conteudo_trocado_no_mesmo_endereco_preserva_original(self):
         self.coletar()
@@ -178,7 +185,8 @@ class TesteColeta(unittest.TestCase):
         self.coletar([self.auniao, self.cge])
         self.assertEqual(len(self.banco.publicacoes()), 7)
         self.assertEqual(len(self.banco.arquivos()), 6)
-        linhas = {l["data"]: l for l in inventario.cobertura(self.banco, self.INICIO, self.FIM, ["auniao", "cge"])}
+        # Etapa 05.3.2: COMPLETO exige o arquivo presente no acervo; com o banco em memória, o acervo é informado.
+        linhas = {l["data"]: l for l in inventario.cobertura(self.banco, self.INICIO, self.FIM, ["auniao", "cge"], self.acervo)}
         self.assertEqual((linhas["2026-01-07"]["listadas"], linhas["2026-01-07"]["arquivos_distintos"]), (2, 1))
         self.assertEqual(linhas["2026-01-07"]["situacao"], "COMPLETO")
         self.assertTrue(linhas["2026-01-10"]["so_em_uma_fonte"])
@@ -221,7 +229,7 @@ class TesteLinhaDeComando(unittest.TestCase):
                 self.assertEqual(main(["importar", str(origem), "--data", "2026-01-07", "--dados", dados]), 0)
                 self.assertEqual(main(["conferir", "--dados", dados]), 0)
                 self.assertEqual(main(["inventario", "--inicio", "2026-01-07", "--fim", "2026-01-07", "--dados", dados]), 0)
-            self.assertIn('"COMPLETO": 1', saida.getvalue())
+            self.assertIn('"BAIXADO_SEM_VARREDURA_COMPLETA": 1', saida.getvalue())   # PDF manual não torna o dia completo
             next((Path(dados) / "acervo").rglob("*.pdf")).write_bytes(b"x")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["conferir", "--dados", dados]), 3)

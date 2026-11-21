@@ -1,0 +1,62 @@
+{
+  "o_que_e": "Sonda de acesso às fontes (python -m observatorio.sonda) executada em três tipos de executor hospedado pelo GitHub. Valores transcritos do registro de cada job.",
+  "execucao": "https://github.com/gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE/actions/runs/42934585756",
+  "commit": "8e38463",
+  "limite": "Os três executores saem para a internet pela Microsoft (AS8075), nos EUA. Nenhum representa um computador no Brasil nem a rede da SEAD. O resultado não prova que a coleta falhe nessas redes, nem que funcione.",
+  "executores": [
+    {
+      "job": "sonda (ubuntu-24.04)",
+      "gerado_em": "2026-11-11T00:51:21+00:00",
+      "sistema": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "saida_internet": {
+        "country": "US",
+        "region": "Iowa",
+        "org": "AS8075 Microsoft Corporation"
+      },
+      "resumo": {
+        "auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "www.auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "cge.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "paraiba.pb.gov.br": "HTTP (respondeu com página de verificação anti-robô)",
+        "www.gov.br": "ACESSO OK",
+        "github.com": "ACESSO OK"
+      }
+    },
+    {
+      "job": "sonda (windows-latest)",
+      "gerado_em": "2026-11-11T00:51:29+00:00",
+      "sistema": "Windows-2025Server-10.0.26100-SP0",
+      "saida_internet": {
+        "country": "US",
+        "region": "Virginia",
+        "org": "AS8075 Microsoft Corporation"
+      },
+      "resumo": {
+        "auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "www.auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "cge.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "paraiba.pb.gov.br": "HTTP (respondeu com página de verificação anti-robô)",
+        "www.gov.br": "ACESSO OK",
+        "github.com": "ACESSO OK"
+      }
+    },
+    {
+      "job": "sonda (macos-latest)",
+      "gerado_em": "2026-11-11T00:51:26+00:00",
+      "sistema": "macOS-26.7.2-arm64-arm-64bit-Mach-O",
+      "saida_internet": {
+        "country": "US",
+        "region": "California",
+        "org": "AS8075 Microsoft Corporation"
+      },
+      "resumo": {
+        "auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "www.auniao.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "cge.pb.gov.br": "TCP (porta 443 não aceitou conexão)",
+        "paraiba.pb.gov.br": "HTTP (respondeu com página de verificação anti-robô)",
+        "www.gov.br": "ACESSO OK",
+        "github.com": "ACESSO OK"
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import importlib.util
+import re
 import io
 import tempfile
 import unittest
@@ -71,6 +72,8 @@ class TestePaginaPura(unittest.TestCase):
         self.assertEqual(identificar_edicao("João Pessoa - Sábado, 1 de Agosto de 2026\nDIÁRIO OFI CIAL\nNº 18.642"), ("18642", "2026-08-01"))
         self.assertEqual(identificar_edicao("João Pessoa - Terça-feira, 10 de Março de 2026\nDIÁRIO OFICIAL Nº 18.546"), ("18546", "2026-03-10"))
         self.assertEqual(identificar_edicao("João Pessoa Sexta-feira, 08 de Maio de 2026 R$ 2,55\nDIÁRIO OFICIAL Nº 18.585"), ("18585", "2026-05-08"))
+        self.assertEqual(identificar_edicao("DIÁRIO OFICIAL\nESTADO DA PARAÍBA\nNº 18.684 João Pessoa - Sexta-feira, 02 de Outubro de 2026 R$ 2,55"),
+                         ("18684", "2026-10-02"))                    # forma da capa real de 02/10/2026
         self.assertEqual(identificar_edicao("texto qualquer sem cabeçalho"), (None, None))
         self.assertEqual(identificar_edicao("João Pessoa - Segunda-feira, 31 de Fevereiro de 2026"), (None, None))
 
@@ -121,6 +124,59 @@ def pdf_digitalizado() -> bytes:
     c.showPage()
     c.save()
     return memoria.getvalue()
+
+
+class TesteAchadosDoPdfOficialNaLeitura(unittest.TestCase):
+    """Defeitos de leitura revelados pelo PDF oficial de 02/10/2026 (docs/08)."""
+
+    def test_vaos_de_tabela_nao_viram_colunas_quando_ha_corredor_central(self):
+        # Coluna esquerda: tabela com três colunas internas; coluna direita: texto corrido. Como na p. 4 do DOE real.
+        palavras = linha(40, 30, "CABECALHO GERAL DA PAGINA QUE OCUPA TODA A LARGURA DISPONIVEL NO TOPO DO DIARIO")
+        for i in range(14):
+            topo = 60 + i * 12
+            palavras += [Palavra(40, 95, topo, f"ORGAO{i:02d}"), Palavra(130, 185, topo, f"NOME{i:02d}"), Palavra(215, 270, topo, f"MAT{i:02d}")]
+            palavras += linha(310, topo, f"D{i:02d} texto corrido da direita")
+        texto, colunas = ler_pagina(palavras, 595)
+        linhas = texto.split("\n")
+        self.assertEqual(colunas, 2)
+        self.assertEqual(linhas[1:15], [f"ORGAO{i:02d} NOME{i:02d} MAT{i:02d}" for i in range(14)])     # a linha da tabela fica inteira
+        self.assertTrue(all(l.startswith("D") for l in linhas[15:]))
+
+    def test_blocos_de_fonte_ilegivel_sao_fundidos_e_trechos_pequenos_ignorados(self):
+        from observatorio.leitura.leitor import _blocos_ilegiveis
+        sinais = "(cid:5)" * 12
+        palavra = lambda x0, topo, x1, texto=sinais: {"x0": x0, "x1": x1, "top": topo, "bottom": topo + 6, "text": texto}
+        brutas = [palavra(20, 40, 300), palavra(20, 52, 180), palavra(200, 52, 330), palavra(20, 64, 320),
+                  palavra(400, 500, 420, "(cid:9)"),                       # sinal solto: não justifica OCR
+                  palavra(20, 700, 250), {"x0": 20, "x1": 100, "top": 300, "bottom": 306, "text": "normal"}]
+        blocos = _blocos_ilegiveis(brutas, 600, 800)
+        self.assertEqual(len(blocos), 2)
+        self.assertEqual([round(v) for v in blocos[0]], [16, 36, 334, 74])
+        self.assertEqual(_blocos_ilegiveis([palavra(400, 500, 420, "(cid:9)")], 600, 800), [])
+
+    @unittest.skipUnless(TEM_BIBLIOTECAS and TEM_OCR, "requer pdfplumber, reportlab e Tesseract com português")
+    def test_trecho_em_fonte_sem_mapeamento_e_recuperado_por_ocr_so_naquele_trecho(self):
+        import pdfplumber
+        from datetime import date
+        from observatorio.leitura import leitor
+        from observatorio.operacao import sintetico as S
+        dados = S.diario(date(2026, 10, 2), 18684, [S.resenha_tempo(801, "30-09-2026", "LICENÇA ESPECIAL", 1, 3),
+                                                   S.resenha_tempo(802, "30-09-2026", "ANOTAÇÃO DE TEMPO DE SERVIÇO / CONTRIBUIÇÃO", 5, 3)])
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as pasta:
+            caminho = Path(pasta) / "d.pdf"
+            caminho.write_bytes(dados)
+            with pdfplumber.open(str(caminho)) as documento:
+                pagina = documento.pages[0]
+                brutas = pagina.extract_words()
+                limite = next(w["top"] for w in brutas if w["text"] == "802/2026") - 8        # tudo acima da 2ª resenha "perde" o mapeamento
+                simuladas = [({**w, "text": "(cid:7)" * max(4, len(w["text"]))} if 70 < w["top"] < limite else w) for w in brutas]
+                relida = leitor._reler_trechos_ilegiveis(1, pagina, simuladas)
+        self.assertEqual(relida["metodo"], "TEXTO+OCR")
+        self.assertNotIn("(cid:", relida["texto"])
+        self.assertEqual(relida["texto"].count("801/2026"), 1)              # lido uma única vez
+        self.assertEqual(len(re.findall(r"SAD-PSE-2026/9\d{4}", relida["texto"])), 6)   # 3 por OCR + 3 nativas
+        self.assertIn("802/2026", relida["texto"])
+        self.assertGreaterEqual(relida["confianca"], 75)
 
 
 class BaseLeitor(unittest.TestCase):
@@ -205,8 +261,8 @@ class TesteLeitorComPdf(BaseLeitor):
 
     def test_arquivo_ilegivel_vira_erro_e_nao_para_a_fila(self):
         from observatorio.leitura import leitor
-        from tests.apoio import pdf_sintetico
-        self.guardar(pdf_sintetico("estrutura minima, sem paginas"), "ruim")
+        from tests.apoio import pdf_sem_paginas
+        self.guardar(pdf_sem_paginas("estrutura minima, sem paginas"), "ruim")
         self.guardar(self.dados, "bom")
         contagem = leitor.processar(self.banco, self.acervo)
         self.assertEqual((contagem["ERRO"], contagem["LIDA_COM_PENDENCIAS"]), (1, 1))
@@ -236,7 +292,7 @@ class TesteLeitorComPdf(BaseLeitor):
         referencias = [{"data": "2026-05-08", "sha256": sha, "paginas": 1, "bytes": 1, "numero_edicao": "18585", "fonte_da_referencia": "teste"}]
         r = validacao.relatorio(self.banco, self.acervo, referencias)
         item = r["arquivos"][0]
-        self.assertEqual(r["sistema"], "Painel de Publicações DOE-PB GEDIV")
+        self.assertEqual(r["sistema"], "Painel Diário Oficial | GEDIV")
         self.assertEqual((item["integridade_do_acervo"], item["edicao"], item["paginas"]["por_colunas"]),
                          (True, {"numero": "18585", "data": "2026-05-08"}, {"2": 1}))
         self.assertEqual(item["referencia"]["conferidos"], {"sha256": True, "bytes": False, "paginas": True, "numero_edicao": True})
@@ -302,7 +358,7 @@ class TesteFluxoManualCompleto(unittest.TestCase):
                              ("manual", "2026-05-08", "2026-05-08", "LIDA"))
             _, saida = rodar(coleta, "progresso")
             progresso = json.loads(saida)
-            self.assertEqual(progresso["sistema"], "Painel de Publicações DOE-PB GEDIV")
+            self.assertEqual(progresso["sistema"], "Painel Diário Oficial | GEDIV")
             self.assertEqual(progresso["cobertura"]["situacao"], "PARCIAL")              # importação manual não é acervo completo
             self.assertEqual(progresso["fontes"]["auniao"]["situacao"], "NAO_TESTADA")
             codigo, saida = rodar(leitura, "pagina", item["sha256"][:10], "1")
@@ -313,11 +369,11 @@ class TesteNomeDoSistema(unittest.TestCase):
     def test_nome_oficial_exato(self):
         import observatorio
         raiz = Path(__file__).resolve().parents[1]
-        self.assertEqual(observatorio.NOME, "Painel de Publicações DOE-PB GEDIV")
-        self.assertEqual((raiz / "README.md").read_text(encoding="utf-8").splitlines()[0], "# Painel de Publicações DOE-PB GEDIV")
+        self.assertEqual(observatorio.NOME, "Painel Diário Oficial | GEDIV")
+        self.assertEqual((raiz / "README.md").read_text(encoding="utf-8").splitlines()[0], "# Painel Diário Oficial | GEDIV")
         for modulo in ("coleta", "leitura", "sonda"):
             texto = (raiz / "observatorio" / modulo / "__main__.py").read_text(encoding="utf-8")
-            self.assertIn("Painel de Publicações DOE-PB GEDIV", texto.split("\n")[0])
+            self.assertIn("Painel Diário Oficial | GEDIV", texto.split("\n")[0])
 
 
 if __name__ == "__main__":

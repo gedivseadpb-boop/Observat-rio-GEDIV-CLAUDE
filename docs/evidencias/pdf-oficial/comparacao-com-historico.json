@@ -1,0 +1,28 @@
+{
+  "o_que_e": "Decisões extraídas pelo sistema dos PDFs oficiais de 02/10 e 03/10/2026, comparadas processo a processo com o histórico do painel anterior (planilha do Drive). Somente contagens.",
+  "observacao": "Em 02/10 o sistema encontrou 2 decisões a mais que o histórico: as resenhas 488/2026 e 504/2026, impressas em fonte sem mapeamento de caracteres e recuperadas por OCR do trecho. Conferidas visualmente contra a imagem da página 5.",
+  "por_edicao": {
+    "2026-10-02": {
+      "registros_no_historico": 5,
+      "decisoes_extraidas_do_pdf": 7,
+      "em_ambos": 5,
+      "so_no_historico": 0,
+      "so_no_sistema": 2,
+      "matricula_igual": 5,
+      "nome_igual": 5,
+      "resultado_igual": 5,
+      "numero_da_resenha_igual": 5
+    },
+    "2026-10-03": {
+      "registros_no_historico": 42,
+      "decisoes_extraidas_do_pdf": 42,
+      "em_ambos": 42,
+      "so_no_historico": 0,
+      "so_no_sistema": 0,
+      "matricula_igual": 42,
+      "nome_igual": 37,
+      "resultado_igual": 42,
+      "numero_da_resenha_igual": 42
+    }
+  }
+}

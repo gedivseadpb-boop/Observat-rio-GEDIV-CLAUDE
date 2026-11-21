@@ -18,8 +18,19 @@ concurrency:
 
 jobs:
   sonda:
-    runs-on: ubuntu-24.04
+    # Três tipos de executor hospedado pelo GitHub. Nenhum deles representa a rede de um computador
+    # no Brasil nem a rede da SEAD: servem só para saber se a falha se repete em origens diferentes.
+    runs-on: ${{ matrix.sistema }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sistema: [ubuntu-24.04, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,8 +40,18 @@ jobs:
           python-version: "3.13"
       - name: Executar sonda
         run: python -m observatorio.sonda --saida sonda.json || echo "A sonda apontou falha de acesso (ver relatório)."
+      - name: Resumo (origem da conexão e camada da falha por servidor)
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          r = json.load(open("sonda.json", encoding="utf-8"))
+          print("RESUMO_SONDA", json.dumps({k: r.get(k) for k in ("gerado_em", "executor", "resumo")}, ensure_ascii=True))
+          for alvo in r.get("alvos", []):
+              print("ALVO", alvo.get("servidor"), "| camada da falha:", alvo.get("camada_da_falha"))
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: relatorio-sonda
+          name: relatorio-sonda-${{ matrix.sistema }}
           path: sonda.json
           retention-days: 14

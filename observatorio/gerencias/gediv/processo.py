@@ -1,0 +1,102 @@
+"""Aplica a classificação GEDIV aos arquivos já lidos e grava os candidatos no banco.
+
+Nada do que é gravado aqui entra nos indicadores: todo registro nasce PENDENTE e só a
+revisão humana (observatorio.revisao) pode torná-lo CONFERIDO.
+"""
+from __future__ import annotations
+
+import json
+
+from ...nucleo.banco import Banco
+from . import catalogo as C
+from .classificador import classificar
+
+GERENCIA = "GEDIV"
+INICIO_DA_BASE = "2026-01-01"     # primeira data coberta pela coleta histórica
+
+
+def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
+    """Classifica os arquivos lidos ainda não classificados com a versão atual das regras."""
+    if refazer:
+        fila = [l["sha256"] for l in banco.leituras() if l["situacao"] != "ERRO"]
+    else:
+        fila = [l["sha256"] for l in banco.arquivos_sem_classificacao(GERENCIA, C.VERSAO_REGRAS)]
+    resumo = {"arquivos": 0, "atos": 0, "decisoes": 0, "eventos": 0, "outras": 0, "fora_escopo": 0, "descartados": 0,
+              "preservadas_por_revisao": 0, "conflitos": 0, "com_erro": 0, "erros": []}
+    for sha in fila:
+        try:
+            paginas = banco.paginas(sha)
+            resultado = classificar([(p["numero"], p["texto"]) for p in paginas], sha)
+            from .paddle_complementar import preservar_propostas
+            preservar_propostas(banco, resultado, sha)
+            ruins = [p["numero"] for p in paginas if p["qualidade"] not in ("OK", "VAZIA")]
+            if ruins:
+                resultado.pendencias.append(
+                    f"páginas com leitura pendente ou de baixa confiança: {', '.join(map(str, ruins))}; pode haver atos não extraídos")
+            if any(p["metodo"] != "TEXTO" for p in paginas):
+                resultado.pendencias.append("há páginas lidas por OCR; conferir página e colunas no PDF")
+            parte = banco.gravar_classificacao(GERENCIA, sha, C.VERSAO_REGRAS, banco.data_do_arquivo(sha), resultado)
+        except Exception as e:
+            # Um arquivo problemático não para a fila. Nada dele é gravado pela metade (gravar_classificacao é uma
+            # transação) e ele continua na fila de classificação para a próxima execução. Só o tipo do erro é
+            # registrado: a mensagem poderia trazer trechos do documento.
+            resumo["com_erro"] += 1
+            resumo["erros"].append({"sha256": sha[:12], "erro": type(e).__name__})
+            continue
+        resumo["arquivos"] += 1
+        for chave in parte:
+            resumo[chave] += parte[chave]
+    resumo["vinculos_sugeridos"] = sugerir_vinculos(banco)
+    return resumo
+
+
+def sugerir_vinculos(banco: Banco) -> int:
+    """Propõe o ato original de cada evento de alteração quando a correspondência é única.
+
+    É apenas uma SUGESTÃO para o revisor: o evento não conta em REFEITOS nem em TORNADOS SEM EFEITO
+    enquanto o vínculo não for validado por uma pessoa. Sem correspondência inequívoca (nenhum ato,
+    ou mais de um, com o número citado), o evento permanece PENDENTE_VINCULACAO.
+    """
+    sugeridos = 0
+    eventos = banco.con.execute("SELECT * FROM evento WHERE estado = 'PENDENTE_VINCULACAO' AND gerencia = ?", (GERENCIA,)).fetchall()
+    for evento in eventos:
+        candidatos = set()
+        for numero in json.loads(evento["resenhas_citadas"] or "[]"):
+            for ato in banco.con.execute(
+                    "SELECT id FROM ato WHERE gerencia = ? AND tipo = 'RESENHA' AND natureza = 'ORIGINAL' AND numero = ? "
+                    "AND id <> COALESCE(?, '') AND (data_publicacao IS NULL OR ? IS NULL OR data_publicacao <= ?)",
+                    (GERENCIA, numero, evento["ato_id"], evento["data_publicacao"], evento["data_publicacao"])):
+                candidatos.add(ato["id"])
+        citadas = json.loads(evento["publicacoes_citadas"] or "[]")
+        if not candidatos and citadas and all(d < INICIO_DA_BASE for d in citadas) and not evento["fundamento"]:
+            # O ato original foi publicado antes do período coberto: o vínculo não é possível nesta base.
+            # Fica registrado o motivo; o evento continua pendente e fora dos indicadores.
+            with banco.con:
+                banco.con.execute("UPDATE evento SET fundamento = ? WHERE id = ?",
+                                  ("ato original publicado no DOE de " + ", ".join(f"{d[8:]}/{d[5:7]}/{d[:4]}" for d in citadas)
+                                   + f", antes do início da base ({INICIO_DA_BASE[8:]}/{INICIO_DA_BASE[5:7]}/{INICIO_DA_BASE[:4]}); "
+                                   "vínculo automático impossível", evento["id"]))
+            continue
+        if len(candidatos) == 1:
+            with banco.con:
+                banco.con.execute(
+                    "UPDATE evento SET ato_sugerido_id = ?, estado = 'SUGERIDO', fundamento = ? WHERE id = ?",
+                    (candidatos.pop(), "número de resenha citado no ato modificador; ato original único com esse número na base",
+                     evento["id"]))
+            sugeridos += 1
+    return sugeridos
+
+
+def situacao(banco: Banco) -> dict:
+    um = lambda sql: banco.con.execute(sql).fetchone()[0]
+    return {
+        "versao_regras": C.VERSAO_REGRAS,
+        "arquivos_classificados": um("SELECT COUNT(*) FROM classificacao WHERE gerencia = 'GEDIV'"),
+        "na_fila": len(banco.arquivos_sem_classificacao(GERENCIA, C.VERSAO_REGRAS)),
+        "atos": um("SELECT COUNT(*) FROM ato WHERE gerencia = 'GEDIV'"),
+        "decisoes": {l[0]: l[1] for l in banco.con.execute("SELECT validacao, COUNT(*) FROM decisao GROUP BY validacao")},
+        "eventos": {l[0]: l[1] for l in banco.con.execute("SELECT estado, COUNT(*) FROM evento GROUP BY estado")},
+        "outras_publicacoes": um("SELECT COUNT(*) FROM outra_publicacao WHERE gerencia = 'GEDIV'"),
+        "fora_escopo": {l[0]: l[1] for l in banco.con.execute(
+            "SELECT motivo, COUNT(*) FROM fora_escopo WHERE gerencia = 'GEDIV' GROUP BY motivo")},
+    }

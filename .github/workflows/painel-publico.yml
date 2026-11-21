@@ -1,0 +1,34 @@
+name: Painel público
+on:
+  push:
+    branches: [entrega/painel-publico-gediv, entrega/painel-completo-referencias]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  distribuicao:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar somente dependências de teste
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validar projeção pública sem bancos privados
+        run: python -m unittest tests.test_publicacao_painel tests.test_distribuicao_publica tests.test_preparacao_github_pages -v
+      - name: Verificar consulta, integração DOM e exportação XLSX
+        run: npm test
+      - name: Congelar pacote para revisão (não publica)
+        if: github.ref == 'refs/heads/entrega/painel-completo-referencias'
+        run: python scripts/preparar_github_pages.py --saida "${{ runner.temp }}/gediv-pages-preparado"
+      - name: Preparar distribuição estática permitida
+        if: github.ref != 'refs/heads/entrega/painel-completo-referencias'
+        run: python scripts/preparar_painel_publico.py --projecao painel-publico/dados.json --saida dist

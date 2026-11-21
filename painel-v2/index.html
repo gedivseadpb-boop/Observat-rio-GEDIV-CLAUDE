@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Painel Diário Oficial | GEDIV — nova interface em desenvolvimento. Agregados públicos de Progressão Funcional e Tempo de Serviço, com cobertura e limites explicados.">
+<!-- Fontes de dados e recursos compartilhados com o painel atual (somente leitura; nada aqui altera o painel publicado). -->
+<meta name="gediv-dados" content="../painel-publico/dados.json">
+<meta name="gediv-estado-site" content="./estado-site.json">
+<title>Painel Diário Oficial | GEDIV</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230d4d91'/%3E%3Cpath d='M11 11h18v18H11zM16 17h8M16 22h8' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./estilo.css">
+<script src="../painel-publico/modelo.js" defer></script>
+<script src="../painel-publico/xlsx.js" defer></script>
+<script src="../painel-publico/pdf.js" defer></script>
+<script src="./graficos.js" defer></script>
+<script src="./app.js" defer></script>
+</head>
+<body>
+<a class="pular" href="#conteudo">Ir para o conteúdo</a>
+
+<header class="topo">
+  <a class="marca" href="#/inicio" aria-label="GEDIV — ir para a Visão geral">
+    <span class="marca-simbolo" aria-hidden="true">G</span>
+    <span class="marca-texto"><b>GEDIV</b><small>Diário Oficial · Paraíba</small></span>
+  </a>
+  <p class="topo-frase">Progressão Funcional e Tempo de Serviço, com fonte e limites explicados</p>
+  <div class="topo-acoes">
+    <span class="selo-publico">Consulta pública</span>
+    <button id="tema" type="button" class="botao botao-discreto" aria-pressed="false"><span aria-hidden="true">◐</span> <span class="tema-rotulo">Modo escuro</span></button>
+    <button id="abrirMenu" type="button" class="botao botao-menu" aria-expanded="false" aria-controls="menuPrincipal"><span aria-hidden="true">☰</span> Menu</button>
+  </div>
+</header>
+
+<div class="aviso-versao" role="note">
+  <b>Versão nova em teste.</b> Esta interface ainda não substitui o painel publicado. Os números vêm da mesma base pública do painel atual.
+</div>
+
+<div class="estrutura">
+  <nav id="menuPrincipal" class="menu" aria-label="Seções do painel">
+    <div class="menu-cabeca"><b>Seções</b><button id="fecharMenu" type="button" class="botao botao-discreto">Fechar ✕</button></div>
+    <p class="menu-grupo">Por assunto</p>
+    <ul>
+      <li><a href="#/inicio" data-rota="inicio"><span aria-hidden="true">⌂</span> Visão geral</a></li>
+      <li><a href="#/progressao" data-rota="progressao"><span aria-hidden="true">↗</span> Progressão Funcional</a></li>
+      <li><a href="#/tempo" data-rota="tempo"><span aria-hidden="true">◷</span> Tempo de Serviço</a></li>
+    </ul>
+    <p class="menu-grupo">Por documento e data</p>
+    <ul>
+      <li><a href="#/edicoes" data-rota="edicoes"><span aria-hidden="true">▤</span> Edições e fontes</a></li>
+      <li><a href="#/dia" data-rota="dia"><span aria-hidden="true">▦</span> Publicações do dia</a></li>
+      <li><a href="#/historico" data-rota="historico"><span aria-hidden="true">⋯</span> Histórico</a></li>
+      <li><a href="#/alteracoes" data-rota="alteracoes"><span aria-hidden="true">↺</span> Alterações e refeitos</a></li>
+      <li><a href="#/outras" data-rota="outras"><span aria-hidden="true">＋</span> Outras publicações</a></li>
+    </ul>
+    <p class="menu-grupo">Apoio</p>
+    <ul>
+      <li><a href="#/ajuda" data-rota="ajuda"><span aria-hidden="true">?</span> Entenda os dados</a></li>
+      <li><a href="#/gerencial" data-rota="gerencial"><span aria-hidden="true">◇</span> Área gerencial</a></li>
+    </ul>
+  </nav>
+  <div id="fundoMenu" class="fundo-menu" hidden></div>
+
+  <main id="conteudo" tabindex="-1">
+    <nav class="trilha" aria-label="Você está em"><ol id="trilha"></ol></nav>
+    <div id="carregando" class="estado estado-info" role="status"><b>Carregando os dados públicos…</b><p>Aguarde alguns segundos.</p></div>
+    <div id="falha" class="estado estado-erro" role="alert" hidden>
+      <h2>Não foi possível carregar os dados agora</h2>
+      <p id="falhaMensagem">Nenhum número antigo está sendo mostrado.</p>
+      <button id="tentarDeNovo" type="button" class="botao botao-primario">Tentar novamente</button>
+    </div>
+    <div id="desativado" class="estado estado-aviso" role="status" hidden></div>
+    <div id="pagina" aria-live="polite"></div>
+    <footer class="rodape">
+      <div><b>Painel Diário Oficial | GEDIV</b>
+        <p>Fonte: Diário Oficial do Estado da Paraíba. A consulta não substitui a publicação oficial nem a conferência administrativa.</p></div>
+      <a href="#/ajuda">Entenda os dados e os limites</a>
+    </footer>
+  </main>
+</div>
+
+<dialog id="dialogo" aria-labelledby="dialogoTitulo">
+  <div class="dialogo-cabeca"><h2 id="dialogoTitulo"></h2><button id="fecharDialogo" type="button" class="botao">Fechar ✕</button></div>
+  <div id="dialogoCorpo"></div>
+</dialog>
+<div id="anuncio" class="so-leitor" role="status" aria-live="polite"></div>
+<section id="impressao" class="so-impressao" aria-hidden="true"></section>
+</body>
+</html>

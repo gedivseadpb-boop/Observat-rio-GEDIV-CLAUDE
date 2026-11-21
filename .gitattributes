@@ -1,0 +1,13 @@
+# O pacote estático deve ter os mesmos bytes no Linux e no Windows.
+painel-publico/*.html text eol=lf
+painel-publico/*.js text eol=lf
+painel-publico/*.css text eol=lf
+painel-publico/*.json text eol=lf
+painel-publico/*.png binary
+observatorio/web/unificado/*.html text eol=lf
+observatorio/web/unificado/*.json text eol=lf
+revisao-2910/*.html text eol=lf
+revisao-2910/*.js text eol=lf
+revisao-2910/*.css text eol=lf
+revisao-2910/*.json text eol=lf
+revisao-2910/*.png binary

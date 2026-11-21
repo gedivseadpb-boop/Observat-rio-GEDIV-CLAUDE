@@ -1,0 +1,181 @@
+{
+ "erros_no_console": [
+  "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+  "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)"
+ ],
+ "passos": [
+  {
+   "passo": "consulta pública (sem credencial)",
+   "cartoes": {
+    "Total de processos": "45",
+    "Total de resenhas": "10",
+    "Total de decisões individuais": "45",
+    "Deferidos": "38",
+    "Indeferidos": "7",
+    "Refeitos": "1",
+    "Tornados sem efeito": "1"
+   },
+   "itens_na_tabela": 10,
+   "botao_excel_visivel": false,
+   "pagina_contem_nome_de_servidor": false
+  },
+  {
+   "passo": "credencial errada",
+   "mensagem": "Credencial não aceita."
+  },
+  {
+   "passo": "gerência",
+   "cartoes": {
+    "Total de processos": "45",
+    "Total de resenhas": "10",
+    "Total de decisões individuais": "45",
+    "Deferidos": "38",
+    "Indeferidos": "7",
+    "Refeitos": "1",
+    "Tornados sem efeito": "1"
+   },
+   "quantidade_de_cartoes": 7
+  },
+  {
+   "passo": "filtro eixo = Progressão",
+   "cartoes": {
+    "Total de processos": "31",
+    "Total de resenhas": "6",
+    "Total de decisões individuais": "31",
+    "Deferidos": "28",
+    "Indeferidos": "3",
+    "Refeitos": "0",
+    "Tornados sem efeito": "1"
+   }
+  },
+  {
+   "passo": "+ modalidade = Horizontal",
+   "cartoes": {
+    "Total de processos": "18",
+    "Total de resenhas": "3",
+    "Total de decisões individuais": "18",
+    "Deferidos": "15",
+    "Indeferidos": "3",
+    "Refeitos": "0",
+    "Tornados sem efeito": "1"
+   }
+  },
+  {
+   "passo": "+ grupo = MAG",
+   "cartoes": {
+    "Total de processos": "3",
+    "Total de resenhas": "1",
+    "Total de decisões individuais": "3",
+    "Deferidos": "0",
+    "Indeferidos": "3",
+    "Refeitos": "0",
+    "Tornados sem efeito": "1"
+   },
+   "filtros_ativos": [
+    "Eixo: Progressão Funcional",
+    "Modalidade: Horizontal",
+    "Grupo: MAG"
+   ]
+  },
+  {
+   "passo": "eixo = Tempo de Serviço + subcategoria TS-01",
+   "cartoes": {
+    "Total de processos": "10",
+    "Total de resenhas": "2",
+    "Total de decisões individuais": "10",
+    "Deferidos": "6",
+    "Indeferidos": "4",
+    "Refeitos": "1",
+    "Tornados sem efeito": "0"
+   },
+   "subcategorias_exibidas": 7
+  },
+  {
+   "passo": "resultado = Indeferido",
+   "cartoes": {
+    "Total de processos": "7",
+    "Total de resenhas": "2",
+    "Total de decisões individuais": "7",
+    "Deferidos": "0",
+    "Indeferidos": "7",
+    "Refeitos": "0",
+    "Tornados sem efeito": "1"
+   }
+  },
+  {
+   "passo": "período = 09/10/2026",
+   "cartoes": {
+    "Total de processos": "20",
+    "Total de resenhas": "5",
+    "Total de decisões individuais": "20",
+    "Deferidos": "16",
+    "Indeferidos": "4",
+    "Refeitos": "0",
+    "Tornados sem efeito": "0"
+   }
+  },
+  {
+   "passo": "clique no cartão Refeitos",
+   "tabela": "1 resenha(s) · 6 decisão(ões)",
+   "resenhas": [
+    "Resenha 801/2026"
+   ]
+  },
+  {
+   "passo": "detalhe de uma resenha",
+   "linhas_de_decisao": 4,
+   "tem_texto_do_ato": true,
+   "tem_botao_pdf": true,
+   "tem_trilha": true
+  },
+  {
+   "passo": "tabela por processo",
+   "itens_na_pagina": 12,
+   "paginacao": "Página 1 de 4"
+  },
+  {
+   "passo": "exportação xlsx",
+   "arquivo_sugerido": "painel-gediv-conferido-2026-11-10.xlsx",
+   "bytes": 13489
+  },
+  {
+   "passo": "exportação csv",
+   "arquivo_sugerido": "painel-gediv-conferido-2026-11-10.csv",
+   "bytes": 24744
+  },
+  {
+   "passo": "situação = em conferência",
+   "cartoes": {
+    "Total de processos": "5",
+    "Total de resenhas": "2",
+    "Total de decisões individuais": "5",
+    "Deferidos": "5",
+    "Indeferidos": "0",
+    "Refeitos": "—",
+    "Tornados sem efeito": "—"
+   },
+   "aviso": "Dados PRELIMINARES, em conferência: ainda não foram homologados pela GEDIV e não devem ser divulgados como resultado oficial."
+  },
+  {
+   "passo": "conferir sem declarar a fonte",
+   "recusado_com": "para conferir é preciso declarar que o PDF oficial foi consultado"
+  },
+  {
+   "passo": "após conferir uma resenha pela tela",
+   "cartoes": {
+    "Total de processos": "48",
+    "Total de resenhas": "11",
+    "Total de decisões individuais": "48",
+    "Deferidos": "41",
+    "Indeferidos": "7",
+    "Refeitos": "1",
+    "Tornados sem efeito": "1"
+   }
+  },
+  {
+   "passo": "outras publicações",
+   "itens": 1
+  }
+ ],
+ "observacao": "Base de DEMONSTRAÇÃO (dados fictícios). Os dois avisos 403 e 422 no console são as respostas esperadas aos passos 'credencial errada' e 'conferir sem declarar a fonte'."
+}

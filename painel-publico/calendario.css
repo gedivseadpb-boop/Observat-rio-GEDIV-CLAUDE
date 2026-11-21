@@ -1,0 +1,90 @@
+/* Calendário de intervalo — usa os tokens semânticos dos dois temas GEDIV. */
+.gediv-calendar-dialog {
+  width: min(820px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 24px; border: 1px solid var(--line, #cad5e2); border-radius: 16px;
+  color: var(--ink, #15263a); background: var(--surface, #fff);
+  box-shadow: 0 24px 80px #00142b55; overflow: auto; overscroll-behavior: contain;
+  scrollbar-gutter: stable; font-size: 14px; line-height: 1.5;
+}
+.gediv-calendar-dialog::backdrop { background: #061a36b8; }
+.gediv-cal-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.gediv-cal-heading h2 { font-size: 23px; margin-bottom: 4px; }
+.gediv-cal-heading p, .gediv-cal-keyboard, .gediv-cal-coverage { color: var(--muted, #475569); }
+.gediv-calendar-dialog button {
+  min-height: 44px; min-width: 44px; border: 1px solid var(--control-border, #64748b);
+  border-radius: 8px; background: var(--surface, #fff); padding: 8px 12px;
+  color: var(--ink, #15263a); font: inherit; line-height: 1.35;
+}
+.gediv-calendar-dialog button:hover { border-color: var(--blue, #124e97); background: var(--blue-soft, #ecf2f8); }
+.gediv-calendar-dialog :focus-visible { outline: 3px solid var(--focus, #0b69b5); outline-offset: 3px; }
+.gediv-cal-close { flex-shrink: 0; }
+.gediv-cal-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.gediv-cal-shortcuts button { font-size: 13px; }
+.gediv-cal-shortcuts button[aria-pressed="true"] {
+  background: var(--blue, #124e97); color: var(--on-primary, #fff); border-color: var(--blue, #124e97);
+  font-weight: 700; box-shadow: inset 0 -3px 0 currentColor;
+}
+.gediv-cal-shortcuts button[aria-pressed="true"]:hover { background: var(--primary-hover, #0e3f7b); }
+.gediv-cal-inputs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 12px; }
+.gediv-cal-inputs label { display: grid; min-width: 0; gap: 5px; font-weight: 650; }
+.gediv-cal-inputs input, .gediv-cal-nav input, .gediv-cal-nav select {
+  width: 100%; min-width: 0; height: 44px; padding: 7px 10px;
+  border: 1px solid var(--control-border, #64748b); border-radius: 8px;
+  background: var(--surface, #fff); color: var(--ink, #15263a); font: inherit;
+}
+.gediv-cal-inputs > span { padding-bottom: 11px; }
+.gediv-cal-nav { display: grid; grid-template-columns: 44px 44px minmax(0, 1fr) 94px 44px 44px; gap: 8px; align-items: center; margin: 20px 0 14px; }
+.gediv-cal-nav label { min-width: 0; }
+.gediv-cal-nav button { font-size: 22px; line-height: 1; padding: 4px; }
+.gediv-cal-months { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.gediv-cal-month { min-width: 0; }
+.gediv-cal-month h3 { text-align: center; font-size: 16px; margin: 4px 0 10px; }
+.gediv-cal-weekdays, .gediv-cal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.gediv-cal-weekdays span { text-align: center; font-size: 12px; font-weight: 650; color: var(--muted, #475569); padding: 4px 0 8px; }
+.gediv-cal-days button {
+  min-width: 0; min-height: 42px; aspect-ratio: 1; padding: 4px; border-color: transparent;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.gediv-cal-days button.in-range { color: var(--ink, #15263a); background: var(--blue-soft, #ecf2f8); border-radius: 4px; }
+.gediv-cal-days button.selected {
+  color: var(--on-primary, #fff); background: var(--blue, #124e97);
+  border-color: var(--blue, #124e97); font-weight: 750;
+}
+.gediv-cal-days button.is-today { box-shadow: inset 0 0 0 2px var(--blue, #124e97); text-decoration: underline; text-underline-offset: 4px; }
+.gediv-cal-days button.selected:hover { color: var(--on-primary, #fff); background: var(--primary-hover, #0e3f7b); border-color: var(--primary-hover, #0e3f7b); }
+.gediv-cal-keyboard { font-size: 12px; margin: 14px 0; }
+.gediv-cal-message { border: 1px solid var(--line, #cad5e2); color: var(--ink, #15263a); background: var(--side, #ecf2f8); border-radius: 9px; padding: 12px 14px; font-size: 13px; line-height: 1.55; }
+.gediv-cal-coverage { font-size: 12px; line-height: 1.55; margin: 12px 0 16px; }
+.gediv-cal-actions {
+  position: sticky; bottom: -24px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  margin: 0 -24px -24px; padding: 16px 24px 24px; z-index: 1;
+  border-top: 1px solid var(--line, #cad5e2); background: var(--surface, #fff);
+}
+.gediv-cal-actions > span { flex: 1; }
+.gediv-cal-actions button.gediv-cal-apply { background: var(--blue, #124e97); color: var(--on-primary, #fff); border-color: var(--blue, #124e97); font-weight: 700; }
+.gediv-cal-actions button.gediv-cal-apply:hover { background: var(--primary-hover, #0e3f7b); border-color: var(--primary-hover, #0e3f7b); }
+.gediv-cal-actions button.gediv-cal-apply:disabled { opacity: 1; background: var(--side, #ecf2f8); color: var(--muted, #475569); border-color: var(--line, #cad5e2); cursor: not-allowed; }
+@media (max-width: 680px) {
+  .gediv-calendar-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); padding: 16px; border-radius: 12px; }
+  .gediv-cal-months { grid-template-columns: minmax(0, 1fr); }
+  .gediv-cal-second { display: none; }
+  .gediv-cal-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .gediv-cal-nav label:nth-child(3) { grid-column: 1 / 3; grid-row: 1; }
+  .gediv-cal-nav label:nth-child(4) { grid-column: 3 / 5; grid-row: 1; }
+  .gediv-cal-nav button { grid-row: 2; }
+  .gediv-cal-nav input, .gediv-cal-nav select { font-size: 14px; }
+  .gediv-cal-inputs { gap: 8px; }
+  .gediv-cal-inputs input { padding: 6px; font-size: 14px; }
+  .gediv-cal-days button { aspect-ratio: auto; min-height: 44px; }
+  .gediv-cal-shortcuts { gap: 8px; }
+  .gediv-cal-actions { bottom: -16px; margin: 0 -16px -16px; padding: 14px 16px 16px; display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; }
+  .gediv-cal-actions > span { display: none; }
+  .gediv-cal-actions button { padding: 8px 10px; min-width: 0; }
+}
+@media (max-width: 360px) {
+  .gediv-calendar-dialog { width: calc(100vw - 8px); max-height: calc(100dvh - 8px); padding: 10px; scrollbar-gutter: auto; }
+  .gediv-cal-weekdays, .gediv-cal-days { gap: 1px; }
+  .gediv-cal-actions { bottom: -10px; margin: 0 -10px -10px; padding: 12px 10px 10px; gap: 6px; }
+  .gediv-cal-heading { gap: 10px; }
+  .gediv-cal-heading h2 { font-size: 21px; }
+}
