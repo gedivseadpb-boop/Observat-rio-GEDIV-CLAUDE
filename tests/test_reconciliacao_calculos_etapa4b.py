@@ -830,6 +830,220 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
             finally:
                 b_ts.fechar()
 
+    # 13. Eventos em processos coletivos: exige identificação individual inequívoca (nunca vincula o coletivo inteiro)
+    def test_13_evento_em_processo_coletivo_exige_identificacao_individual(self):
+        self.carregar_e_classificar(
+            "d01", "2026-10-09",
+            _resenha_progressao(
+                "120/2099",
+                [
+                    "SAD-PSE-2099/96100 961001-1 SERVIDOR COLETIVO ALFA PROFESSOR A B",
+                    "SAD-PSE-2099/96100 961002-2 SERVIDOR COLETIVO BETA PROFESSOR B C",
+                    "SAD-PSE-2099/96100 961003-3 SERVIDOR COLETIVO GAMA PROFESSOR C D",
+                ],
+            ),
+        )
+        # Portaria A (ambígua): cita apenas o processo coletivo sem matrícula nem servidor
+        port_ambigua = _portaria_sem_efeito("220/2099", "120/2099", ["SAD-PSE-2099/96100"])
+        self.carregar_e_classificar("d02", "2026-10-15", port_ambigua)
+        self.conferir_todas_decisoes()
+
+        ato_orig = self.banco.con.execute("SELECT id FROM ato WHERE numero = '120/2099'").fetchone()["id"]
+        ev_amb = self.banco.con.execute("SELECT * FROM evento ORDER BY rowid DESC LIMIT 1").fetchone()
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, ev_amb["id"], servico.VINCULAR, REV, JUST, ato_orig, True)
+        # Evento permanece pendente e nenhuma decisão do processo coletivo foi vinculada ou excluída
+        self.assertNotEqual(self.banco.con.execute("SELECT estado FROM evento WHERE id = ?", (ev_amb["id"],)).fetchone()[0], "VALIDADO")
+        self.assertEqual(self.banco.eventos_decisoes(ev_amb["id"]), [])
+        p_amb, proj_amb = self.painel_e_proj()
+        _assert_particoes_exatas(self, p_amb, proj_amb)
+        self.assertEqual((p_amb["indicadores"]["decisoes"], p_amb["indicadores"]["sem_efeito"]), (3, 0))
+
+        # Portaria B (contraditória): matrícula de ALFA + nome de BETA -> recusada por ambiguidade
+        port_contr = (
+            "Portaria nº 221/2099 - DEREH\n"
+            "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\n"
+            "O SECRETÁRIO DE ESTADO DA ADMINISTRAÇÃO RESOLVE TORNAR SEM EFEITO a Resenha nº 120/2099, "
+            "publicada no DOE de 09/10/2026, referente à PROGRESSÃO FUNCIONAL, processo SAD-PSE-2099/96100, "
+            "servidor SERVIDOR COLETIVO BETA, matrícula 961001-1.\nPUBLIQUE-SE"
+        )
+        self.carregar_e_classificar("d03", "2026-10-16", port_contr)
+        ev_contr = self.banco.con.execute("SELECT * FROM evento WHERE data_publicacao = '2026-10-16'").fetchone()
+        self.assertIsNotNone(ev_contr)
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, ev_contr["id"], servico.VINCULAR, REV, JUST, ato_orig, True)
+
+        # Portaria C (inequívoca): processo coletivo + matrícula 961002-2 (BETA) -> vincula EXCLUSIVAMENTE 1 de 3
+        port_ok = (
+            "Portaria nº 222/2099 - DEREH\n"
+            "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\n"
+            "O SECRETÁRIO DE ESTADO DA ADMINISTRAÇÃO RESOLVE TORNAR SEM EFEITO a Resenha nº 120/2099, "
+            "publicada no DOE de 09/10/2026, referente à PROGRESSÃO FUNCIONAL, exclusivamente quanto ao "
+            "processo SAD-PSE-2099/96100, servidor SERVIDOR COLETIVO BETA, matrícula 961002-2.\nPUBLIQUE-SE"
+        )
+        self.carregar_e_classificar("d04", "2026-10-17", port_ok)
+        ev_ok = self.banco.con.execute("SELECT * FROM evento WHERE data_publicacao = '2026-10-17'").fetchone()
+        self.assertIsNotNone(ev_ok)
+        res_ok = servico.revisar_evento(self.banco, ev_ok["id"], servico.VINCULAR, REV, JUST, ato_orig, True)
+        self.assertEqual(res_ok["decisoes_vinculadas"], 1)
+
+        p_dep, proj_dep = self.painel_e_proj()
+        _assert_particoes_exatas(self, p_dep, proj_dep)
+        self.assertEqual((p_dep["indicadores"]["decisoes"], p_dep["indicadores"]["processos"], p_dep["indicadores"]["sem_efeito"]), (2, 1, 1))
+        self.assertEqual(p_dep["series"]["eventos_detalhados"]["decisoes_sem_efeito"], 1)
+        mats_ativas = {l["matricula"] for l in p_dep["linhas"]}
+        self.assertEqual(mats_ativas, {"961001-1", "961003-3"})
+
+    # 14. Eventos sem destinatário, tratamento separado (FORA_DO_ACERVO) e compatibilidade temática na validação manual
+    def test_14_evento_sem_destinatario_externo_e_incompatibilidade_tematica_manual(self):
+        self.carregar_e_classificar(
+            "d01", "2026-08-05",
+            _resenha_progressao("353/2099", ["SAD-PSE-2099/96201 962001-1 SERVIDOR GAJ UM POLICIAL PENAL A B"], grupo="GAJ-1700"),
+        )
+        ts_txt = (
+            "SECRETARIA DE ESTADO DA ADMINISTRAÇÃO\n"
+            "RESENHA Nº : 354/2099 - DEREH/GS/SEAD\n"
+            "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\n"
+            "O DIRETOR resolve DEFERIR os processos de ANOTAÇÃO DE TEMPO DE SERVIÇO / CONTRIBUIÇÃO:\n"
+            "SEC.EST.EDUCACAO SAD-PSE-2099/96202 962002-2 SERVIDOR TEMPO UM 0 100 0 200\nPUBLIQUE-SE"
+        )
+        self.carregar_e_classificar("d02", "2026-08-05", ts_txt)
+        self.conferir_todas_decisoes()
+
+        ato_prog = self.banco.con.execute("SELECT id, sha256 FROM ato WHERE numero = '353/2099'").fetchone()
+        ato_ts = self.banco.con.execute("SELECT id FROM ato WHERE numero = '354/2099'").fetchone()
+
+        # 14a. Evento TORNADO_SEM_EFEITO sem processo/matrícula/decisoes_ids: proibido validar sobre o acervo
+        with self.banco.con:
+            self.banco.con.execute(
+                "INSERT INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
+                "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
+                "VALUES ('ev_se_vazio', 'GEDIV', ?, '2026-08-12', NULL, 'TORNADO_SEM_EFEITO', 1, 'EXPRESSO', "
+                "'[\"353/2099\"]', '[]', '[\"2026-08-05\"]', 'TORNAR SEM EFEITO PROGRESSAO FUNCIONAL Resenha 353/2099', 'PENDENTE_VINCULACAO')",
+                (ato_prog["sha256"],),
+            )
+            # Evento de Tempo de Serviço tentando ser vinculado manualmente ao ato de Progressão
+            self.banco.con.execute(
+                "INSERT INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
+                "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
+                "VALUES ('ev_tema_trocado', 'GEDIV', ?, '2026-08-12', NULL, 'TORNADO_SEM_EFEITO', 1, 'EXPRESSO', "
+                "'[\"353/2099\"]', '[\"SAD-PSE-2099/96201\"]', '[\"2026-08-05\"]', "
+                "'TORNAR SEM EFEITO LICENCA ESPECIAL Resenha 353/2099 SAD-PSE-2099/96201', 'PENDENTE_VINCULACAO')",
+                (ato_prog["sha256"],),
+            )
+            # Evento de Abono de Permanência (EC 103/2019) tentando ser vinculado manualmente ao ato GAJ 353/2099
+            self.banco.con.execute(
+                "INSERT INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
+                "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
+                "VALUES ('ev_abono_manual', 'GEDIV', ?, '2026-08-12', NULL, 'REPUBLICACAO', 1, 'EXPRESSO', "
+                "'[\"353/2099\"]', '[\"SAD-PSE-2099/96201\"]', '[\"2026-08-05\"]', "
+                "'REPUBLICACAO ABONO DE PERMANENCIA EC 103/2019 Resenha 353/2099', 'PENDENTE_VINCULACAO')",
+                (ato_prog["sha256"],),
+            )
+            # Evento comprovadamente anterior ao início da base (1999-07-28)
+            self.banco.con.execute(
+                "INSERT INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
+                "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
+                "VALUES ('ev_anterior_1999', 'GEDIV', ?, '2026-08-12', NULL, 'TORNADO_SEM_EFEITO', 1, 'EXPRESSO', "
+                "'[]', '[]', '[\"1999-07-28\"]', 'TORNAR SEM EFEITO ato publicado no DOE de 28/07/1999', 'PENDENTE_VINCULACAO')",
+                (ato_prog["sha256"],),
+            )
+
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, "ev_se_vazio", servico.VINCULAR, REV, JUST, ato_prog["id"], True)
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, "ev_tema_trocado", servico.VINCULAR, REV, JUST, ato_prog["id"], True)
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, "ev_abono_manual", servico.VINCULAR, REV, JUST, ato_prog["id"], True)
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, "ev_anterior_1999", servico.VINCULAR, REV, JUST, ato_ts["id"], True)
+
+        # 14b. Tratamento separado para atos anteriores/externos via servico.EXTERNO -> estado FORA_DO_ACERVO
+        with self.assertRaises(servico.Recusada):
+            servico.revisar_evento(self.banco, "ev_anterior_1999", servico.EXTERNO, REV, JUST, None, False)
+        r_ext = servico.revisar_evento(self.banco, "ev_anterior_1999", servico.EXTERNO, REV, JUST, None, True)
+        self.assertEqual(r_ext, {"alterados": 1, "estado": "FORA_DO_ACERVO", "decisoes_vinculadas": 0})
+        r_ext_ab = servico.revisar_evento(self.banco, "ev_abono_manual", servico.EXTERNO, REV, JUST, None, True)
+        self.assertEqual(r_ext_ab["estado"], "FORA_DO_ACERVO")
+
+        # 14c. Mesmo que um banco legado contenha evento TORNADO_SEM_EFEITO VALIDADO sem alcance decisório,
+        # o cartão `sem_efeito` NÃO registra evento sem decisão atingida definida
+        with self.banco.con:
+            self.banco.con.execute(
+                "UPDATE evento SET estado = 'VALIDADO', ato_original_id = ? WHERE id = 'ev_se_vazio'",
+                (ato_prog["id"],),
+            )
+        p, proj = self.painel_e_proj()
+        _assert_particoes_exatas(self, p, proj)
+        self.assertEqual(p["indicadores"]["sem_efeito"], 0)
+        self.assertEqual(p["series"]["eventos_detalhados"]["sem_efeito_atos"], 0)
+        self.assertEqual(p["series"]["eventos_detalhados"]["decisoes_sem_efeito"], 0)
+        self.assertEqual(p["series"]["eventos_detalhados"]["eventos_fora_do_acervo"], 2)
+        self.assertEqual(p["apoio"]["eventos_fora_do_acervo"], 2)
+        self.assertEqual(indicadores.painel(self.banco, {"cartao": "sem_efeito"}, GER)["linhas"], [])
+        self.assertEqual(sum(1 for e in proj["events"] if e["validation"] == "externo"), 2)
+        # Snapshot público mantém isolamento integral (apoio.eventos_fora_do_acervo == None)
+        snap = indicadores.gerar_snapshot_publico(self.banco)
+        indicadores.validar_snapshot_publico(snap)
+        self.assertIsNone(snap["painel"]["apoio"]["eventos_fora_do_acervo"])
+
+    # 15. Grupos com cargos mistos (AST): não aceitar automaticamente quando coexistir cargo compatível e incompatível
+    def test_15_ast_com_cargos_mistos_encaminha_para_conferencia_sem_alterar_total(self):
+        # 15a. Regra direta em catalogo.avaliar_grupo
+        grp_misto, exp_misto, pend_misto = C.avaliar_grupo(
+            "DO GRUPO TEC. ADM.",
+            cargos=["TECNICO ADMINISTRATIVO", "PROFESSOR DE EDUCACAO BASICA"],
+        )
+        self.assertIsNone(grp_misto)
+        self.assertEqual(exp_misto, "TEC. ADM")
+        self.assertTrue(pend_misto)
+
+        grp_puro, exp_puro, pend_puro = C.avaliar_grupo(
+            "DO GRUPO TEC. ADM.",
+            cargos=["TECNICO ADMINISTRATIVO", "ASSISTENTE ADMINISTRATIVO"],
+        )
+        self.assertEqual((grp_puro, exp_puro, pend_puro), ("AST", "TEC. ADM", None))
+
+        # 15b. Classificação completa + painel: resenha mista fica sem grupo, resenha pura vira AST, total geral intacto
+        self.carregar_e_classificar(
+            "d01", "2026-10-09",
+            _resenha_progressao(
+                "130/2099",
+                [
+                    "SAD-PSE-2099/96301 963001-1 SERVIDOR MISTO UM TECNICO ADMINISTRATIVO A B",
+                    "SAD-PSE-2099/96302 963002-2 SERVIDOR MISTO DOIS PROFESSOR DE EDUCACAO BAS B C",
+                ],
+                grupo="TEC. ADM.",
+            ),
+        )
+        self.carregar_e_classificar(
+            "d02", "2026-10-09",
+            _resenha_progressao(
+                "131/2099",
+                [
+                    "SAD-PSE-2099/96303 963003-3 SERVIDOR PURO UM TECNICO ADMINISTRATIVO A B",
+                    "SAD-PSE-2099/96304 963004-4 SERVIDOR PURO DOIS TECNICO ADMINISTRATIVO B C",
+                ],
+                grupo="TEC. ADM.",
+            ),
+        )
+        self.conferir_todas_decisoes()
+
+        p, proj = self.painel_e_proj()
+        _assert_particoes_exatas(self, p, proj)
+        self.assertEqual(p["indicadores"]["decisoes"], 4)  # contagem geral preservada (Delta = 0)
+        por_grupo = {g["grupo"]: g["total"] for g in p["series"]["por_grupo"]}
+        self.assertEqual(por_grupo, {"AST": 2, "NAO_INFORMADO": 2})
+        atos_map = {
+            r["numero"]: (r["grupo"], r["grupo_expressao"], json.loads(r["pendencias"] or "[]"))
+            for r in self.banco.con.execute("SELECT numero, grupo, grupo_expressao, pendencias FROM ato")
+        }
+        self.assertIsNone(atos_map["130/2099"][0])
+        self.assertEqual(atos_map["130/2099"][1], "TEC. ADM")
+        self.assertTrue(any("TEC. ADM" in x for x in atos_map["130/2099"][2]))
+        self.assertEqual(atos_map["131/2099"][0], "AST")
+        self.assertEqual(atos_map["131/2099"][1], "TEC. ADM")
+
 
 if __name__ == "__main__":
     unittest.main()

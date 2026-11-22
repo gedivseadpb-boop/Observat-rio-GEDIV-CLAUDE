@@ -13,10 +13,10 @@ import hashlib
 import json
 import re
 
-from ..gerencias.gediv import catalogo as C
+from ..gerencias.gediv import catalogo as C, processo as gediv_processo
 from ..nucleo.banco import Banco, agora, chave_decisao, normalizar_processo, normalizar_texto
 
-CONFERIR, REJEITAR, REABRIR, VINCULAR = "CONFERIR", "REJEITAR", "REABRIR", "VINCULAR"
+CONFERIR, REJEITAR, REABRIR, VINCULAR, EXTERNO = "CONFERIR", "REJEITAR", "REABRIR", "VINCULAR", "EXTERNO"
 ACEITAR, MANTER = "ACEITAR", "MANTER"
 _ESTADO = {CONFERIR: "CONFERIDO", REJEITAR: "REJEITADO", REABRIR: "PENDENTE"}
 CAMPOS_CORRIGIVEIS = ("processo", "servidor", "matricula", "lotacao", "cargo", "resultado")
@@ -279,6 +279,34 @@ def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justi
             raise Recusada("o vínculo só pode apontar para um ato original da mesma gerência")
         if ato["data_publicacao"] and evento["data_publicacao"] and ato["data_publicacao"] > evento["data_publicacao"]:
             raise Recusada("o ato original não pode ser posterior ao evento que o altera")
+
+        # Compatibilidade temática e temporal também na validação manual (não apenas na sugestão automática)
+        ato_mod = (
+            banco.con.execute("SELECT * FROM ato WHERE id = ?", (evento["ato_id"],)).fetchone()
+            if evento["ato_id"] else None
+        )
+        eixo_ev = gediv_processo.eixo_do_evento(evento, ato_mod)
+        if eixo_ev == "OUTROS_ABONO":
+            raise Recusada(
+                "incompatibilidade temática: evento de Abono de Permanência (fora dos eixos contabilizados) "
+                "não pode ser vinculado a ato de Progressão ou Tempo de Serviço; registre-o como EXTERNO"
+            )
+        if eixo_ev is not None and ato["eixo"] and ato["eixo"] != eixo_ev:
+            raise Recusada(
+                f"incompatibilidade temática: evento de {eixo_ev} não pode ser vinculado a ato original de {ato['eixo']}"
+            )
+        citadas = json.loads(evento["publicacoes_citadas"] or "[]")
+        if citadas and all(d < gediv_processo.INICIO_DA_BASE for d in citadas):
+            raise Recusada(
+                "evento refere-se a ato comprovadamente anterior ao início da base; "
+                "registre-o separadamente como EXTERNO sem vincular a decisões do acervo"
+            )
+        if citadas and ato["data_publicacao"] and ato["data_publicacao"] not in set(citadas):
+            raise Recusada(
+                f"data de publicação do ato original ({ato['data_publicacao']}) incompatível com "
+                f"a(s) edição(ões) citada(s) no evento ({', '.join(citadas)})"
+            )
+
         if res_novo_limpo is not None and res_novo_limpo not in C.RESULTADOS:
             raise Recusada("resultado_novo inválido para retificação")
         if campos_limpos:
@@ -294,7 +322,7 @@ def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justi
         )
         marcas_atos = ",".join("?" * len(atos_mesmo_logico))
         decs_ato = banco.con.execute(
-            f"SELECT id, processo FROM decisao WHERE ato_id IN ({marcas_atos}) AND vigente = 1",
+            f"SELECT id, processo, matricula, servidor FROM decisao WHERE ato_id IN ({marcas_atos}) AND vigente = 1",
             atos_mesmo_logico,
         ).fetchall()
         ids_validos_ato = {d["id"] for d in decs_ato}
@@ -307,16 +335,18 @@ def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justi
             if estranhas:
                 raise Recusada("decisão informada não pertence ao ato original informado")
         else:
-            # Sem lista explícita: resolve por processos citados no evento, sem presumir todo o ato.
-            procs_cit = {
-                p for raw in json.loads(evento["processos_citados"] or "[]")
-                if (p := normalizar_processo(raw))
-            }
-            if procs_cit:
-                decisoes_alvo = [
-                    d["id"] for d in decs_ato
-                    if normalizar_processo(d["processo"]) in procs_cit
-                ]
+            # Sem lista explícita: resolve por referências documentais exigindo identificação inequívoca
+            # em processos coletivos (nunca vincula todas as decisões de um processo coletivo por suposição).
+            decisoes_alvo, erro_ambig = gediv_processo.resolver_decisoes_por_referencias(evento, decs_ato)
+            if erro_ambig:
+                raise Recusada(erro_ambig)
+
+        if evento["tipo"] == C.SEM_EFEITO and not decisoes_alvo:
+            raise Recusada(
+                "evento 'Tornado sem efeito' sobre ato do acervo exige identificar ao menos uma decisão atingida "
+                "(informe decisoes_ids ou referência documental inequívoca); para atos anteriores ou externos ao "
+                "universo contabilizado, utilize a decisão EXTERNO"
+            )
         if (res_novo_limpo is not None or campos_limpos) and not decisoes_alvo:
             raise Recusada("retificação com dado corrigido exige identificar a(s) decisão(ões) individual(is) atingida(s)")
         posterior = {
@@ -326,6 +356,10 @@ def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justi
             "resultado_novo": res_novo_limpo,
             "campos_corrigidos": campos_limpos or None,
         }
+    elif decisao == EXTERNO:
+        if not confirma_fonte:
+            raise Recusada("para registrar evento como anterior/externo ao acervo é preciso declarar que a fonte oficial foi consultada")
+        posterior = {"estado": "FORA_DO_ACERVO", "ato_original_id": None, "decisoes": []}
     elif decisao == REJEITAR:
         posterior = {"estado": "REJEITADO", "ato_original_id": None, "decisoes": []}
     elif decisao == REABRIR:

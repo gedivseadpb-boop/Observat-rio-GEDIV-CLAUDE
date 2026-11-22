@@ -24,7 +24,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-from ..gerencias.gediv import catalogo as C
+from ..gerencias.gediv import catalogo as C, processo as gediv_processo
 from ..nucleo.banco import Banco, agora, chave_processo, normalizar_matricula, normalizar_processo
 from . import documental, projecao
 
@@ -593,6 +593,7 @@ def _aplicar_protecao_publica(
 
     apoio_nulo = {
         "eventos_de_alteracao": None, "eventos_por_tipo": None, "eventos_sem_vinculo": None,
+        "eventos_fora_do_acervo": None,
         "decisoes_pendentes": None, "decisoes_conferidas": None, "decisoes_excluidas_integridade": None,
         "decisoes_conferidas_com_conflito": None, "decisoes_rejeitadas": None,
         "conflitos_abertos": None, "classificacoes_desatualizadas": None, "vinculo_nao_expresso_pendente": None,
@@ -953,15 +954,12 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
                 if links:
                     atingidas = {lk["decisao_id"] for lk in links}
                 else:
-                    procs_cit = {
-                        p for raw in json.loads(e["processos_citados"] or "[]")
-                        if (p := normalizar_processo(raw))
-                    }
-                    if procs_cit:
-                        atingidas = {
-                            l["id"] for l in decs_por_logico.get(alvo_log, [])
-                            if normalizar_processo(l.get("processo")) in procs_cit
-                        }
+                    # Fallback seguro (bancos legados v8): exige resolução inequívoca sem presumir processos coletivos.
+                    resolv, erro_ambig = gediv_processo.resolver_decisoes_por_referencias(
+                        e, decs_por_logico.get(alvo_log, [])
+                    )
+                    if not erro_ambig and resolv:
+                        atingidas = set(resolv)
                 decisoes_sem_efeito_por_evento[ev_id] = atingidas
                 decisoes_desconstituidas_ids |= atingidas
             elif e["tipo"] in (C.RETIFICACAO, C.CORRECAO) and links:
@@ -1026,7 +1024,11 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
     ret_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.RETIFICACAO}
     cor_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.CORRECAO}
     refeitos_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] in C.TIPOS_REFEITO}
-    sem_efeito_logicos = {logico.get(e["ato_original_id"], e["ato_original_id"]) for e in validos if e["tipo"] == C.SEM_EFEITO}
+    sem_efeito_logicos = {
+        logico.get(e["ato_original_id"], e["ato_original_id"])
+        for e in validos
+        if e["tipo"] == C.SEM_EFEITO and decisoes_sem_efeito_por_evento.get(e["id"])
+    }
     decisoes_se_periodo = {did for e in validos if e["tipo"] == C.SEM_EFEITO for did in decisoes_sem_efeito_por_evento.get(e["id"], ())}
     decisoes_ret_periodo = {did for e in validos if e["tipo"] in (C.RETIFICACAO, C.CORRECAO) for did in decisoes_retificadas_por_evento.get(e["id"], ())}
 
@@ -1055,11 +1057,10 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
     elif cartao == "refeitos":
         recorte = [l for l in dim if l["ato_id"] in refeitos and l["natureza"] == C.ORIGINAL] if conferido else []
     elif cartao == "sem_efeito":
-        if conferido:
-            recorte = ([l for l in desconstituidas_lista if l["id"] in decisoes_se_periodo and l["natureza"] == C.ORIGINAL]
-                       if decisoes_se_periodo else [l for l in dim if l["ato_id"] in sem_efeito and l["natureza"] == C.ORIGINAL])
-        else:
-            recorte = []
+        recorte = (
+            [l for l in desconstituidas_lista if l["id"] in decisoes_se_periodo and l["natureza"] == C.ORIGINAL]
+            if conferido else []
+        )
     else:
         recorte = originais
 
@@ -1133,6 +1134,7 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
         "decisoes_retificadas": len(decisoes_ret_periodo) if conferido else None,
         "decisoes_sem_efeito": len(decisoes_se_periodo) if conferido else None,
         "eventos_pendentes": sum(e["estado"] in ("PENDENTE_VINCULACAO", "SUGERIDO") for e in eventos),
+        "eventos_fora_do_acervo": sum(e["estado"] == "FORA_DO_ACERVO" for e in eventos),
     }
     series = {
         "unidades": unidades,
@@ -1232,6 +1234,7 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
             "eventos_de_alteracao": len([e for e in validos if e["tipo"] in C.TIPOS_REFEITO]) if conferido else None,
             "eventos_por_tipo": {t: sum(e["tipo"] == t for e in validos) for t in C.ALTERACOES} if conferido else None,
             "eventos_sem_vinculo": sum(e["estado"] in ("PENDENTE_VINCULACAO", "SUGERIDO") for e in eventos),
+            "eventos_fora_do_acervo": sum(e["estado"] == "FORA_DO_ACERVO" for e in eventos),
             "decisoes_pendentes": um("SELECT COUNT(*) FROM decisao WHERE validacao = 'PENDENTE' AND vigente = 1"),
             "decisoes_conferidas": conferidas_vigentes,
             "decisoes_excluidas_integridade": excluidas_integridade,

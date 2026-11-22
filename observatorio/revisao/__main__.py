@@ -24,7 +24,7 @@ def main(argv=None) -> int:
     ap.add_argument("comando", choices=["fila", "ato", "decisao", "evento", "trilha"])
     ap.add_argument("id", nargs="?")
     ap.add_argument("--dados", default="dados")
-    ap.add_argument("--decisao", choices=[servico.CONFERIR, servico.REJEITAR, servico.REABRIR, servico.VINCULAR])
+    ap.add_argument("--decisao", choices=[servico.CONFERIR, servico.REJEITAR, servico.REABRIR, servico.VINCULAR, servico.EXTERNO])
     ap.add_argument("--responsavel", default="")
     ap.add_argument("--justificativa", default="")
     ap.add_argument("--ato-original")

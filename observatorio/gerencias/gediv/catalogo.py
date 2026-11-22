@@ -247,11 +247,9 @@ def avaliar_grupo(preambulo_normalizado: str, *, cargos=None) -> tuple[str | Non
     if m_tec:
         exp_lit = m_tec.group(0)
         outros = codigos_presentes - {"AST"}
-        cargo_incomp = (
-            bool(cargos_norm)
-            and any(_PAT_CARGO_INCOMPATIVEL_AST.search(c) for c in cargos_norm)
-            and not any(_PAT_CARGO_COMPATIVEL_AST.search(c) for c in cargos_norm)
-        )
+        # Qualquer cargo incompatível na resenha (mesmo coexistindo com cargos compatíveis) impede
+        # a atribuição automática de AST e encaminha o ato para conferência, preservando o total geral.
+        cargo_incomp = bool(cargos_norm) and any(_PAT_CARGO_INCOMPATIVEL_AST.search(c) for c in cargos_norm)
         if outros or cargo_incomp:
             return None, exp_lit, EXPRESSOES_SEM_GRUPO[0][2]
         return "AST", exp_lit, None

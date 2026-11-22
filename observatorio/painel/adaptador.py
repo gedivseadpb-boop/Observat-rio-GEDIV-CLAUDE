@@ -448,7 +448,12 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
     for e in (painel_resp.get("eventos") or []):
         url_of = str(e.get("url_oficial") or "").split("#")[0]
         est = e.get("estado") or "PENDENTE_VINCULACAO"
-        val_ev = "conferido" if est == "VALIDADO" else "rejeitado" if est == "REJEITADO" else "pendente"
+        val_ev = (
+            "conferido" if est == "VALIDADO"
+            else "rejeitado" if est == "REJEITADO"
+            else "externo" if est == "FORA_DO_ACERVO"
+            else "pendente"
+        )
         events_conv.append({
             "id": e.get("id"),
             "date": e.get("data_publicacao") or "",

@@ -6,10 +6,12 @@ revisão humana (observatorio.revisao) pode torná-lo CONFERIDO.
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 
-from ...nucleo.banco import Banco, normalizar_processo
+from ...nucleo.banco import Banco, normalizar_matricula, normalizar_processo, normalizar_texto
 from . import catalogo as C
-from .classificador import _tema, classificar
+from .classificador import PAT_MATRICULA, PAT_PROCESSO, PAT_PROCESSO_ANTIGO, _tema, classificar
 
 GERENCIA = "GEDIV"
 INICIO_DA_BASE = "2026-01-01"     # primeira data coberta pela coleta histórica
@@ -50,7 +52,7 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
     return resumo
 
 
-def _eixo_do_evento(evento, ato_mod) -> str | None:
+def eixo_do_evento(evento, ato_mod=None) -> str | None:
     """Identifica o eixo temático esperado de um evento modificador para evitar colisões entre séries
     (ex.: Resenha 353/2026 de Abono de Permanência vs. Resenha 353/2026 de Progressão GAJ)."""
     if ato_mod is not None and ato_mod["eixo"]:
@@ -64,6 +66,98 @@ def _eixo_do_evento(evento, ato_mod) -> str | None:
     if "ABONO DE PERMANENCIA" in texto_norm or "EMENDA CONSTITUCIONAL FEDERAL 103/2019" in texto_norm or "EC 103/2019" in texto_norm:
         return "OUTROS_ABONO"
     return None
+
+
+_eixo_do_evento = eixo_do_evento
+
+
+def extrair_matriculas_citadas(texto: str) -> set[str]:
+    """Extrai matrículas válidas citadas no texto do evento, removendo antes números de processo
+    (inclusive processos legados no formato 999.999-9) para evitar falsas correspondências."""
+    norm = C.normalizar(texto or "")
+    if not norm:
+        return set()
+    limpo = PAT_PROCESSO.sub(" ", norm)
+    limpo = PAT_PROCESSO_ANTIGO.sub(" ", limpo)
+    return {m for raw in PAT_MATRICULA.findall(limpo) if (m := normalizar_matricula(raw))}
+
+
+def _nome_citado(servidor: str | None, texto_ev_norm: str) -> bool:
+    nome = normalizar_texto(servidor)
+    if not nome or len(nome.split()) < 2 or len(nome) < 8:
+        return False
+    return re.search(rf"(?<![A-Z0-9]){re.escape(nome)}(?![A-Z0-9])", texto_ev_norm) is not None
+
+
+def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str | None]:
+    """Resolve as decisões individuais atingidas por um evento a partir das referências documentais.
+
+    Regra para processos coletivos: quando o processo citado contém múltiplas decisões no ato original,
+    NUNCA vincula automaticamente todas as decisões do processo coletivo. Exige identificação individual
+    inequívoca (matrícula e/ou nome completo compatível e sem contradição). Havendo ambiguidade, devolve
+    `([], motivo)` para que o evento permaneça pendente até identificação explícita (`decisoes_ids`)."""
+    procs_cit = list(dict.fromkeys(
+        p for raw in json.loads(evento["processos_citados"] or "[]")
+        if (p := normalizar_processo(raw))
+    ))
+    texto_ev = evento["texto"] or ""
+    texto_ev_norm = normalizar_texto(texto_ev)
+    mats_cit = extrair_matriculas_citadas(texto_ev)
+    resolvidas: list[str] = []
+
+    if procs_cit:
+        for proc_norm in procs_cit:
+            cands = [d for d in decs_ato if normalizar_processo(d["processo"]) == proc_norm]
+            if not cands:
+                continue
+            if len(cands) == 1:
+                unico = cands[0]
+                m_unico = normalizar_matricula(unico["matricula"])
+                # Se o evento cita apenas este processo e uma matrícula explícita divergente, recusa por ambiguidade.
+                if len(procs_cit) == 1 and mats_cit and m_unico and m_unico not in mats_cit:
+                    return [], "matrícula citada no evento diverge da decisão do processo informado; vínculo mantido pendente"
+                resolvidas.append(unico["id"])
+                continue
+
+            # Processo coletivo (> 1 decisão no mesmo processo): exigir identificação individual inequívoca.
+            por_mat = [d for d in cands if (m := normalizar_matricula(d["matricula"])) and m in mats_cit]
+            por_nome = [d for d in cands if _nome_citado(d["servidor"], texto_ev_norm)]
+
+            if por_mat:
+                if por_nome and {d["id"] for d in por_mat} != {d["id"] for d in por_nome}:
+                    return [], "referências individuais (matrícula e servidor) divergem no processo coletivo; informe decisoes_ids explicitamente"
+                cont_m = Counter(normalizar_matricula(d["matricula"]) for d in por_mat)
+                if any(v > 1 for v in cont_m.values()):
+                    return [], "mais de uma decisão compartilha a mesma matrícula no processo coletivo; informe decisoes_ids explicitamente"
+                resolvidas.extend(d["id"] for d in por_mat)
+            elif not mats_cit and por_nome:
+                cont_n = Counter(normalizar_texto(d["servidor"]) for d in por_nome)
+                if any(v > 1 for v in cont_n.values()):
+                    return [], "mais de uma decisão compartilha o mesmo nome no processo coletivo; informe decisoes_ids explicitamente"
+                resolvidas.extend(d["id"] for d in por_nome)
+            else:
+                return [], (
+                    "processo coletivo com múltiplos servidores exige identificação individual inequívoca "
+                    "(matrícula/referência documental ou decisoes_ids explícito); evento mantido pendente"
+                )
+    else:
+        # Sem processo citado: só resolve se matrícula ou nome identificar inequivocamente no ato
+        por_mat = [d for d in decs_ato if (m := normalizar_matricula(d["matricula"])) and m in mats_cit]
+        por_nome = [d for d in decs_ato if _nome_citado(d["servidor"], texto_ev_norm)]
+        if por_mat:
+            if por_nome and {d["id"] for d in por_mat} != {d["id"] for d in por_nome}:
+                return [], "matrícula e servidor citados no evento divergem nas decisões do ato; informe decisoes_ids explicitamente"
+            cont_m = Counter(normalizar_matricula(d["matricula"]) for d in por_mat)
+            if any(v > 1 for v in cont_m.values()):
+                return [], "matrícula citada corresponde a múltiplas decisões no ato; informe decisoes_ids explicitamente"
+            resolvidas.extend(d["id"] for d in por_mat)
+        elif not mats_cit and por_nome:
+            cont_n = Counter(normalizar_texto(d["servidor"]) for d in por_nome)
+            if any(v > 1 for v in cont_n.values()):
+                return [], "nome citado corresponde a múltiplas decisões no ato; informe decisoes_ids explicitamente"
+            resolvidas.extend(d["id"] for d in por_nome)
+
+    return list(dict.fromkeys(resolvidas)), None
 
 
 def _ato_compativel_com_evento(banco: Banco, evento, ato_cand, ato_mod, eixo_ev: str | None,
