@@ -313,6 +313,22 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
     series_b = painel_resp.get("series") or {}
     diag_vr = meta_b.get("versao_regras_diagnostico") or cob_b.get("versao_regras_diagnostico") or {}
     individual = bool(meta_b.get("dados_individuais"))
+    if not individual and isinstance(diag_vr, dict) and diag_vr:
+        incomp_pub = bool(diag_vr.get("incompativel"))
+        diag_vr = {
+            "versao_codigo": diag_vr.get("versao_codigo") or C.VERSAO_REGRAS,
+            "versoes_no_banco": [],
+            "edicoes_por_versao": None,
+            "compativel": not incomp_pub,
+            "incompativel": incomp_pub,
+            "edicoes_compativeis": None,
+            "edicoes_incompativeis": None,
+            "decisoes_afetadas": None,
+            "mensagem": (
+                "Incompatibilidade técnica de versão de regras detectada; os indicadores aguardam alinhamento interno."
+                if incomp_pub else None
+            ),
+        }
 
     # 1. Somente decisões primárias dos dois eixos (PROGRESSAO e TEMPO_SERVICO) entram em `rows`
     rows_conv = [backend_para_frontend_linha(l) for l in (painel_resp.get("linhas") or [])]

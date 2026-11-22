@@ -357,8 +357,8 @@ def normalizar_processo(valor) -> str | None:
 
 def chave_processo(processo, orgao=None, serie=None) -> str | None:
     """Chave de identidade de processo administrativo que evita colisões entre órgãos e séries.
-    - Processos com prefixo institucional explícito (ex.: SAD-PSE-2026/00123 vs SEE-PRC-2026/00123 vs
-      SDS-OFI-2026/00123) já carregam órgão e série distintos no próprio identificador normalizado.
+    - Processos com prefixo institucional explícito (ex.: SAD-PSE-2099/90123 vs SEE-PRC-2099/90123 vs
+      SDS-OFI-2099/90123) já carregam órgão e série distintos no próprio identificador normalizado.
     - Números legados ou sem prefixo institucional são qualificados por órgão/série quando disponíveis."""
     proc = normalizar_processo(processo)
     if not proc:

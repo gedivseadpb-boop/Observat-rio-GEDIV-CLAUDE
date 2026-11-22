@@ -194,9 +194,13 @@ def _no_periodo(data, f: dict) -> bool:
     return bool(data) and (not f["inicio"] or data >= f["inicio"]) and (not f["fim"] or data <= f["fim"])
 
 
-def diagnostico_versao_regras(banco: Banco) -> dict:
+def diagnostico_versao_regras(banco: Banco, perfil: str = PUBLICO) -> dict:
     """Inspeciona explicitamente a compatibilidade entre `C.VERSAO_REGRAS` do código e as versões
-    gravadas em `classificacao`, evitando que uma incompatibilidade produza silenciosamente um painel vazio."""
+    gravadas em `classificacao`, evitando que uma incompatibilidade produza silenciosamente um painel vazio.
+
+    Seguro por padrão (`perfil=PUBLICO`): no perfil público devolve apenas sinalização booleana e mensagem
+    neutra, sem expor contagens exatas de decisões (inclusive pendentes) nem telemetria interna por versão.
+    O diagnóstico técnico completo é reservado exclusivamente ao perfil `GERENCIA_PERFIL`."""
     linhas_v = banco.con.execute(
         "SELECT versao_regras, COUNT(*) AS n FROM classificacao WHERE gerencia = 'GEDIV' "
         "GROUP BY versao_regras ORDER BY versao_regras"
@@ -205,9 +209,25 @@ def diagnostico_versao_regras(banco: Banco) -> dict:
     versoes_banco = sorted(por_versao)
     edicoes_comp = por_versao.get(C.VERSAO_REGRAS, 0)
     edicoes_incomp = sum(n for v, n in por_versao.items() if v != C.VERSAO_REGRAS)
+    incompativel = edicoes_incomp > 0
+    if perfil != GERENCIA_PERFIL:
+        return {
+            "versao_codigo": C.VERSAO_REGRAS,
+            "versoes_no_banco": [],
+            "edicoes_por_versao": None,
+            "compativel": not incompativel,
+            "incompativel": incompativel,
+            "edicoes_compativeis": None,
+            "edicoes_incompativeis": None,
+            "decisoes_afetadas": None,
+            "mensagem": (
+                "Incompatibilidade técnica de versão de regras detectada; os indicadores aguardam alinhamento interno."
+                if incompativel else None
+            ),
+        }
     versoes_incomp = [v for v in versoes_banco if v != C.VERSAO_REGRAS]
     decisoes_afetadas = 0
-    if edicoes_incomp > 0:
+    if incompativel:
         decisoes_afetadas = int(
             banco.con.execute(
                 "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id "
@@ -218,7 +238,7 @@ def diagnostico_versao_regras(banco: Banco) -> dict:
             ).fetchone()[0]
         )
     mensagem = None
-    if edicoes_incomp > 0:
+    if incompativel:
         mensagem = (
             f"Incompatibilidade de versão de regras: o código exige '{C.VERSAO_REGRAS}', mas o banco contém "
             f"{', '.join(repr(v) for v in versoes_incomp)} em {edicoes_incomp} edição(ões) "
@@ -228,8 +248,8 @@ def diagnostico_versao_regras(banco: Banco) -> dict:
         "versao_codigo": C.VERSAO_REGRAS,
         "versoes_no_banco": versoes_banco,
         "edicoes_por_versao": por_versao,
-        "compativel": edicoes_incomp == 0,
-        "incompativel": edicoes_incomp > 0,
+        "compativel": not incompativel,
+        "incompativel": incompativel,
         "edicoes_compativeis": edicoes_comp,
         "edicoes_incompativeis": edicoes_incomp,
         "decisoes_afetadas": decisoes_afetadas,
@@ -237,12 +257,12 @@ def diagnostico_versao_regras(banco: Banco) -> dict:
     }
 
 
-def cobertura(banco: Banco) -> dict:
+def cobertura(banco: Banco, perfil: str = PUBLICO) -> dict:
     um = lambda sql: banco.con.execute(sql).fetchone()[0]
     datas = banco.con.execute(
         "SELECT MIN(data_publicacao), MAX(data_publicacao) FROM publicacao WHERE sha256 IS NOT NULL").fetchone()
     edicoes = um("SELECT COUNT(*) FROM arquivo")
-    diag_vr = diagnostico_versao_regras(banco)
+    diag_vr = diagnostico_versao_regras(banco, perfil=perfil)
     parecer = ("Nenhuma edição carregada." if not edicoes else
                f"Cobertura parcial: {edicoes} edição(ões) no acervo. O inventário completo do período não foi validado; "
                "ausência de registro nesta base não comprova ausência de publicação.")
@@ -471,13 +491,15 @@ def _aplicar_protecao_publica(
         itens_m = meses_map[mes]
         p_m = _pessoas_distintas(itens_m)
         t_m = _proteger_inteiro(len(itens_m), p_m)
-        v_lin = [x for x in itens_m if x["modalidade"] == C.VERTICAL]
-        h_lin = [x for x in itens_m if x["modalidade"] == C.HORIZONTAL]
+        v_lin = [x for x in itens_m if x["eixo"] == C.PROGRESSAO and x["modalidade"] == C.VERTICAL]
+        h_lin = [x for x in itens_m if x["eixo"] == C.PROGRESSAO and x["modalidade"] == C.HORIZONTAL]
+        sm_lin = [x for x in itens_m if x["eixo"] == C.PROGRESSAO and x["modalidade"] is None]
         tm_lin = [x for x in itens_m if x["eixo"] == C.TEMPO]
         v_p = _proteger_inteiro(len(v_lin), _pessoas_distintas(v_lin))
         h_p = _proteger_inteiro(len(h_lin), _pessoas_distintas(h_lin))
+        sm_p = _proteger_inteiro(len(sm_lin), _pessoas_distintas(sm_lin))
         tm_p = _proteger_inteiro(len(tm_lin), _pessoas_distintas(tm_lin))
-        if t_m is None or any(len(s) > 0 and sp is None for s, sp in ((v_lin, v_p), (h_lin, h_p), (tm_lin, tm_p))):
+        if t_m is None or any(len(s) > 0 and sp is None for s, sp in ((v_lin, v_p), (h_lin, h_p), (sm_lin, sm_p), (tm_lin, tm_p))):
             v_p = h_p = tm_p = None
         por_data_todos.append({"data": mes, "vertical": v_p, "horizontal": h_p, "tempo": tm_p, "total": t_m})
     _suprimir_secundaria(por_data_todos, len(meses_map))
@@ -545,8 +567,13 @@ def _aplicar_protecao_publica(
         sit = None if cont["total"] else ("suprimido por privacidade (< 5)" if lins else (
             "sem ocorrência confirmada no período verificado" if cob["completa"] else "cobertura pendente"))
         por_sub.append({"codigo": s.codigo, "nome": s.nome, **cont, "situacao": sit})
-    _suprimir_secundaria(por_sub, pos_sub)
     tempo_sem_sub_pub = _contar_publico(tempo_sem_sub)
+    if tempo_sem_sub:
+        pos_sub += 1
+    _suprimir_secundaria(por_sub + [tempo_sem_sub_pub], pos_sub)
+    for item in por_sub:
+        if item["total"] is None and item.get("situacao") is None:
+            item["situacao"] = "suprimido por privacidade (< 5)"
 
     por_cond, pos_cond = [], 0
     for c, n in C.CONDICOES.items():
@@ -708,6 +735,10 @@ def validar_snapshot_publico(snap: dict) -> dict:
     series = p_pub.get("series")
     if not isinstance(series, dict):
         raise ValueError("snapshot público inválido: bloco 'series' ausente")
+    for chave_priv_serie in ("unidades", "eventos_detalhados", "outras_publicacoes_resumo"):
+        if chave_priv_serie in series:
+            raise ValueError(f"snapshot público inválido: bloco privado series.{chave_priv_serie} não permitido")
+
     _validar_inteiro_publico(series.get("progressao_sem_modalidade"), "series.progressao_sem_modalidade")
     for pt in series.get("por_data") or []:
         dt_val = str(pt.get("data") or "")
@@ -726,28 +757,46 @@ def validar_snapshot_publico(snap: dict) -> dict:
             if nome_serie == "por_nivel_vertical" and item.get("transicoes") not in (None, []):
                 raise ValueError("snapshot público inválido: transições detalhadas expostas em por_nivel_vertical")
 
+    sub_itens_val = list(series.get("por_subcategoria") or [])
     if "tempo_sem_subcategoria" in series:
         ts_sem = series.get("tempo_sem_subcategoria") or {}
         for campo in ("total", "deferido", "indeferido", "nao_informado"):
             if campo in ts_sem:
                 _validar_inteiro_publico(ts_sem.get(campo), f"tempo_sem_subcategoria.{campo}")
+        if (ts_sem.get("deferido") is None) != (ts_sem.get("indeferido") is None):
+            raise ValueError("snapshot público inválido: supressão complementar violada em tempo_sem_subcategoria")
+        if ts_sem.get("total") is None and any(ts_sem.get(c) is not None for c in ("deferido", "indeferido", "nao_informado")):
+            raise ValueError("snapshot público inválido: subcontagem exposta com total suprimido em tempo_sem_subcategoria")
+        sub_itens_val.append(ts_sem)
+    suprimidas_sub = sum(1 for x in sub_itens_val if x.get("total") is None)
+    visiveis_sub = sum(1 for x in sub_itens_val if (x.get("total") or 0) > 0)
+    if suprimidas_sub == 1 and visiveis_sub > 0:
+        raise ValueError("snapshot público inválido: supressão secundária violada em subcategorias de Tempo de Serviço")
+
     for item in series.get("por_condicao") or []:
         _validar_inteiro_publico(item.get("total"), "por_condicao.total")
     res_nv = series.get("resumo_nivel_vertical") or {}
     for campo in ("total_progressao", "total_horizontal", "total_vertical", "classificados", "nao_identificados"):
         _validar_inteiro_publico(res_nv.get(campo), f"resumo_nivel_vertical.{campo}")
 
-    if d_pub.get("rows") != [] or d_pub.get("events") != []:
-        raise ValueError("snapshot público inválido: data.rows e data.events devem estar vazios")
+    if d_pub.get("rows") != [] or d_pub.get("events") != [] or d_pub.get("otherPublications") not in (None, []):
+        raise ValueError("snapshot público inválido: data.rows, data.events e data.otherPublications devem estar vazios")
+    if (d_pub.get("otherPublicationsSummary") or {}).get("total", 0) != 0:
+        raise ValueError("snapshot público inválido: data.otherPublicationsSummary.total deve ser zero")
     meta_d = d_pub.get("meta") or {}
-    if any(meta_d.get(c) != 0 for c in ("pendentes", "rejeitados", "eventosPendentes")):
+    if any(meta_d.get(c) != 0 for c in ("pendentes", "rejeitados", "eventosPendentes")) or meta_d.get("outrasPublicacoes", 0) != 0:
         raise ValueError("snapshot público inválido: contadores de fila não zerados em data.meta")
     dash = d_pub.get("dashboard") or {}
     counts = dash.get("counts") or {}
     if dash.get("defaultScope") != "conferido" or any(
         counts.get(c) != 0 for c in ("received", "pending", "confirmed", "rejected", "unlinkedEvents")
-    ):
+    ) or counts.get("otherPublications", 0) != 0:
         raise ValueError("snapshot público inválido: contadores de data.dashboard.counts inconsistentes")
+    for nome_v, visao_v in (dash.get("views") or {}).items():
+        if visao_v.get("rowIds"):
+            raise ValueError(f"snapshot público inválido: data.dashboard.views.{nome_v}.rowIds deve estar vazio")
+        if (visao_v.get("metrics") or {}).get("otherPublications", 0) != 0:
+            raise ValueError(f"snapshot público inválido: data.dashboard.views.{nome_v}.metrics.otherPublications deve ser zero")
     back = d_pub.get("backend") or {}
     if (
         back.get("autenticado") is not False
@@ -759,6 +808,31 @@ def validar_snapshot_publico(snap: dict) -> dict:
         or any(v is not None for v in (back.get("apoio") or {}).values())
     ):
         raise ValueError("snapshot público inválido: bloco data.backend contém dados restritos ou divergentes")
+
+    # Garantir que o diagnóstico de versão de regras no snapshot público nunca exponha contagens exatas/pendentes
+    diags_publicos = (
+        ("painel.meta.versao_regras_diagnostico", meta_p.get("versao_regras_diagnostico")),
+        ("painel.meta.cobertura.versao_regras_diagnostico", (meta_p.get("cobertura") or {}).get("versao_regras_diagnostico")),
+        ("data.meta.versaoRegrasDiagnostico", meta_d.get("versaoRegrasDiagnostico")),
+        ("data.backend.versaoRegrasDiagnostico", back.get("versaoRegrasDiagnostico")),
+    )
+    for rot_d, diag_d in diags_publicos:
+        if not isinstance(diag_d, dict) or not diag_d:
+            continue
+        for campo_proib in ("decisoes_afetadas", "edicoes_por_versao", "edicoes_compativeis", "edicoes_incompativeis"):
+            if diag_d.get(campo_proib) is not None:
+                raise ValueError(f"snapshot público inválido: {rot_d}.{campo_proib} deve ser nulo no perfil público")
+        if diag_d.get("versoes_no_banco"):
+            raise ValueError(f"snapshot público inválido: {rot_d}.versoes_no_banco deve ser vazio no perfil público")
+        msg_d = str(diag_d.get("mensagem") or "")
+        if re.search(r"\d+\s+decis", msg_d, re.I):
+            raise ValueError(f"snapshot público inválido: {rot_d}.mensagem expõe contagem de decisões")
+    for rot_txt, txt_val in (
+        ("painel.meta.cobertura.parecer", (meta_p.get("cobertura") or {}).get("parecer")),
+        ("data.meta.coverage", meta_d.get("coverage")),
+    ):
+        if re.search(r"\d+\s+decis", str(txt_val or ""), re.I):
+            raise ValueError(f"snapshot público inválido: {rot_txt} expõe contagem de decisões")
 
     bruto_json = json.dumps(snap, ensure_ascii=False)
     if (
@@ -996,7 +1070,7 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
 
     prog = [l for l in recorte if l["eixo"] == C.PROGRESSAO]
     tempo = [l for l in recorte if l["eixo"] == C.TEMPO]
-    cob = cobertura(banco)
+    cob = cobertura(banco, perfil=(PUBLICO if restringir_publico else perfil))
     diag_vr = cob["versao_regras_diagnostico"]
     if restringir_publico:
         meta_base = {

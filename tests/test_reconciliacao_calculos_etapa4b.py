@@ -6,15 +6,19 @@ responsáveis em caso de divergência.
 """
 from __future__ import annotations
 
+import copy
 import json
 import tempfile
+import threading
 import unittest
+import urllib.request
 from pathlib import Path
 
 from observatorio.gerencias.gediv import catalogo as C, classificador as K, processo
 from observatorio.nucleo import banco as B
 from observatorio.painel import adaptador, indicadores
 from observatorio.revisao import servico
+from observatorio.web.servidor import criar_servidor
 from tests import test_painel as TP
 
 REV = "Revisora Fictícia GEDIV"
@@ -195,13 +199,13 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
     # 1. Portaria que desconstitui 2 de 20 decisões
     def test_01_portaria_desconstitui_2_de_20_decisoes(self):
         linhas20 = [
-            f"SAD-PSE-2026/{10001 + i} {100001 + i}-1 SERVIDOR FICTICIO {i:02d} PROFESSOR A B"
+            f"SAD-PSE-2099/{91001 + i} {910001 + i}-1 SERVIDOR FICTICIO {i:02d} PROFESSOR A B"
             for i in range(20)
         ]
-        self.carregar_e_classificar("d01", "2026-10-09", _resenha_progressao("101/2026", linhas20))
+        self.carregar_e_classificar("d01", "2026-10-09", _resenha_progressao("101/2099", linhas20))
         self.carregar_e_classificar(
             "d02", "2026-10-15",
-            _portaria_sem_efeito("201/2026", "101/2026", ["SAD-PSE-2026/10003", "SAD-PSE-2026/10017"]),
+            _portaria_sem_efeito("201/2099", "101/2099", ["SAD-PSE-2099/91003", "SAD-PSE-2099/91017"]),
         )
         self.conferir_todas_decisoes()
 
@@ -229,22 +233,22 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         # Nenhuma decisão foi apagada da tabela histórica
         self.assertEqual(self.banco.con.execute("SELECT COUNT(*) FROM decisao").fetchone()[0], 20)
         ativos_procs = {l["processo"] for l in p_dep["linhas"]}
-        self.assertNotIn("SAD-PSE-2026/10003", ativos_procs)
-        self.assertNotIn("SAD-PSE-2026/10017", ativos_procs)
+        self.assertNotIn("SAD-PSE-2099/91003", ativos_procs)
+        self.assertNotIn("SAD-PSE-2099/91017", ativos_procs)
 
     # 2. Indeferimento tornado sem efeito seguido de deferimento
     def test_02_indeferimento_sem_efeito_seguido_de_deferimento(self):
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("102/2026", ["SAD-PSE-2026/50001 500001-1 PESSOA FICTICIA UM PROFESSOR A B"], verbo="INDEFERIU"),
+            _resenha_progressao("102/2099", ["SAD-PSE-2099/95001 950001-1 PESSOA FICTICIA UM PROFESSOR A B"], verbo="INDEFERIU"),
         )
         self.carregar_e_classificar(
             "d02", "2026-10-12",
-            _resenha_progressao("103/2026", ["SAD-PSE-2026/50001 500001-1 PESSOA FICTICIA UM PROFESSOR A B"], verbo="DEFERIU"),
+            _resenha_progressao("103/2099", ["SAD-PSE-2099/95001 950001-1 PESSOA FICTICIA UM PROFESSOR A B"], verbo="DEFERIU"),
         )
         self.carregar_e_classificar(
             "d03", "2026-10-15",
-            _portaria_sem_efeito("202/2026", "102/2026", ["SAD-PSE-2026/50001"]),
+            _portaria_sem_efeito("202/2099", "102/2099", ["SAD-PSE-2099/95001"]),
         )
         self.conferir_todas_decisoes()
 
@@ -269,11 +273,11 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
     # 3. Republicação idêntica (+0 decisões novas, +1 em republicacoes_atos)
     def test_03_republicacao_identica_nao_duplica_decisoes(self):
         linhas = [
-            "SAD-PSE-2026/30001 300001-1 SERVIDOR UM PROFESSOR A B",
-            "SAD-PSE-2026/30002 300002-2 SERVIDOR DOIS PROFESSOR B C",
-            "SAD-PSE-2026/30003 300003-3 SERVIDOR TRES PROFESSOR C D",
+            "SAD-PSE-2099/93001 930001-1 SERVIDOR UM PROFESSOR A B",
+            "SAD-PSE-2099/93002 930002-2 SERVIDOR DOIS PROFESSOR B C",
+            "SAD-PSE-2099/93003 930003-3 SERVIDOR TRES PROFESSOR C D",
         ]
-        orig_txt = _resenha_progressao("104/2026", linhas)
+        orig_txt = _resenha_progressao("104/2099", linhas)
         repub_txt = orig_txt.replace("PUBLIQUE-SE", "REPUBLICADA POR INCORREÇÃO\nPUBLIQUE-SE")
         self.carregar_e_classificar("d01", "2026-10-09", orig_txt)
         self.carregar_e_classificar("d02", "2026-10-15", repub_txt)
@@ -299,27 +303,27 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         self.carregar_e_classificar(
             "d01", "2026-10-09",
             _resenha_progressao(
-                "105/2026",
+                "105/2099",
                 [
-                    "SAD-PSE-2026/40001 400001-1 SERVIDOR QUATRO UM PROFESSOR A B",
-                    "SAD-PSE-2026/40002 400002-2 SERVIDOR QUATRO DOIS PROFESSOR B C",
+                    "SAD-PSE-2099/94001 940001-1 SERVIDOR QUATRO UM PROFESSOR A B",
+                    "SAD-PSE-2099/94002 940002-2 SERVIDOR QUATRO DOIS PROFESSOR B C",
                 ],
                 verbo="INDEFERIU",
             ),
         )
         retif_txt = (
             "SECRETARIA DE ESTADO DA ADMINISTRAÇÃO\n"
-            "PORTARIA Nº 205/2026 - GS/SEAD\n"
+            "PORTARIA Nº 205/2099 - GS/SEAD\n"
             "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\n"
-            "RETIFICAÇÃO da Resenha nº 105/2026, publicada no DOE de 09/10/2026, "
-            "referente à PROGRESSÃO FUNCIONAL, quanto ao processo SAD-PSE-2026/40001: "
+            "RETIFICAÇÃO da Resenha nº 105/2099, publicada no DOE de 09/10/2026, "
+            "referente à PROGRESSÃO FUNCIONAL, quanto ao processo SAD-PSE-2099/94001: "
             "onde se lê INDEFERIDO, leia-se DEFERIDO.\nPUBLIQUE-SE"
         )
         self.carregar_e_classificar("d02", "2026-10-15", retif_txt)
         self.conferir_todas_decisoes()
 
-        d_alvo = self.banco.con.execute("SELECT id FROM decisao WHERE processo = 'SAD-PSE-2026/40001'").fetchone()["id"]
-        ato_orig = self.banco.con.execute("SELECT id FROM ato WHERE numero = '105/2026'").fetchone()["id"]
+        d_alvo = self.banco.con.execute("SELECT id FROM decisao WHERE processo = 'SAD-PSE-2099/94001'").fetchone()["id"]
+        ato_orig = self.banco.con.execute("SELECT id FROM ato WHERE numero = '105/2099'").fetchone()["id"]
         ev = self.banco.con.execute("SELECT * FROM evento WHERE tipo = 'RETIFICACAO'").fetchone()
         self.assertIsNotNone(ev)
 
@@ -353,25 +357,25 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
     def test_05_processo_coletivo_com_servidores_sem_matricula(self):
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("106/2026", ["SAD-PSE-2026/60001 600001-1 SERVIDOR COM MATRICULA UM PROFESSOR A B"]),
+            _resenha_progressao("106/2099", ["SAD-PSE-2099/96001 960001-1 SERVIDOR COM MATRICULA UM PROFESSOR A B"]),
         )
-        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '106/2026'").fetchone()["id"]
+        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '106/2099'").fetchone()["id"]
         sha = self.banco.con.execute("SELECT sha256 FROM ato WHERE id = ?", (ato_id,)).fetchone()["sha256"]
         # Inserir mais 3 decisões no mesmo processo coletivo: 1 indeferida com matrícula, 2 sem matrícula (D e NI)
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_col_2', ?, ?, 1, 'SAD-PSE-2026/60001', 'SERVIDOR DOIS', '600002-2', 'PROFESSOR', '{}', 'INDEFERIDO', 't2', 'PENDENTE', 1, 'cl_col_2')",
+                "VALUES ('dec_col_2', ?, ?, 1, 'SAD-PSE-2099/96001', 'SERVIDOR DOIS', '960002-2', 'PROFESSOR', '{}', 'INDEFERIDO', 't2', 'PENDENTE', 1, 'cl_col_2')",
                 (ato_id, sha),
             )
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_col_3', ?, ?, 1, 'SAD-PSE-2026/60001', 'SERVIDOR SEM MAT A', NULL, 'PROFESSOR', '{}', 'DEFERIDO', 't3', 'PENDENTE', 1, 'cl_col_3')",
+                "VALUES ('dec_col_3', ?, ?, 1, 'SAD-PSE-2099/96001', 'SERVIDOR SEM MAT A', NULL, 'PROFESSOR', '{}', 'DEFERIDO', 't3', 'PENDENTE', 1, 'cl_col_3')",
                 (ato_id, sha),
             )
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_col_4', ?, ?, 1, 'SAD-PSE-2026/60001', 'SERVIDOR SEM MAT B', '', 'PROFESSOR', '{}', 'NAO_INFORMADO', 't4', 'PENDENTE', 1, 'cl_col_4')",
+                "VALUES ('dec_col_4', ?, ?, 1, 'SAD-PSE-2099/96001', 'SERVIDOR SEM MAT B', '', 'PROFESSOR', '{}', 'NAO_INFORMADO', 't4', 'PENDENTE', 1, 'cl_col_4')",
                 (ato_id, sha),
             )
         self.conferir_todas_decisoes()
@@ -392,26 +396,26 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
     def test_06_servidor_dois_pedidos_autonomos_e_particao_indeferido_com_nao_informado(self):
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("107/2026", ["SAD-PSE-2026/70001 700001-1 SERVIDOR AUTONOMO PROFESSOR A B"], verbo="DEFERIU"),
+            _resenha_progressao("107/2099", ["SAD-PSE-2099/97001 970001-1 SERVIDOR AUTONOMO PROFESSOR A B"], verbo="DEFERIU"),
         )
         self.carregar_e_classificar(
             "d02", "2026-10-12",
             _resenha_progressao(
-                "108/2026",
+                "108/2099",
                 [
-                    "SAD-PSE-2026/70002 700001-1 SERVIDOR AUTONOMO PROFESSOR B C",
-                    "SAD-PSE-2026/70003 700002-2 SERVIDOR INDEF NI PROFESSOR A B",
+                    "SAD-PSE-2099/97002 970001-1 SERVIDOR AUTONOMO PROFESSOR B C",
+                    "SAD-PSE-2099/97003 970002-2 SERVIDOR INDEF NI PROFESSOR A B",
                 ],
                 verbo="INDEFERIU",
             ),
         )
-        # Adiciona segunda decisão NAO_INFORMADO para o servidor 700002-2 (reproduz exatamente o bug dos 2 servidores!)
-        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '108/2026'").fetchone()["id"]
+        # Adiciona segunda decisão NAO_INFORMADO para o servidor 970002-2 (reproduz exatamente o bug dos 2 servidores!)
+        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '108/2099'").fetchone()["id"]
         sha = self.banco.con.execute("SELECT sha256 FROM ato WHERE id = ?", (ato_id,)).fetchone()["sha256"]
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_ni_serv2', ?, ?, 1, 'SAD-PSE-2026/70004', 'SERVIDOR INDEF NI', '700002-2', 'PROFESSOR', '{}', 'NAO_INFORMADO', 't_ni', 'PENDENTE', 1, 'cl_ni_2')",
+                "VALUES ('dec_ni_serv2', ?, ?, 1, 'SAD-PSE-2099/97004', 'SERVIDOR INDEF NI', '970002-2', 'PROFESSOR', '{}', 'NAO_INFORMADO', 't_ni', 'PENDENTE', 1, 'cl_ni_2')",
                 (ato_id, sha),
             )
         self.conferir_todas_decisoes()
@@ -419,7 +423,7 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         p, proj = self.painel_e_proj()
         _assert_particoes_exatas(self, p, proj)
         us = p["series"]["unidades"]["servidores"]
-        # Regra 5: indeferimento em pedido posterior não elimina concessão anterior válida do servidor 700001-1
+        # Regra 5: indeferimento em pedido posterior não elimina concessão anterior válida do servidor 970001-1
         self.assertEqual(us["total"], 2)
         self.assertEqual(us["beneficiados"], 1)
         self.assertEqual(us["misto_com_deferido"], 1)
@@ -431,25 +435,25 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
 
     # 7. Duas grafias da mesma matrícula + matrículas inválidas nunca fundidas
     def test_07_duas_grafias_mesma_matricula_e_invalidas_nunca_fundidas(self):
-        self.assertEqual(B.normalizar_matricula("157.239-3"), "1572393")
-        self.assertEqual(B.normalizar_matricula("157239-3"), "1572393")
-        self.assertEqual(B.normalizar_matricula("1572393"), "1572393")
+        self.assertEqual(B.normalizar_matricula("987.654-3"), "9876543")
+        self.assertEqual(B.normalizar_matricula("987654-3"), "9876543")
+        self.assertEqual(B.normalizar_matricula("9876543"), "9876543")
         for inv in (None, "", "   ", "000000", "000000-0", "123", "1111111"):
             self.assertIsNone(B.normalizar_matricula(inv), f"Matrícula inválida {inv!r} não deveria normalizar")
 
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("109/2026", ["SAD-PSE-2026/71001 157.239-3 SERVIDOR GRAFIA PROFESSOR A B"]),
+            _resenha_progressao("109/2099", ["SAD-PSE-2099/97101 987.654-3 SERVIDOR GRAFIA PROFESSOR A B"]),
         )
-        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '109/2026'").fetchone()["id"]
+        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '109/2099'").fetchone()["id"]
         sha = self.banco.con.execute("SELECT sha256 FROM ato WHERE id = ?", (ato_id,)).fetchone()["sha256"]
         with self.banco.con:
             for idx, (proc, mat) in enumerate([
-                ("SAD-PSE-2026/71002", "157239-3"),
-                ("SAD-PSE-2026/71003", "1572393"),
-                ("SAD-PSE-2026/71004", ""),
-                ("SAD-PSE-2026/71005", "000000"),
-                ("SAD-PSE-2026/71006", "123"),
+                ("SAD-PSE-2099/97102", "987654-3"),
+                ("SAD-PSE-2099/97103", "9876543"),
+                ("SAD-PSE-2099/97104", ""),
+                ("SAD-PSE-2099/97105", "000000"),
+                ("SAD-PSE-2099/97106", "123"),
             ], start=2):
                 self.banco.con.execute(
                     "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
@@ -465,41 +469,41 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         self.assertEqual(p["series"]["unidades"]["pedidos_individuais"], 6)
         # Valores originais preservados no banco e na projeção
         mats_orig = {l["matricula"] for l in p["linhas"]}
-        self.assertTrue({"157.239-3", "157239-3", "1572393"}.issubset(mats_orig))
+        self.assertTrue({"987.654-3", "987654-3", "9876543"}.issubset(mats_orig))
 
     # 8. Processos diferentes com números semelhantes (órgãos e séries distintos)
     def test_08_processos_diferentes_numeros_semelhantes_nao_colidem(self):
         chaves = [
-            B.chave_processo("SAD-PSE-2026/00123"),
-            B.chave_processo("SEE-PRC-2026/00123"),
-            B.chave_processo("SDS-OFI-2026/00123"),
-            B.chave_processo("00123/2026", orgao="SEC.EST.SAUDE", serie="RESENHA"),
-            B.chave_processo("00123/2026", orgao="SEC.EST.EDUCACAO", serie="RESENHA"),
+            B.chave_processo("SAD-PSE-2099/90123"),
+            B.chave_processo("SEE-PRC-2099/90123"),
+            B.chave_processo("SDS-OFI-2099/90123"),
+            B.chave_processo("90123/2099", orgao="SEC.EST.SAUDE", serie="RESENHA"),
+            B.chave_processo("90123/2099", orgao="SEC.EST.EDUCACAO", serie="RESENHA"),
         ]
         self.assertEqual(len(set(chaves)), 5, f"Colisão indevida em chaves de processo: {chaves}")
 
         self.carregar_e_classificar(
             "d01", "2026-10-09",
             _resenha_progressao(
-                "110/2026",
+                "110/2099",
                 [
-                    "SAD-PSE-2026/00123 800001-1 SERVIDOR UM PROFESSOR A B",
-                    "SEE-PRC-2026/00123 800002-2 SERVIDOR DOIS PROFESSOR A B",
-                    "SDS-OFI-2026/00123 800003-3 SERVIDOR TRES PROFESSOR A B",
+                    "SAD-PSE-2099/90123 980001-1 SERVIDOR UM PROFESSOR A B",
+                    "SEE-PRC-2099/90123 980002-2 SERVIDOR DOIS PROFESSOR A B",
+                    "SDS-OFI-2099/90123 980003-3 SERVIDOR TRES PROFESSOR A B",
                 ],
             ),
         )
-        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '110/2026'").fetchone()["id"]
+        ato_id = self.banco.con.execute("SELECT id FROM ato WHERE numero = '110/2099'").fetchone()["id"]
         sha = self.banco.con.execute("SELECT sha256 FROM ato WHERE id = ?", (ato_id,)).fetchone()["sha256"]
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, lotacao, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_p4', ?, ?, 1, '00123/2026', 'SERVIDOR QUATRO', '800004-4', 'SEC.EST.SAUDE', 'PROFESSOR', '{}', 'DEFERIDO', 't4', 'PENDENTE', 1, 'cl_p4')",
+                "VALUES ('dec_p4', ?, ?, 1, '90123/2099', 'SERVIDOR QUATRO', '980004-4', 'SEC.EST.SAUDE', 'PROFESSOR', '{}', 'DEFERIDO', 't4', 'PENDENTE', 1, 'cl_p4')",
                 (ato_id, sha),
             )
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, lotacao, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_p5', ?, ?, 1, '00123/2026', 'SERVIDOR CINCO', '800005-5', 'SEC.EST.EDUCACAO', 'PROFESSOR', '{}', 'DEFERIDO', 't5', 'PENDENTE', 1, 'cl_p5')",
+                "VALUES ('dec_p5', ?, ?, 1, '90123/2099', 'SERVIDOR CINCO', '980005-5', 'SEC.EST.EDUCACAO', 'PROFESSOR', '{}', 'DEFERIDO', 't5', 'PENDENTE', 1, 'cl_p5')",
                 (ato_id, sha),
             )
         self.conferir_todas_decisoes()
@@ -543,19 +547,19 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         # 9c. Classificação integrada: AST compatível, SFT compatível, TEC. ADM incompatível e STF ambíguo
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("111/2026", ["SAD-PSE-2026/81001 810001-1 SERVIDOR AST TECNICO ADMINISTRATIVO A B"], grupo="TEC. ADM."),
+            _resenha_progressao("111/2099", ["SAD-PSE-2099/98101 981001-1 SERVIDOR AST TECNICO ADMINISTRATIVO A B"], grupo="TEC. ADM."),
         )
         self.carregar_e_classificar(
             "d02", "2026-10-09",
-            _resenha_progressao("112/2026", ["SAD-PSE-2026/81002 810002-2 SERVIDOR SFT AUDITOR FISCAL TRIBUTARIO A B"], grupo="STF - AUDITOR FISCAL TRIBUTARIO"),
+            _resenha_progressao("112/2099", ["SAD-PSE-2099/98102 981002-2 SERVIDOR SFT AUDITOR FISCAL TRIBUTARIO A B"], grupo="STF - AUDITOR FISCAL TRIBUTARIO"),
         )
         self.carregar_e_classificar(
             "d03", "2026-10-09",
-            _resenha_progressao("113/2026", ["SAD-PSE-2026/81003 810003-3 SERVIDOR INCOMP PROFESSOR DE EDUCACAO BAS A B"], grupo="TEC. ADM."),
+            _resenha_progressao("113/2099", ["SAD-PSE-2099/98103 981003-3 SERVIDOR INCOMP PROFESSOR DE EDUCACAO BAS A B"], grupo="TEC. ADM."),
         )
         self.carregar_e_classificar(
             "d04", "2026-10-09",
-            _resenha_progressao("114/2026", ["SAD-PSE-2026/81004 810004-4 SERVIDOR AMBIG TECNICO ADMINISTRATIVO A B"], grupo="STF"),
+            _resenha_progressao("114/2099", ["SAD-PSE-2099/98104 981004-4 SERVIDOR AMBIG TECNICO ADMINISTRATIVO A B"], grupo="STF"),
         )
         self.conferir_todas_decisoes()
 
@@ -566,28 +570,28 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         self.assertEqual(por_grupo, {"AST": 1, "SFT": 1, "NAO_INFORMADO": 2})
         # Denominação original preservada em `grupo_expressao`
         por_res = {r["numero"]: (r["grupo"], r["grupo_expressao"]) for r in self.banco.con.execute("SELECT numero, grupo, grupo_expressao FROM ato")}
-        self.assertEqual(por_res["111/2026"], ("AST", "TEC. ADM"))
-        self.assertEqual(por_res["112/2026"], ("SFT", "STF"))
-        self.assertEqual(por_res["113/2026"], (None, "TEC. ADM"))
-        self.assertEqual(por_res["114/2026"], (None, "STF"))
+        self.assertEqual(por_res["111/2099"], ("AST", "TEC. ADM"))
+        self.assertEqual(por_res["112/2099"], ("SFT", "STF"))
+        self.assertEqual(por_res["113/2099"], (None, "TEC. ADM"))
+        self.assertEqual(por_res["114/2099"], (None, "STF"))
 
     # 10. Resultado não informado, Tempo sem subcategoria e zero contaminação por outra_publicacao
     def test_10_resultado_nao_informado_tempo_sem_subcategoria_e_sem_contaminacao(self):
         self.carregar_e_classificar(
             "d01", "2026-10-09",
-            _resenha_progressao("115/2026", ["SAD-PSE-2026/82001 820001-1 SERVIDOR PROG PROFESSOR A B"], modalidade="VERTICAL"),
+            _resenha_progressao("115/2099", ["SAD-PSE-2099/98201 982001-1 SERVIDOR PROG PROFESSOR A B"], modalidade="VERTICAL"),
         )
         # Inserir ato Tempo de Serviço sem subcategoria + resultado NAO_INFORMADO + outra_publicacao (Abono)
         sha = self.banco.con.execute("SELECT sha256 FROM arquivo LIMIT 1").fetchone()[0]
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT INTO ato (id, gerencia, sha256, data_publicacao, tipo, numero, pagina, pagina_final, vinculo, natureza, eixo, subcategoria, resultado, texto, versao_regras, chave_logica) "
-                "VALUES ('ato_ts_sem', 'GEDIV', ?, '2026-10-09', 'RESENHA', '116/2026', 2, 2, 'EXPRESSO', 'ORIGINAL', 'TEMPO_SERVICO', NULL, 'NAO_INFORMADO', 't', ?, 'cl_ts_sem')",
+                "VALUES ('ato_ts_sem', 'GEDIV', ?, '2026-10-09', 'RESENHA', '116/2099', 2, 2, 'EXPRESSO', 'ORIGINAL', 'TEMPO_SERVICO', NULL, 'NAO_INFORMADO', 't', ?, 'cl_ts_sem')",
                 (sha, C.VERSAO_REGRAS),
             )
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_ts_sem', 'ato_ts_sem', ?, 2, 'SAD-PSE-2026/82002', 'SERVIDOR TS', '820002-2', 'AGENTE', '{}', 'NAO_INFORMADO', 't', 'PENDENTE', 1, 'cl_dec_ts_sem')",
+                "VALUES ('dec_ts_sem', 'ato_ts_sem', ?, 2, 'SAD-PSE-2099/98202', 'SERVIDOR TS', '982002-2', 'AGENTE', '{}', 'NAO_INFORMADO', 't', 'PENDENTE', 1, 'cl_dec_ts_sem')",
                 (sha,),
             )
             self.banco.con.execute(
@@ -611,32 +615,32 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         self.assertEqual(p_sem["indicadores"]["decisoes"], 1)
         self.assertEqual(p_sem["linhas"][0]["id"], "dec_ts_sem")
 
-    # 11. Incompatibilidade de versao_regras + colisão Resenha 353/2026 + evento sem fonte + governança NAO_HOMOLOGADO
+    # 11. Incompatibilidade de versao_regras + colisão Resenha 353/2099 + evento sem fonte + governança NAO_HOMOLOGADO
     def test_11_versao_regras_incompativel_colisao_353_e_governanca(self):
-        # 11a. Colisão Resenha 353/2026: Progressão GAJ (processos 91001) vs Republicação de Abono (EC 103/2019, processos 99001)
+        # 11a. Colisão Resenha 353/2099: Progressão GAJ (processos 99101) vs Republicação de Abono (EC 103/2019, processos 99901)
         self.carregar_e_classificar(
             "d01", "2026-08-05",
-            _resenha_progressao("353/2026", ["SAD-PSE-2026/91001 910001-1 SERVIDOR GAJ POLICIAL PENAL A B"], grupo="GAJ-1700"),
+            _resenha_progressao("353/2099", ["SAD-PSE-2099/99101 991001-1 SERVIDOR GAJ POLICIAL PENAL A B"], grupo="GAJ-1700"),
         )
         abono_repub = (
             "SECRETARIA DE ESTADO DA ADMINISTRAÇÃO\n"
-            "RESENHA Nº : 353/2026 - DEREH/GS/SEAD\n"
+            "RESENHA Nº : 353/2099 - DEREH/GS/SEAD\n"
             "GERÊNCIA EXECUTIVA DE CONCESSÃO DE DIREITOS E VANTAGENS\n"
             "O SECRETÁRIO DE ESTADO DEFERIU os processos de ABONO DE PERMANÊNCIA (EC 103/2019), "
             "publicada no DOE de 05/08/2026:\n"
-            "SAD-PSE-2026/99001 990001-9 SERVIDOR ABONO\n"
+            "SAD-PSE-2099/99901 999001-9 SERVIDOR ABONO\n"
             "REPUBLICADA POR INCORREÇÃO\nPUBLIQUE-SE"
         )
         self.carregar_e_classificar("d02", "2026-08-12", abono_repub)
-        # Inserir também um evento sintético de republicação de Abono citando 353/2026 caso classificador o tenha classificado como outra_publicacao
+        # Inserir também um evento sintético de republicação de Abono citando 353/2099 caso classificador o tenha classificado como outra_publicacao
         sha2 = self.banco.con.execute("SELECT sha256 FROM arquivo ORDER BY rowid DESC LIMIT 1").fetchone()[0]
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT OR IGNORE INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
                 "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
                 "VALUES ('ev_353_abono', 'GEDIV', ?, '2026-08-12', NULL, 'REPUBLICACAO', 1, 'EXPRESSO', "
-                "'[\"353/2026\"]', '[\"SAD-PSE-2026/99001\"]', '[\"2026-08-05\"]', "
-                "'REPUBLICACAO ABONO DE PERMANENCIA EC 103/2019 Resenha 353/2026', 'PENDENTE_VINCULACAO')",
+                "'[\"353/2099\"]', '[\"SAD-PSE-2099/99901\"]', '[\"2026-08-05\"]', "
+                "'REPUBLICACAO ABONO DE PERMANENCIA EC 103/2019 Resenha 353/2099', 'PENDENTE_VINCULACAO')",
                 (sha2,),
             )
         processo.sugerir_vinculos(self.banco)
@@ -647,11 +651,11 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
 
         # 11b. Governança (Seção 8): nunca converte pendentes em conferidos nem vaza PII,
         # e sinaliza candidato a duplicidade OCR (sem jamais apagar decisões)
-        ato_gaj = self.banco.con.execute("SELECT id, sha256 FROM ato WHERE numero = '353/2026'").fetchone()
+        ato_gaj = self.banco.con.execute("SELECT id, sha256 FROM ato WHERE numero = '353/2099'").fetchone()
         with self.banco.con:
             self.banco.con.execute(
                 "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
-                "VALUES ('dec_ocr_cand', ?, ?, 1, 'SAD-PSE-2026/91002', 'SERVIDOR GAJ', '910001-1', 'POLICIAL PENAL', '{}', 'DEFERIDO', 't_ocr', 'PENDENTE', 1, 'cl_ocr_cand')",
+                "VALUES ('dec_ocr_cand', ?, ?, 1, 'SAD-PSE-2099/99102', 'SERVIDOR GAJ', '991001-1', 'POLICIAL PENAL', '{}', 'DEFERIDO', 't_ocr', 'PENDENTE', 1, 'cl_ocr_cand')",
                 (ato_gaj["id"], ato_gaj["sha256"]),
             )
         dups_ocr = self.banco.candidatos_duplicidade_ocr()
@@ -666,25 +670,165 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         self.assertEqual(triagem["duvidas_documentais_especificas"]["decisoes_com_duvida"], 2)
         triagem_txt = json.dumps(triagem, ensure_ascii=False)
         self.assertNotIn("SERVIDOR GAJ", triagem_txt)
-        self.assertNotIn("910001-1", triagem_txt)
+        self.assertNotIn("991001-1", triagem_txt)
 
-        # 11c. Incompatibilidade explícita de `versao_regras` (em vez de painel silenciosamente vazio)
+        # 11c. Incompatibilidade explícita de `versao_regras` (seguro por padrão no público, detalhado na gerência)
         with self.banco.con:
             self.banco.con.execute("UPDATE classificacao SET versao_regras = 'gediv-2026.11.19-1'")
-        diag = indicadores.diagnostico_versao_regras(self.banco)
-        self.assertTrue(diag["incompativel"])
-        self.assertFalse(diag["compativel"])
-        self.assertEqual(diag["versao_codigo"], C.VERSAO_REGRAS)
-        self.assertEqual(diag["versoes_no_banco"], ["gediv-2026.11.19-1"])
-        self.assertGreaterEqual(diag["decisoes_afetadas"], 1)
-        self.assertIn("Incompatibilidade de versão de regras", diag["mensagem"])
+
+        # Padrão sem informar perfil == PUBLICO (seguro por padrão: sem contagens exatas nem telemetria interna)
+        diag_pub = indicadores.diagnostico_versao_regras(self.banco)
+        self.assertTrue(diag_pub["incompativel"])
+        self.assertFalse(diag_pub["compativel"])
+        self.assertEqual(diag_pub["versao_codigo"], C.VERSAO_REGRAS)
+        self.assertEqual(diag_pub["versoes_no_banco"], [])
+        self.assertIsNone(diag_pub["decisoes_afetadas"])
+        self.assertIsNone(diag_pub["edicoes_por_versao"])
+        self.assertIsNone(diag_pub["edicoes_incompativeis"])
+        self.assertIn("Incompatibilidade técnica de versão de regras", diag_pub["mensagem"])
+        self.assertNotRegex(diag_pub["mensagem"], r"\d+\s+decis")
+
+        # Perfil interno autorizado (GERENCIA_PERFIL) recebe diagnóstico técnico completo
+        diag_ger = indicadores.diagnostico_versao_regras(self.banco, perfil=GER)
+        self.assertTrue(diag_ger["incompativel"])
+        self.assertEqual(diag_ger["versoes_no_banco"], ["gediv-2026.11.19-1"])
+        self.assertEqual(diag_ger["decisoes_afetadas"], 2)
+        self.assertIn("Incompatibilidade de versão de regras", diag_ger["mensagem"])
 
         p_inc = indicadores.painel(self.banco, {"escopo": "pendente"}, GER)
         cob_inc = p_inc["meta"]["cobertura"]
         self.assertTrue(p_inc["meta"]["incompatibilidade_versao_regras"])
         self.assertTrue(cob_inc["incompatibilidade_versao_regras"])
+        self.assertEqual(cob_inc["versao_regras_diagnostico"]["decisoes_afetadas"], 2)
         self.assertIn("Incompatibilidade de versão de regras", cob_inc["parecer"])
         self.assertEqual(p_inc["indicadores"]["decisoes"], 0)
+
+    # 12. Isolamento público (1 a 4 decisões pendentes em versão incompatível + supressão secundária de tempo_sem_subcategoria)
+    def test_12_isolamento_publico_1_a_4_pendentes_e_supressao_tempo_sem_subcategoria(self):
+        # 12a. Testar de 1 a 4 decisões pendentes sob versão incompatível em /api/saude, /api/painel, /api/data e snapshot_publico.json
+        for qtd in (1, 2, 3, 4):
+            with self.subTest(decisoes_pendentes=qtd):
+                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as pasta_tmp:
+                    pasta = Path(pasta_tmp)
+                    b_iso = B.Banco(pasta / "observatorio.sqlite3")
+                    try:
+                        linhas_q = [
+                            f"SAD-PSE-2099/{98500 + i} {985000 + i}-1 SERVIDOR PEND {i} PROFESSOR A B"
+                            for i in range(qtd)
+                        ]
+                        TP.carregar(b_iso, f"iso_{qtd}", "2026-10-09", _resenha_progressao(f"90{qtd}/2099", linhas_q))
+                        processo.classificar_pendentes(b_iso)
+                        with b_iso.con:
+                            b_iso.con.execute("UPDATE classificacao SET versao_regras = 'gediv-2026.11.19-1'")
+
+                        # Snapshot público gerado e validado
+                        snap = indicadores.gerar_snapshot_publico(b_iso)
+                        indicadores.validar_snapshot_publico(snap)
+                        snap_txt = json.dumps(snap, ensure_ascii=False)
+                        self.assertNotIn("decisões vigentes bloqueadas", snap_txt)
+                        self.assertNotRegex(snap["painel"]["meta"]["cobertura"]["parecer"], r"\d+\s+decis")
+                        self.assertNotRegex(snap["data"]["meta"]["coverage"], r"\d+\s+decis")
+                        self.assertIsNone(snap["painel"]["meta"]["versao_regras_diagnostico"]["decisoes_afetadas"])
+                        self.assertIsNone(snap["data"]["meta"]["versaoRegrasDiagnostico"]["decisoes_afetadas"])
+                        self.assertEqual(snap["data"]["otherPublications"], [])
+                        self.assertEqual(snap["data"]["otherPublicationsSummary"]["total"], 0)
+                        for chave_priv in ("unidades", "eventos_detalhados", "outras_publicacoes_resumo"):
+                            self.assertNotIn(chave_priv, snap["painel"]["series"])
+
+                        # validar_snapshot_publico deve recusar qualquer adulteração que exponha contagem interna ou otherPublications
+                        for mut_nome, mut_fn in (
+                            ("decisoes_afetadas_vazada", lambda s: s["painel"]["meta"]["versao_regras_diagnostico"].__setitem__("decisoes_afetadas", qtd)),
+                            ("otherPublications_nao_vazio", lambda s: s["data"]["otherPublications"].append({"id": "out_x"})),
+                            ("series_unidades_exposto", lambda s: s["painel"]["series"].__setitem__("unidades", {})),
+                        ):
+                            adulterado = copy.deepcopy(snap)
+                            mut_fn(adulterado)
+                            with self.assertRaises(ValueError, msg=f"Deveria recusar adulteração: {mut_nome}"):
+                                indicadores.validar_snapshot_publico(adulterado)
+                    finally:
+                        b_iso.fechar()
+
+                    # Verificar HTTP real em /api/saude, /api/painel e /api/data (público vs autenticado)
+                    tok = "credencial-sintetica-etapa4cbis-0123456789"
+                    srv = criar_servidor(pasta, tok, porta=0)
+                    threading.Thread(target=srv.serve_forever, daemon=True).start()
+                    try:
+                        base = f"http://127.0.0.1:{srv.server_address[1]}"
+                        with urllib.request.urlopen(f"{base}/api/saude", timeout=5) as r:
+                            saude_pub = json.loads(r.read())
+                        self.assertTrue(saude_pub["cobertura"]["incompatibilidade_versao_regras"])
+                        self.assertIsNone(saude_pub["cobertura"]["versao_regras_diagnostico"]["decisoes_afetadas"])
+                        self.assertEqual(saude_pub["cobertura"]["versao_regras_diagnostico"]["versoes_no_banco"], [])
+                        self.assertNotRegex(saude_pub["cobertura"]["parecer"], r"\d+\s+decis")
+
+                        req_saude_ger = urllib.request.Request(f"{base}/api/saude", headers={"Authorization": f"Bearer {tok}"})
+                        with urllib.request.urlopen(req_saude_ger, timeout=5) as r:
+                            saude_ger = json.loads(r.read())
+                        self.assertEqual(saude_ger["cobertura"]["versao_regras_diagnostico"]["decisoes_afetadas"], qtd)
+
+                        with urllib.request.urlopen(f"{base}/api/painel", timeout=5) as r:
+                            painel_pub = json.loads(r.read())
+                        self.assertTrue(painel_pub["meta"]["incompatibilidade_versao_regras"])
+                        self.assertIsNone(painel_pub["meta"]["versao_regras_diagnostico"]["decisoes_afetadas"])
+                        self.assertEqual((painel_pub["linhas"], painel_pub["resenhas"], painel_pub["eventos"]), ([], [], []))
+
+                        with urllib.request.urlopen(f"{base}/api/data", timeout=5) as r:
+                            data_pub = json.loads(r.read())
+                        self.assertTrue(data_pub["meta"]["incompatibilidadeVersaoRegras"])
+                        self.assertIsNone(data_pub["meta"]["versaoRegrasDiagnostico"]["decisoes_afetadas"])
+                        self.assertEqual((data_pub["rows"], data_pub["events"], data_pub["otherPublications"]), ([], [], []))
+                    finally:
+                        srv.shutdown()
+                        srv.server_close()
+
+        # 12b. Supressão secundária de `tempo_sem_subcategoria` (impedir reconstrução por subtração)
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as pasta_ts:
+            b_ts = B.Banco(Path(pasta_ts) / "ts_supressao.sqlite3")
+            try:
+                sha_ts = TP.carregar(b_ts, "ts_sup", "2026-10-09", _resenha_progressao("910/2099", ["SAD-PSE-2099/98801 988001-1 SERVIDOR AUX PROFESSOR A B"]))
+                processo.classificar_pendentes(b_ts)
+                with b_ts.con:
+                    # Remover decisão auxiliar de progressão e inserir 10 TS-01 + 3 Tempo sem subcategoria (conferidas)
+                    b_ts.con.execute("DELETE FROM decisao")
+                    b_ts.con.execute("DELETE FROM ato")
+                    b_ts.con.execute(
+                        "INSERT INTO ato (id, gerencia, sha256, data_publicacao, tipo, numero, pagina, pagina_final, vinculo, natureza, eixo, subcategoria, resultado, texto, versao_regras, chave_logica) "
+                        "VALUES ('ato_ts01', 'GEDIV', ?, '2026-10-09', 'RESENHA', '911/2099', 1, 1, 'EXPRESSO', 'ORIGINAL', 'TEMPO_SERVICO', 'TS-01', 'DEFERIDO', 't', ?, 'cl_ts01')",
+                        (sha_ts, C.VERSAO_REGRAS),
+                    )
+                    b_ts.con.execute(
+                        "INSERT INTO ato (id, gerencia, sha256, data_publicacao, tipo, numero, pagina, pagina_final, vinculo, natureza, eixo, subcategoria, resultado, texto, versao_regras, chave_logica) "
+                        "VALUES ('ato_ts_ni', 'GEDIV', ?, '2026-10-09', 'RESENHA', '912/2099', 2, 2, 'EXPRESSO', 'ORIGINAL', 'TEMPO_SERVICO', NULL, 'DEFERIDO', 't', ?, 'cl_ts_ni')",
+                        (sha_ts, C.VERSAO_REGRAS),
+                    )
+                    for i in range(10):
+                        b_ts.con.execute(
+                            "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
+                            "VALUES (?, 'ato_ts01', ?, 1, ?, 'SERVIDOR TS01', ?, 'AGENTE', '{}', 'DEFERIDO', 't', 'CONFERIDO', 1, ?)",
+                            (f"d_ts01_{i}", sha_ts, f"SAD-PSE-2099/{98901 + i}", f"{989001 + i}-1", f"cl_d_ts01_{i}"),
+                        )
+                    for j in range(3):
+                        b_ts.con.execute(
+                            "INSERT INTO decisao (id, ato_id, sha256, pagina, processo, servidor, matricula, cargo, detalhe, resultado, trecho, validacao, vigente, chave_logica) "
+                            "VALUES (?, 'ato_ts_ni', ?, 2, ?, 'SERVIDOR TSNI', ?, 'AGENTE', '{}', 'DEFERIDO', 't', 'CONFERIDO', 1, ?)",
+                            (f"d_tsni_{j}", sha_ts, f"SAD-PSE-2099/{98951 + j}", f"{989501 + j}-2", f"cl_d_tsni_{j}"),
+                        )
+                snap_ts = indicadores.gerar_snapshot_publico(b_ts)
+                indicadores.validar_snapshot_publico(snap_ts)
+                ts_sem_pub = snap_ts["painel"]["series"]["tempo_sem_subcategoria"]
+                ts01_pub = next(x for x in snap_ts["painel"]["series"]["por_subcategoria"] if x["codigo"] == "TS-01")
+                # Com 3 decisões sem subcategoria (< 5, suprimidas), TS-01 (única outra positiva) TAMBÉM é suprimida secundariamente
+                self.assertIsNone(ts_sem_pub["total"])
+                self.assertIsNone(ts01_pub["total"])
+                self.assertEqual(ts01_pub["situacao"], "suprimido por privacidade (< 5)")
+
+                # E `validar_snapshot_publico` deve recusar caso TS-01 fosse deixado visível junto com tempo_sem_subcategoria suprimido
+                adul_sub = copy.deepcopy(snap_ts)
+                next(x for x in adul_sub["painel"]["series"]["por_subcategoria"] if x["codigo"] == "TS-01")["total"] = 10
+                with self.assertRaises(ValueError):
+                    indicadores.validar_snapshot_publico(adul_sub)
+            finally:
+                b_ts.fechar()
 
 
 if __name__ == "__main__":

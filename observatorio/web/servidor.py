@@ -389,7 +389,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 return self._arquivo(rota[len("/estatico/"):], ESTATICO)
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
-                                   "papel": self._papel(), "cobertura": indicadores.cobertura(banco)})
+                                   "papel": self._papel(), "cobertura": indicadores.cobertura(banco, perfil=perfil)})
             if rota == "/api/sessao":
                 conta = self._conta()
                 if not conta:
