@@ -8,10 +8,21 @@ Type=simple
 User=gediv
 Group=gediv
 WorkingDirectory=/opt/observatorio-gediv
-EnvironmentFile=/etc/gediv/admin.env
-ExecStart=/opt/observatorio-gediv/.venv/bin/python -m observatorio.web --dados /var/lib/gediv/dados --endereco 127.0.0.1 --porta 8000 --origem-admin https://gedivseadpb-boop.github.io
+Environment=PYTHONSAFEPATH=1
+Environment=GEDIV_MODO_PRODUCAO=1
+Environment=GEDIV_COOKIE_SECURE=1
+Environment=GEDIV_LOGIN_SOMENTE_COOKIE=1
+Environment=GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1
+Environment=GEDIV_HABILITAR_TOKEN_TECNICO=0
+EnvironmentFile=-/etc/gediv/admin.env
+ExecStart=/opt/observatorio-gediv/.venv/bin/python -m observatorio.web --dados /var/lib/gediv/dados --endereco 127.0.0.1 --porta 8000 --modo-producao
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/gediv/dados
+UMask=0027
 
 [Install]
 WantedBy=multi-user.target

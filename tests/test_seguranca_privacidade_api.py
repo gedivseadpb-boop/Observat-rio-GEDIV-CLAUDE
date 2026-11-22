@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
+import os
 import pathlib
+import re
+import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -18,7 +24,7 @@ from observatorio.nucleo.acervo import Acervo
 from observatorio.nucleo.banco import Banco
 from observatorio.painel import adaptador, indicadores
 from observatorio.web.contas import Contas
-from observatorio.web.servidor import criar_servidor
+from observatorio.web.servidor import POLITICA_PRODUCAO, criar_servidor, validar_ambiente_producao
 
 
 def _http(url: str, token: str | None = None, payload: dict | None = None, headers: dict | None = None, method: str | None = None):
@@ -618,6 +624,347 @@ class TestSegurancaPrivacidadeAPI(unittest.TestCase):
         d_apos_exp = json.loads(_http(f"{self.base}/api/data", headers=hdrs_get)[2])
         self.assertFalse(d_apos_exp["backend"]["autenticado"])
         self.assertEqual(d_apos_exp["rows"], [])
+
+    def test_07_login_somente_cookie_sem_token_json_e_compatibilidade_cors(self) -> None:
+        """Etapa 3A: POST /api/login com modo_cookie=True ou GEDIV_LOGIN_SOMENTE_COOKIE=1 (same-origin)
+        emite cookie HttpOnly/SameSite=Strict (+ Secure sob HTTPS) e OMITE 'token' do JSON,
+        preservando 'token' apenas para origens CORS autorizadas ou clientes legados."""
+        host_local = self.base.replace("http://", "")
+
+        # 1. Login explícito modo_cookie=True sob HTTPS: sem 'token' no JSON e com Set-Cookie HttpOnly+Secure
+        st, hdrs, body = _http(
+            f"{self.base}/api/login",
+            payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026", "modo_cookie": True},
+            headers={"X-Forwarded-Proto": "https", "Origin": f"http://{host_local}", "Sec-Fetch-Site": "same-origin"},
+        )
+        self.assertEqual(st, 200, body)
+        dados = json.loads(body)
+        self.assertNotIn("token", dados)
+        self.assertEqual(dados.get("autenticacao"), "cookie_httponly")
+        self.assertEqual(dados.get("usuario"), "ger1.gediv")
+        set_cookie = hdrs.get("Set-Cookie") or ""
+        self.assertIn("gediv_sessao=", set_cookie)
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=Strict", set_cookie)
+        self.assertIn("Secure", set_cookie)
+        cookie = set_cookie.split(";", 1)[0]
+
+        # Sessão e logout funcionam integralmente só com esse cookie
+        self.assertEqual(_http(f"{self.base}/api/sessao", headers={"Cookie": cookie})[0], 200)
+        self.assertEqual(_http(f"{self.base}/api/auditoria", headers={"Cookie": cookie})[0], 200)
+        st_out, _, _ = _http(
+            f"{self.base}/api/logout",
+            payload={},
+            headers={"Cookie": cookie, "Sec-Fetch-Site": "same-origin", "Origin": f"http://{host_local}"},
+            method="POST",
+        )
+        self.assertEqual(st_out, 200)
+        self.assertEqual(_http(f"{self.base}/api/sessao", headers={"Cookie": cookie})[0], 401)
+
+        # 2. Com GEDIV_LOGIN_SOMENTE_COOKIE=1: same-origin sem modo_cookie também omite 'token',
+        # mas origem CORS autorizada (--origem-admin) mantém 'token' para compatibilidade do admin-painel
+        antigo = os.environ.get("GEDIV_LOGIN_SOMENTE_COOKIE")
+        os.environ["GEDIV_LOGIN_SOMENTE_COOKIE"] = "1"
+        try:
+            st_so, _, body_so = _http(
+                f"{self.base}/api/login",
+                payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026"},
+                headers={"Origin": f"http://{host_local}", "Sec-Fetch-Site": "same-origin"},
+            )
+            self.assertEqual(st_so, 200)
+            self.assertNotIn("token", json.loads(body_so))
+
+            st_co, _, body_co = _http(
+                f"{self.base}/api/login",
+                payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026"},
+                headers={"Origin": "https://admin-oficial.exemplo.gov.br", "Sec-Fetch-Site": "cross-site"},
+            )
+            self.assertEqual(st_co, 200)
+            self.assertIn("token", json.loads(body_co))
+        finally:
+            if antigo is None:
+                os.environ.pop("GEDIV_LOGIN_SOMENTE_COOKIE", None)
+            else:
+                os.environ["GEDIV_LOGIN_SOMENTE_COOKIE"] = antigo
+
+    def test_08_snapshot_ausente_corrompido_e_modo_estrito_503(self) -> None:
+        """Etapa 3A: comprova comportamento fail-closed (503) quando snapshot_publico.json está ausente
+        sob GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1 ou corrompido em disco, preservando acesso da gerência e
+        validando o endurecimento de gediv-admin.service e homologar_ambiente_linux.sh."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            with Banco(pasta / "observatorio.sqlite3") as banco:
+                adaptador.importar_snapshot_reconciliado(banco, _bootstrap_privacidade())
+            contas = Contas(pasta / "contas.sqlite3")
+            contas.criar("adm.estrito", "Admin Estrito", "SenhaAdm#2026", papel="admin")
+
+            antigo = os.environ.get("GEDIV_EXIGIR_SNAPSHOT_PUBLICO")
+            os.environ["GEDIV_EXIGIR_SNAPSHOT_PUBLICO"] = "1"
+            srv = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            base_est = f"http://127.0.0.1:{srv.server_address[1]}"
+            try:
+                # 1. Sem snapshot_publico.json em modo estrito -> 503 fail-closed para público
+                self.assertEqual(_http(f"{base_est}/api/painel")[0], 503)
+                self.assertEqual(_http(f"{base_est}/api/data")[0], 503)
+
+                # Admin autenticado continua operando e publica snapshot controlado
+                st_l, hdrs_l, _ = _http(
+                    f"{base_est}/api/login",
+                    payload={"usuario": "adm.estrito", "senha": "SenhaAdm#2026", "modo_cookie": True},
+                )
+                self.assertEqual(st_l, 200)
+                cookie = (hdrs_l.get("Set-Cookie") or "").split(";", 1)[0]
+                self.assertEqual(_http(f"{base_est}/api/data", headers={"Cookie": cookie})[0], 200)
+
+                st_pub, _, _ = _http(
+                    f"{base_est}/api/admin/snapshot-publico",
+                    payload={},
+                    headers={"Cookie": cookie, "Sec-Fetch-Site": "same-origin"},
+                    method="POST",
+                )
+                self.assertEqual(st_pub, 200)
+                self.assertEqual(_http(f"{base_est}/api/painel")[0], 200)
+                self.assertEqual(_http(f"{base_est}/api/data")[0], 200)
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                if antigo is None:
+                    os.environ.pop("GEDIV_EXIGIR_SNAPSHOT_PUBLICO", None)
+                else:
+                    os.environ["GEDIV_EXIGIR_SNAPSHOT_PUBLICO"] = antigo
+
+            # 2. Snapshot corrompido em disco em servidor recém-iniciado (sem cache) -> 503 fail-closed
+            (pasta / indicadores.ARQUIVO_SNAPSHOT_PUBLICO).write_text("{corrompido", encoding="utf-8")
+            srv2 = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv2.serve_forever, daemon=True).start()
+            base2 = f"http://127.0.0.1:{srv2.server_address[1]}"
+            try:
+                self.assertEqual(_http(f"{base2}/api/painel")[0], 503)
+                self.assertEqual(_http(f"{base2}/api/data")[0], 503)
+            finally:
+                srv2.shutdown()
+                srv2.server_close()
+
+        # 3. Validar unit endurecida e script de homologação Linux em LF
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        unit_txt = (repo / "deploy_autonomo" / "gediv-admin.service").read_text(encoding="utf-8")
+        self.assertIn("GEDIV_COOKIE_SECURE=1", unit_txt)
+        self.assertIn("GEDIV_LOGIN_SOMENTE_COOKIE=1", unit_txt)
+        self.assertIn("GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1", unit_txt)
+        self.assertIn("GEDIV_HABILITAR_TOKEN_TECNICO=0", unit_txt)
+        self.assertNotIn("https://gedivseadpb-boop.github.io", unit_txt)
+        homolog_sh = repo / "deploy_autonomo" / "homologar_ambiente_linux.sh"
+        self.assertTrue(homolog_sh.is_file())
+        self.assertEqual(homolog_sh.read_bytes().count(b"\r\n"), 0)
+
+    def test_09_x_forwarded_proto_rejeitado_de_cliente_nao_confiavel(self) -> None:
+        """Etapa 3B: X-Forwarded-Proto só é considerado quando vindo de proxy confiável
+        (loopback ou GEDIV_PROXIES_CONFIAVEIS); GEDIV_COOKIE_SECURE=1 força Secure sempre."""
+        from observatorio.web.servidor import criar_manipulador
+
+        cls = criar_manipulador(self.pasta, None, ())
+        h = object.__new__(cls)
+        h.headers = {"X-Forwarded-Proto": "https"}
+
+        antigo_sec = os.environ.pop("GEDIV_COOKIE_SECURE", None)
+        antigo_prx = os.environ.pop("GEDIV_PROXIES_CONFIAVEIS", None)
+        try:
+            # Cliente externo não confiável forjando X-Forwarded-Proto: https -> ignorado
+            h.client_address = ("198.51.100.10", 54321)
+            self.assertFalse(h._proxy_confiavel())
+            self.assertNotIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # Proxy local confiável (127.0.0.1) -> aceito
+            h.client_address = ("127.0.0.1", 54321)
+            self.assertTrue(h._proxy_confiavel())
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # Proxy explicitamente autorizado via GEDIV_PROXIES_CONFIAVEIS -> aceito
+            os.environ["GEDIV_PROXIES_CONFIAVEIS"] = "10.0.0.5"
+            h.client_address = ("10.0.0.5", 54321)
+            self.assertTrue(h._proxy_confiavel())
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # GEDIV_COOKIE_SECURE=1 força Secure independente de cabeçalho do cliente
+            os.environ["GEDIV_COOKIE_SECURE"] = "1"
+            h.headers = {}
+            h.client_address = ("198.51.100.10", 54321)
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+        finally:
+            if antigo_sec is None:
+                os.environ.pop("GEDIV_COOKIE_SECURE", None)
+            else:
+                os.environ["GEDIV_COOKIE_SECURE"] = antigo_sec
+            if antigo_prx is None:
+                os.environ.pop("GEDIV_PROXIES_CONFIAVEIS", None)
+            else:
+                os.environ["GEDIV_PROXIES_CONFIAVEIS"] = antigo_prx
+
+    def test_10_modo_producao_falha_fechada_se_protecao_sobrescrita(self) -> None:
+        """Etapa 3F-bis: no modo de produção (--modo-producao / gediv-admin.service), qualquer
+        sobrescrita insegura (ex.: via /etc/gediv/admin.env) de qualquer uma das 5 proteções
+        obrigatórias aborta a inicialização de forma segura (ValueError), em vez de operar com
+        segurança reduzida."""
+        from observatorio.web import __main__ as web_main
+
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        unit_txt = (repo / "deploy_autonomo" / "gediv-admin.service").read_text(encoding="utf-8")
+        self.assertIn("--modo-producao", unit_txt)
+        for chave, esperado in POLITICA_PRODUCAO.items():
+            self.assertIn(f"Environment={chave}={esperado}", unit_txt)
+
+        chaves_gerenciadas = tuple(POLITICA_PRODUCAO.keys()) + ("GEDIV_PROXIES_CONFIAVEIS", "GEDIV_TOKEN_GERENCIA")
+        snapshot_env = {k: os.environ.get(k) for k in chaves_gerenciadas}
+
+        def _aplicar_env(valores: dict[str, str | None]) -> None:
+            for k in chaves_gerenciadas:
+                os.environ.pop(k, None)
+            for k, v in valores.items():
+                if v is not None:
+                    os.environ[k] = v
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            try:
+                # 1. Configuração de produção íntegra (+ variável opcional compatível) inicia normalmente
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_PROXIES_CONFIAVEIS": "10.0.0.5"})
+                validar_ambiente_producao(exigir_producao=True)
+                srv_ok = criar_servidor(pasta, None, "127.0.0.1", 0, modo_producao=True)
+                srv_ok.server_close()
+
+                # 2. Enfraquecer, esvaziar ou omitir QUALQUER uma das 5 variáveis falha de forma fechada
+                for chave, esperado in POLITICA_PRODUCAO.items():
+                    inseguro = "1" if esperado == "0" else "0"
+                    for valor_ruim in (inseguro, "", None):
+                        env_ruim: dict[str, str | None] = dict(POLITICA_PRODUCAO)
+                        env_ruim[chave] = valor_ruim
+                        _aplicar_env(env_ruim)
+                        with self.assertRaises(ValueError, msg=f"Deveria bloquear {chave}={valor_ruim!r}") as ctx:
+                            validar_ambiente_producao(exigir_producao=True)
+                        self.assertIn(chave, str(ctx.exception))
+                        with self.assertRaises(ValueError):
+                            criar_servidor(pasta, None, "127.0.0.1", 0, modo_producao=True)
+                        with self.assertRaises(ValueError):
+                            web_main.main(["--dados", str(pasta), "--endereco", "127.0.0.1", "--porta", "0", "--modo-producao"])
+
+                # 3. Token técnico legado é bloqueado em modo de produção (por CLI ou argumento direto)
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_TOKEN_GERENCIA": "x" * 40})
+                with self.assertRaises(ValueError):
+                    web_main.main([
+                        "--dados", str(pasta), "--endereco", "127.0.0.1", "--porta", "0",
+                        "--modo-producao", "--habilitar-token-tecnico",
+                    ])
+                with self.assertRaises(ValueError):
+                    criar_servidor(pasta, "x" * 40, "127.0.0.1", 0, modo_producao=True)
+
+                # 4. Mesmo sem --modo-producao, GEDIV_MODO_PRODUCAO=1 com proteção faltante falha fechado
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_COOKIE_SECURE": "0"})
+                with self.assertRaises(ValueError):
+                    criar_servidor(pasta, None, "127.0.0.1", 0)
+            finally:
+                _aplicar_env(snapshot_env)
+
+    def test_11_homologacao_linux_isolada_sem_expor_banco_real_nem_senha_fixa(self) -> None:
+        """Etapa 3F-bis: comprova que homologar_ambiente_linux.sh:
+        - separa totalmente a verificação somente leitura do banco real dos testes HTTP;
+        - não copia nem disponibiliza registros reais na instância HTTP temporária;
+        - usa exclusivamente banco sintético descartável e senha administrativa aleatória não logada."""
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        script = repo / "deploy_autonomo" / "homologar_ambiente_linux.sh"
+        raw = script.read_bytes()
+        self.assertEqual(raw.count(b"\r\n"), 0, "homologar_ambiente_linux.sh deve usar apenas LF")
+        txt = raw.decode("utf-8")
+
+        # Invariantes estruturais: sem senha fixa, sem cópia de banco real para HTTP, com mktemp/cleanup/umask/secrets
+        self.assertNotIn("SenhaHomolog", txt)
+        self.assertNotIn("s.backup(", txt)
+        self.assertIn("mktemp -d", txt)
+        self.assertIn("trap cleanup EXIT", txt)
+        self.assertIn("umask 0027", txt)
+        self.assertIn("secrets.token_urlsafe(", txt)
+        self.assertIn("modo_producao=True", txt)
+        self.assertIn("DADOS_SINTETICOS=", txt)
+        self.assertNotRegex(txt, r'contas\.criar\([^)]*"[^"]*202\d')
+
+        # Extrai os blocos Python exatos das etapas [4/7] (verificação RO) e [5/7] (HTTP sintético)
+        blocos = re.findall(r"<<'PY'\n(.*?)\nPY", txt, flags=re.DOTALL)
+        self.assertGreaterEqual(len(blocos), 4, "Esperados blocos Python nas etapas do script de homologação")
+        bloco_ro = blocos[1]
+        bloco_http = blocos[2]
+        self.assertIn("?mode=ro", bloco_ro)
+        self.assertIn("secrets.token_urlsafe", bloco_http)
+        self.assertIn('j_d["rows"] == []', bloco_http)
+
+        # Cria um banco operacional simulado com registros nominais sentinela
+        sentinela_nome = "MARIA SENTINELA OPERACIONAL"
+        sentinela_proc = "SAD-PSE-2026/999999"
+        sentinela_mat = "9988776"
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            base_tmp = pathlib.Path(tmp)
+            db_real = base_tmp / "operacional_sentinela.sqlite3"
+            snap_real = _bootstrap_privacidade()
+            snap_real["rows"][0]["servidor"] = sentinela_nome
+            snap_real["rows"][0]["processo"] = sentinela_proc
+            snap_real["rows"][0]["matricula"] = sentinela_mat
+            with Banco(db_real) as b_real:
+                adaptador.importar_snapshot_reconciliado(b_real, snap_real)
+            sha_real_antes = hashlib.sha256(db_real.read_bytes()).hexdigest()
+
+            env_base = {
+                **os.environ,
+                "PYTHONPATH": str(repo),
+                "PYTHONSAFEPATH": "1",
+                "PYTHONIOENCODING": "utf-8",
+            }
+
+            # 1. Etapa [4/7] valida o banco real estritamente em modo somente leitura, sem alterá-lo nem vazar PII
+            r_ro = subprocess.run(
+                [sys.executable, "-c", bloco_ro, str(db_real)],
+                capture_output=True, text=True, encoding="utf-8", env=env_base, timeout=30,
+            )
+            self.assertEqual(r_ro.returncode, 0, r_ro.stderr)
+            self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+            for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                self.assertNotIn(termo, r_ro.stdout + r_ro.stderr)
+
+            # 2. Etapa [5/7] roda o servidor HTTP EXCLUSIVAMENTE em diretório sintético vazio (sem tocar no banco real)
+            dados_sint = base_tmp / "dados_sinteticos"
+            dados_sint.mkdir()
+            env_prod = {**env_base, **POLITICA_PRODUCAO}
+            r_http = subprocess.run(
+                [sys.executable, "-c", bloco_http, str(dados_sint)],
+                capture_output=True, text=True, encoding="utf-8", env=env_prod, timeout=30,
+            )
+            self.assertEqual(r_http.returncode, 0, r_http.stderr)
+            self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+            for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                self.assertNotIn(termo, r_http.stdout + r_http.stderr)
+            with Banco.somente_leitura(dados_sint / "observatorio.sqlite3") as b_sin:
+                self.assertEqual(b_sin.con.execute("SELECT COUNT(*) FROM ato").fetchone()[0], 0)
+                self.assertEqual(b_sin.con.execute("SELECT COUNT(*) FROM decisao").fetchone()[0], 0)
+
+            # 3. Se alguém apontar [5/7] para um diretório que já contenha observatorio.sqlite3, a etapa recusa executar
+            dir_contaminado = base_tmp / "dir_contaminado"
+            dir_contaminado.mkdir()
+            shutil.copyfile(db_real, dir_contaminado / "observatorio.sqlite3")
+            r_recusa = subprocess.run(
+                [sys.executable, "-c", bloco_http, str(dir_contaminado)],
+                capture_output=True, text=True, encoding="utf-8", env=env_prod, timeout=30,
+            )
+            self.assertNotEqual(r_recusa.returncode, 0, "Etapa HTTP deve recusar diretório com banco pré-existente")
+
+            # 4. Em ambiente Linux com bash e flock disponíveis (ex.: CI ubuntu-24.04), executa o script completo
+            if sys.platform.startswith("linux") and shutil.which("bash") and shutil.which("flock"):
+                r_sh = subprocess.run(
+                    ["bash", str(script), str(db_real)],
+                    capture_output=True, text=True, encoding="utf-8",
+                    env={**os.environ, "PYTHON_BIN": sys.executable}, timeout=60,
+                )
+                self.assertEqual(r_sh.returncode, 0, f"STDOUT:\n{r_sh.stdout}\nSTDERR:\n{r_sh.stderr}")
+                self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+                for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                    self.assertNotIn(termo, r_sh.stdout + r_sh.stderr)
 
 
 if __name__ == "__main__":

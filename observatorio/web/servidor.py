@@ -24,6 +24,7 @@ import json
 import mimetypes
 import os
 import re
+from collections.abc import Mapping
 from datetime import date
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +52,13 @@ SEGURANCA = {
 COOKIE_SESSAO = "gediv_sessao"
 MIN_TOKEN_TECNICO_LEGADO = 16
 MIN_TOKEN_TECNICO_PRODUCAO = 32
+POLITICA_PRODUCAO: dict[str, str] = {
+    "GEDIV_MODO_PRODUCAO": "1",
+    "GEDIV_COOKIE_SECURE": "1",
+    "GEDIV_LOGIN_SOMENTE_COOKIE": "1",
+    "GEDIV_EXIGIR_SNAPSHOT_PUBLICO": "1",
+    "GEDIV_HABILITAR_TOKEN_TECNICO": "0",
+}
 _ACOES_RESTRITAS_AUDITORIA = frozenset({
     "RECEBER_LOTE_ADMIN",
     "PUBLICAR_SNAPSHOT_PUBLICO",
@@ -196,11 +204,24 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 return
             self._verificar_origem_post(exigir_cabecalho=True)
 
+        def _proxy_confiavel(self) -> bool:
+            """Aceita cabeçalhos de encaminhamento (X-Forwarded-Proto) apenas de proxy local
+            (loopback) ou IPs explicitamente declarados em GEDIV_PROXIES_CONFIAVEIS."""
+            peer = (self.client_address[0] if getattr(self, "client_address", None) else "").strip()
+            extras = {
+                ip.strip()
+                for ip in os.environ.get("GEDIV_PROXIES_CONFIAVEIS", "").split(",")
+                if ip.strip()
+            }
+            return peer in ({"127.0.0.1", "::1"} | extras)
+
         def _cabecalho_cookie_sessao(self, valor: str, max_age: int) -> str:
-            secure = (
+            proto_proxy = (
                 (self.headers.get("X-Forwarded-Proto") or "").strip().lower() == "https"
-                or os.environ.get("GEDIV_COOKIE_SECURE") == "1"
+                if self._proxy_confiavel()
+                else False
             )
+            secure = os.environ.get("GEDIV_COOKIE_SECURE") == "1" or proto_proxy
             partes = [
                 f"{COOKIE_SESSAO}={valor}",
                 "HttpOnly",
@@ -266,7 +287,8 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
 
         def _obter_snapshot_publico(self, banco: Banco) -> dict:
             """Devolve o snapshot público congelado e validado (`snapshot_publico.json`).
-            Confirmações unitárias em `POST /api/revisao` não alteram este snapshot até nova publicação."""
+            Confirmações unitárias em `POST /api/revisao` não alteram este snapshot até nova publicação.
+            Com `GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1`, falha de forma fechada (503) se o arquivo estiver ausente."""
             if caminho_snapshot_publico.is_file():
                 try:
                     mtime_ns = caminho_snapshot_publico.stat().st_mtime_ns
@@ -283,10 +305,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                     raise Erro(503, "snapshot público inválido ou indisponível")
             if _cache_snapshot_publico["snap"] is not None:
                 return _cache_snapshot_publico["snap"]  # type: ignore[return-value]
-            snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
-            _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
-            _cache_snapshot_publico["snap"] = snap
-            return snap
+            if os.environ.get("GEDIV_EXIGIR_SNAPSHOT_PUBLICO") == "1":
+                raise Erro(503, "snapshot público ainda não publicado")
+            try:
+                snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
+                _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
+                _cache_snapshot_publico["snap"] = snap
+                return snap
+            except OSError:
+                raise Erro(503, "snapshot público indisponível para gravação")
 
         def _enviar(self, status: int, corpo: bytes, tipo: str, extras: dict | None = None) -> None:
             self.send_response(status)
@@ -512,7 +539,19 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                     raise Erro(401, "usuário ou senha inválidos, ou acesso bloqueado temporariamente")
                 with banco.con:
                     banco.auditar(f"{sessao['nome']} ({sessao['usuario']})", "ENTRAR", "sessao", sessao["usuario"], None, None, None)
-                return self._json(sessao, extras={"Set-Cookie": self._cabecalho_cookie_sessao(sessao["token"], 28800)})
+                somente_cookie = bool(p.get("modo_cookie") is True) or (
+                    os.environ.get("GEDIV_LOGIN_SOMENTE_COOKIE") == "1"
+                    and self._origem_permitida() is None
+                )
+                resposta_login = (
+                    {k: v for k, v in sessao.items() if k != "token"} | {"autenticacao": "cookie_httponly"}
+                    if somente_cookie
+                    else sessao
+                )
+                return self._json(
+                    resposta_login,
+                    extras={"Set-Cookie": self._cabecalho_cookie_sessao(sessao["token"], 28800)},
+                )
             self._verificar_csrf_cookie()
             if rota == "/api/logout":
                 if self._conta():
@@ -624,8 +663,39 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
     return Manipulador
 
 
+def validar_ambiente_producao(
+    env: Mapping[str, str] | None = None,
+    *,
+    habilitar_token_tecnico: bool = False,
+    exigir_producao: bool = False,
+) -> None:
+    """Garante que, no modo de produção, nenhuma proteção obrigatória tenha sido
+    desabilitada ou sobrescrita (por exemplo, por `/etc/gediv/admin.env`).
+    Falha de maneira segura (`ValueError`) em vez de operar com segurança reduzida."""
+    mapa = os.environ if env is None else env
+    ativo = exigir_producao or (mapa.get("GEDIV_MODO_PRODUCAO") == "1")
+    if not ativo:
+        return
+    violacoes: list[str] = []
+    for chave, esperado in POLITICA_PRODUCAO.items():
+        atual = mapa.get(chave)
+        if atual != esperado:
+            violacoes.append(f"{chave}={atual!r} (esperado {esperado!r})")
+    if habilitar_token_tecnico:
+        violacoes.append("credencial técnica legada proibida no modo de produção")
+    if violacoes:
+        raise ValueError(
+            "Configuração insegura bloqueada na inicialização de produção: "
+            + "; ".join(violacoes)
+        )
+
+
 def criar_servidor(pasta_dados: str | Path, token_gerencia: str | None = None, endereco: str = "127.0.0.1", porta: int = 8000,
-                   origens_admin=(), *, exigir_token_32: bool = False) -> ThreadingHTTPServer:
+                   origens_admin=(), *, exigir_token_32: bool = False, modo_producao: bool = False) -> ThreadingHTTPServer:
+    validar_ambiente_producao(
+        habilitar_token_tecnico=bool(token_gerencia),
+        exigir_producao=modo_producao,
+    )
     if token_gerencia is not None and token_gerencia != "":
         min_len = (
             MIN_TOKEN_TECNICO_PRODUCAO

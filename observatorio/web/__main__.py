@@ -15,7 +15,7 @@ import os
 import sys
 
 from .. import NOME
-from .servidor import MIN_TOKEN_TECNICO_PRODUCAO, criar_servidor
+from .servidor import MIN_TOKEN_TECNICO_PRODUCAO, criar_servidor, validar_ambiente_producao
 
 
 def main(argv=None) -> int:
@@ -28,7 +28,13 @@ def main(argv=None) -> int:
                          "https://gedivseadpb-boop.github.io); repita para mais de um. Também: GEDIV_ORIGENS_ADMIN")
     ap.add_argument("--habilitar-token-tecnico", action="store_true",
                     help="habilita explicitamente o token técnico legado GEDIV_TOKEN_GERENCIA (exige >= 32 caracteres)")
+    ap.add_argument("--modo-producao", action="store_true",
+                    help="exige integralmente a política de segurança de produção e falha de forma fechada se alguma proteção for desabilitada")
     a = ap.parse_args(argv)
+    validar_ambiente_producao(
+        habilitar_token_tecnico=a.habilitar_token_tecnico,
+        exigir_producao=a.modo_producao,
+    )
     origens = a.origem_admin + [o.strip() for o in os.environ.get("GEDIV_ORIGENS_ADMIN", "").split(",") if o.strip()]
     usar_token_legado = a.habilitar_token_tecnico or os.environ.get("GEDIV_HABILITAR_TOKEN_TECNICO") == "1"
     token: str | None = None
@@ -38,7 +44,15 @@ def main(argv=None) -> int:
             raise ValueError(
                 f"Quando habilitado, GEDIV_TOKEN_GERENCIA exige no mínimo {MIN_TOKEN_TECNICO_PRODUCAO} caracteres."
             )
-    servidor = criar_servidor(a.dados, token, a.endereco, a.porta, origens, exigir_token_32=usar_token_legado)
+    servidor = criar_servidor(
+        a.dados,
+        token,
+        a.endereco,
+        a.porta,
+        origens,
+        exigir_token_32=usar_token_legado,
+        modo_producao=a.modo_producao,
+    )
     print(f"{NOME} — http://{a.endereco}:{servidor.server_address[1]}", flush=True)
     if origens:
         print("Painel de administração autorizado em: " + ", ".join(origens), flush=True)
