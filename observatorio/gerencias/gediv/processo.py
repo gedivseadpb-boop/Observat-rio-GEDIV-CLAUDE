@@ -82,6 +82,47 @@ def extrair_matriculas_citadas(texto: str) -> set[str]:
     return {m for raw in PAT_MATRICULA.findall(limpo) if (m := normalizar_matricula(raw))}
 
 
+_PAT_SERVIDOR_CITADO = re.compile(
+    r"\b(?:D[OA]\s+)?(?:SERVIDOR(?:A)?|INTERESSAD[OA])\s*:?\s*"
+    r"([A-Z]{2,}(?:\s+(?:D[AEOS]|E|[A-Z]{2,})){1,7}?)"
+    r"(?=\s*(?:,|;|\.|MATRICULA|LOTAD[OA]|CARGO|CPF|PROCESSO|RESENHA|PUBLICAD|NO\s+D\.?O\.?E|PUBLIQUE|$))"
+)
+_PALAVRAS_NAO_NOME_SERVIDOR = frozenset({
+    "PUBLICO", "PUBLICA", "ESTADUAL", "EFETIVO", "EFETIVA", "COMISSIONADO", "COMISSIONADA",
+    "ABAIXO", "ACIMA", "RELACIONADO", "RELACIONADA", "CITADO", "CITADA", "INTEGRANTE",
+    "OCUPANTE", "DESTA", "DESTE", "DA", "DO", "DE", "DOS", "DAS", "E", "ESTADO", "PARAIBA",
+})
+
+
+def extrair_servidores_citados(texto: str) -> list[str]:
+    """Extrai nomes individuais explicitamente introduzidos por 'servidor(a)' ou 'interessado(a)' no texto do evento."""
+    norm = normalizar_texto(texto or "")
+    if not norm:
+        return []
+    nomes: list[str] = []
+    for m in _PAT_SERVIDOR_CITADO.finditer(norm):
+        cand = m.group(1).strip()
+        palavras = cand.split()
+        if len(palavras) < 2 or len(cand) < 8:
+            continue
+        if palavras[0] in _PALAVRAS_NAO_NOME_SERVIDOR or all(p in _PALAVRAS_NAO_NOME_SERVIDOR for p in palavras):
+            continue
+        if cand not in nomes:
+            nomes.append(cand)
+    return nomes
+
+
+def _nome_compativel(nome_a: str | None, nome_b: str | None) -> bool:
+    a, b = normalizar_texto(nome_a), normalizar_texto(nome_b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    pa, pb = a.split(), b.split()
+    curto, longo = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
+    return len(curto) >= 2 and longo[:len(curto)] == curto
+
+
 def _nome_citado(servidor: str | None, texto_ev_norm: str) -> bool:
     nome = normalizar_texto(servidor)
     if not nome or len(nome.split()) < 2 or len(nome) < 8:
@@ -92,10 +133,11 @@ def _nome_citado(servidor: str | None, texto_ev_norm: str) -> bool:
 def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str | None]:
     """Resolve as decisões individuais atingidas por um evento a partir das referências documentais.
 
-    Regra para processos coletivos: quando o processo citado contém múltiplas decisões no ato original,
-    NUNCA vincula automaticamente todas as decisões do processo coletivo. Exige identificação individual
-    inequívoca (matrícula e/ou nome completo compatível e sem contradição). Havendo ambiguidade, devolve
-    `([], motivo)` para que o evento permaneça pendente até identificação explícita (`decisoes_ids`)."""
+    - Para processos de decisão única: verifica compatibilidade de TODA matrícula e identificação individual
+      citadas no evento; se a decisão não tiver matrícula (ou nome) e o evento citar referência que não possa
+      ser confirmada, recusa o vínculo automático e mantém o evento pendente.
+    - Para processos coletivos (> 1 decisão): NUNCA vincula automaticamente todas as decisões do processo.
+      Exige identificação individual inequívoca sem contradições; havendo ambiguidade, devolve `([], motivo)`."""
     procs_cit = list(dict.fromkeys(
         p for raw in json.loads(evento["processos_citados"] or "[]")
         if (p := normalizar_processo(raw))
@@ -103,7 +145,8 @@ def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str 
     texto_ev = evento["texto"] or ""
     texto_ev_norm = normalizar_texto(texto_ev)
     mats_cit = extrair_matriculas_citadas(texto_ev)
-    resolvidas: list[str] = []
+    nomes_cit = extrair_servidores_citados(texto_ev)
+    resolvidas_objs: list = []
 
     if procs_cit:
         for proc_norm in procs_cit:
@@ -113,10 +156,23 @@ def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str 
             if len(cands) == 1:
                 unico = cands[0]
                 m_unico = normalizar_matricula(unico["matricula"])
-                # Se o evento cita apenas este processo e uma matrícula explícita divergente, recusa por ambiguidade.
-                if len(procs_cit) == 1 and mats_cit and m_unico and m_unico not in mats_cit:
-                    return [], "matrícula citada no evento diverge da decisão do processo informado; vínculo mantido pendente"
-                resolvidas.append(unico["id"])
+                # Se o evento cita matrícula(s), a decisão precisa possuir matrícula compatível e confirmável.
+                if mats_cit:
+                    if not m_unico:
+                        return [], (
+                            "evento cita matrícula que não pode ser confirmada na decisão sem matrícula válida; "
+                            "vínculo mantido pendente"
+                        )
+                    if m_unico not in mats_cit:
+                        return [], "matrícula citada no evento diverge da decisão do processo informado; vínculo mantido pendente"
+                # Se o evento cita identificação individual explícita (servidor/interessado), exige compatibilidade.
+                if nomes_cit:
+                    if not unico["servidor"] or not any(_nome_compativel(nc, unico["servidor"]) for nc in nomes_cit):
+                        return [], (
+                            "identificação individual citada no evento não pode ser confirmada na decisão do processo; "
+                            "vínculo mantido pendente"
+                        )
+                resolvidas_objs.append(unico)
                 continue
 
             # Processo coletivo (> 1 decisão no mesmo processo): exigir identificação individual inequívoca.
@@ -129,12 +185,12 @@ def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str 
                 cont_m = Counter(normalizar_matricula(d["matricula"]) for d in por_mat)
                 if any(v > 1 for v in cont_m.values()):
                     return [], "mais de uma decisão compartilha a mesma matrícula no processo coletivo; informe decisoes_ids explicitamente"
-                resolvidas.extend(d["id"] for d in por_mat)
+                resolvidas_objs.extend(por_mat)
             elif not mats_cit and por_nome:
                 cont_n = Counter(normalizar_texto(d["servidor"]) for d in por_nome)
                 if any(v > 1 for v in cont_n.values()):
                     return [], "mais de uma decisão compartilha o mesmo nome no processo coletivo; informe decisoes_ids explicitamente"
-                resolvidas.extend(d["id"] for d in por_nome)
+                resolvidas_objs.extend(por_nome)
             else:
                 return [], (
                     "processo coletivo com múltiplos servidores exige identificação individual inequívoca "
@@ -150,14 +206,25 @@ def resolver_decisoes_por_referencias(evento, decs_ato) -> tuple[list[str], str 
             cont_m = Counter(normalizar_matricula(d["matricula"]) for d in por_mat)
             if any(v > 1 for v in cont_m.values()):
                 return [], "matrícula citada corresponde a múltiplas decisões no ato; informe decisoes_ids explicitamente"
-            resolvidas.extend(d["id"] for d in por_mat)
+            resolvidas_objs.extend(por_mat)
         elif not mats_cit and por_nome:
             cont_n = Counter(normalizar_texto(d["servidor"]) for d in por_nome)
             if any(v > 1 for v in cont_n.values()):
                 return [], "nome citado corresponde a múltiplas decisões no ato; informe decisoes_ids explicitamente"
-            resolvidas.extend(d["id"] for d in por_nome)
+            resolvidas_objs.extend(por_nome)
 
-    return list(dict.fromkeys(resolvidas)), None
+    # Confirmar que TODA matrícula e toda identificação individual explícita citada no evento foi efetivamente confirmada.
+    if resolvidas_objs:
+        if mats_cit:
+            mats_conf = {m for d in resolvidas_objs if (m := normalizar_matricula(d["matricula"]))}
+            if not mats_cit.issubset(mats_conf):
+                return [], "evento cita matrícula(s) não confirmada(s) nas decisões identificadas; vínculo mantido pendente"
+        if nomes_cit:
+            for nc in nomes_cit:
+                if not any(_nome_compativel(nc, d["servidor"]) for d in resolvidas_objs):
+                    return [], "evento cita servidor não confirmado nas decisões identificadas; vínculo mantido pendente"
+
+    return list(dict.fromkeys(d["id"] for d in resolvidas_objs)), None
 
 
 def _ato_compativel_com_evento(banco: Banco, evento, ato_cand, ato_mod, eixo_ev: str | None,

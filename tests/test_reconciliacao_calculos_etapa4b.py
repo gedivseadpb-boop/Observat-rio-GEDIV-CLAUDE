@@ -987,24 +987,34 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         indicadores.validar_snapshot_publico(snap)
         self.assertIsNone(snap["painel"]["apoio"]["eventos_fora_do_acervo"])
 
-    # 15. Grupos com cargos mistos (AST): não aceitar automaticamente quando coexistir cargo compatível e incompatível
-    def test_15_ast_com_cargos_mistos_encaminha_para_conferencia_sem_alterar_total(self):
-        # 15a. Regra direta em catalogo.avaliar_grupo
-        grp_misto, exp_misto, pend_misto = C.avaliar_grupo(
-            "DO GRUPO TEC. ADM.",
-            cargos=["TECNICO ADMINISTRATIVO", "PROFESSOR DE EDUCACAO BASICA"],
-        )
-        self.assertIsNone(grp_misto)
-        self.assertEqual(exp_misto, "TEC. ADM")
-        self.assertTrue(pend_misto)
+    # 15. Grupos com cargos mistos, desconhecidos ou similares não comprovados (AST)
+    def test_15_ast_com_cargos_mistos_desconhecidos_ou_nao_comprovados_sem_alterar_total(self):
+        # 15a. Allowlist estrita em catalogo.avaliar_grupo:
+        # Cargos desconhecidos (ENGENHEIRO CIVIL, ADVOGADO), similares não comprovados (ASSISTENTE/AUXILIAR ADMINISTRATIVO)
+        # e combinações mistas NÃO podem virar AST automaticamente.
+        for cargos_bloqueados in (
+            ["TECNICO ADMINISTRATIVO", "PROFESSOR DE EDUCACAO BASICA"],
+            ["ENGENHEIRO CIVIL"],
+            ["ADVOGADO"],
+            ["ASSISTENTE ADMINISTRATIVO"],
+            ["AUXILIAR ADMINISTRATIVO"],
+            ["TECNICO ADMINISTRATIVO", "ENGENHEIRO CIVIL"],
+            ["TECNICO ADMINISTRATIVO", "ASSISTENTE ADMINISTRATIVO"],
+        ):
+            with self.subTest(cargos_bloqueados=cargos_bloqueados):
+                grp, exp, pend = C.avaliar_grupo("DO GRUPO TEC. ADM.", cargos=cargos_bloqueados)
+                self.assertIsNone(grp)
+                self.assertEqual(exp, "TEC. ADM")
+                self.assertTrue(pend)
 
         grp_puro, exp_puro, pend_puro = C.avaliar_grupo(
             "DO GRUPO TEC. ADM.",
-            cargos=["TECNICO ADMINISTRATIVO", "ASSISTENTE ADMINISTRATIVO"],
+            cargos=["TECNICO ADMINISTRATIVO", "TEC. ADM."],
         )
         self.assertEqual((grp_puro, exp_puro, pend_puro), ("AST", "TEC. ADM", None))
 
-        # 15b. Classificação completa + painel: resenha mista fica sem grupo, resenha pura vira AST, total geral intacto
+        # 15b. Classificação completa + painel: resenha mista/desconhecida/assistente fica sem grupo,
+        # resenha pura de Técnico Administrativo vira AST, e o total geral permanece intacto (Delta = 0).
         self.carregar_e_classificar(
             "d01", "2026-10-09",
             _resenha_progressao(
@@ -1027,22 +1037,115 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
                 grupo="TEC. ADM.",
             ),
         )
+        self.carregar_e_classificar(
+            "d03", "2026-10-09",
+            _resenha_progressao(
+                "132/2099",
+                [
+                    "SAD-PSE-2099/96305 963005-5 SERVIDOR ENG UM ENGENHEIRO CIVIL A B",
+                    "SAD-PSE-2099/96306 963006-6 SERVIDOR ADV DOIS ADVOGADO B C",
+                ],
+                grupo="TEC. ADM.",
+            ),
+        )
+        self.carregar_e_classificar(
+            "d04", "2026-10-09",
+            _resenha_progressao(
+                "133/2099",
+                [
+                    "SAD-PSE-2099/96307 963007-7 SERVIDOR ASSIS UM ASSISTENTE ADMINISTRATIVO A B",
+                    "SAD-PSE-2099/96308 963008-8 SERVIDOR AUX DOIS AUXILIAR ADMINISTRATIVO B C",
+                ],
+                grupo="TEC. ADM.",
+            ),
+        )
         self.conferir_todas_decisoes()
 
         p, proj = self.painel_e_proj()
         _assert_particoes_exatas(self, p, proj)
-        self.assertEqual(p["indicadores"]["decisoes"], 4)  # contagem geral preservada (Delta = 0)
+        self.assertEqual(p["indicadores"]["decisoes"], 8)  # contagem geral preservada (Delta = 0)
         por_grupo = {g["grupo"]: g["total"] for g in p["series"]["por_grupo"]}
-        self.assertEqual(por_grupo, {"AST": 2, "NAO_INFORMADO": 2})
+        self.assertEqual(por_grupo, {"AST": 2, "NAO_INFORMADO": 6})
         atos_map = {
             r["numero"]: (r["grupo"], r["grupo_expressao"], json.loads(r["pendencias"] or "[]"))
             for r in self.banco.con.execute("SELECT numero, grupo, grupo_expressao, pendencias FROM ato")
         }
-        self.assertIsNone(atos_map["130/2099"][0])
-        self.assertEqual(atos_map["130/2099"][1], "TEC. ADM")
-        self.assertTrue(any("TEC. ADM" in x for x in atos_map["130/2099"][2]))
+        for num_pendente in ("130/2099", "132/2099", "133/2099"):
+            self.assertIsNone(atos_map[num_pendente][0], num_pendente)
+            self.assertEqual(atos_map[num_pendente][1], "TEC. ADM", num_pendente)
+            self.assertTrue(any("TEC. ADM" in x for x in atos_map[num_pendente][2]), num_pendente)
         self.assertEqual(atos_map["131/2099"][0], "AST")
         self.assertEqual(atos_map["131/2099"][1], "TEC. ADM")
+
+    # 16. Processo de decisão única exige compatibilidade de toda matrícula e identificação individual citada
+    def test_16_processo_decisao_unica_exige_confirmacao_de_matricula_e_identificacao(self):
+        self.carregar_e_classificar(
+            "d01", "2026-10-09",
+            _resenha_progressao(
+                "140/2099",
+                [
+                    "SAD-PSE-2099/96401 964001-1 SERVIDOR UNICO UM PROFESSOR A B",
+                    "SAD-PSE-2099/96402 964002-2 SERVIDOR UNICO DOIS PROFESSOR B C",
+                    "SAD-PSE-2099/96403 964003-3 SERVIDOR ORIGINAL UNICO PROFESSOR C D",
+                    "SAD-PSE-2099/96404 964004-4 SERVIDOR UNICO QUATRO PROFESSOR A B",
+                    "SAD-PSE-2099/96405 964005-5 SERVIDOR UNICO CINCO PROFESSOR B C",
+                    "SAD-PSE-2099/96406 964006-6 SERVIDOR UNICO SEIS PROFESSOR C D",
+                ],
+            ),
+        )
+        ato = self.banco.con.execute("SELECT id, sha256 FROM ato WHERE numero = '140/2099'").fetchone()
+        # Remover matrícula da decisão 96401 e nome da decisão 96404 para testar não confirmação
+        with self.banco.con:
+            self.banco.con.execute("UPDATE decisao SET matricula = NULL WHERE processo = 'SAD-PSE-2099/96401'")
+            self.banco.con.execute("UPDATE decisao SET servidor = NULL WHERE processo = 'SAD-PSE-2099/96404'")
+        self.conferir_todas_decisoes()
+
+        # 16a. Decisão sem matrícula + portaria citando matrícula não confirmável -> recusado (permanece pendente)
+        # 16b. Decisão com matrícula + portaria citando matrícula extra não confirmada -> recusado
+        # 16c. Portaria citando nome individual divergente (sem matrícula) -> recusado
+        # 16d. Decisão sem nome + portaria citando nome individual -> recusado
+        # 16e. Portaria multi-processo com uma matrícula divergente -> recusado
+        # 16f. Portaria multi-processo com TODAS as matrículas compatíveis -> vincula exatamente as 2 decisões
+        casos_ev = [
+            ("ev_u_sem_mat", '["SAD-PSE-2099/96401"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processo SAD-PSE-2099/96401, matrícula 964001-1"),
+            ("ev_u_mat_extra", '["SAD-PSE-2099/96402"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processo SAD-PSE-2099/96402, matrículas 964002-2 e 964999-9"),
+            ("ev_u_nome_div", '["SAD-PSE-2099/96403"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processo SAD-PSE-2099/96403, do servidor SERVIDOR DIVERGENTE OUTRO, lotado na SEAD"),
+            ("ev_u_sem_nome", '["SAD-PSE-2099/96404"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processo SAD-PSE-2099/96404, do servidor SERVIDOR NAO CONFIRMADO, lotado na SEAD"),
+            ("ev_u_multi_div", '["SAD-PSE-2099/96405", "SAD-PSE-2099/96406"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processos SAD-PSE-2099/96405 (matrícula 964005-5) e SAD-PSE-2099/96406 (matrícula 964888-8)"),
+            ("ev_u_multi_ok", '["SAD-PSE-2099/96405", "SAD-PSE-2099/96406"]', "TORNAR SEM EFEITO PROGRESSAO FUNCIONAL processos SAD-PSE-2099/96405 (matrícula 964005-5) e SAD-PSE-2099/96406 (matrícula 964006-6)"),
+        ]
+        with self.banco.con:
+            for eid, procs_j, txt_e in casos_ev:
+                self.banco.con.execute(
+                    "INSERT INTO evento (id, gerencia, sha256, data_publicacao, ato_id, tipo, pagina, vinculo, "
+                    "resenhas_citadas, processos_citados, publicacoes_citadas, texto, estado) "
+                    "VALUES (?, 'GEDIV', ?, '2026-10-15', NULL, 'TORNADO_SEM_EFEITO', 1, 'EXPRESSO', "
+                    "'[\"140/2099\"]', ?, '[\"2026-10-09\"]', ?, 'PENDENTE_VINCULACAO')",
+                    (eid, ato["sha256"], procs_j, txt_e),
+                )
+
+        for eid_rec in ("ev_u_sem_mat", "ev_u_mat_extra", "ev_u_nome_div", "ev_u_sem_nome", "ev_u_multi_div"):
+            with self.subTest(evento_recusado=eid_rec):
+                with self.assertRaises(servico.Recusada):
+                    servico.revisar_evento(self.banco, eid_rec, servico.VINCULAR, REV, JUST, ato["id"], True)
+                self.assertEqual(
+                    self.banco.con.execute("SELECT estado FROM evento WHERE id = ?", (eid_rec,)).fetchone()[0],
+                    "PENDENTE_VINCULACAO",
+                )
+                self.assertEqual(self.banco.eventos_decisoes(eid_rec), [])
+
+        # Todas as 6 decisões continuam ativas enquanto nenhum evento incompatível foi aceito
+        p_antes, proj_antes = self.painel_e_proj()
+        _assert_particoes_exatas(self, p_antes, proj_antes)
+        self.assertEqual((p_antes["indicadores"]["decisoes"], p_antes["indicadores"]["sem_efeito"]), (6, 0))
+
+        # Evento multi-processo com TODAS as matrículas confirmadas vincula exatamente 2 decisões
+        r_ok = servico.revisar_evento(self.banco, "ev_u_multi_ok", servico.VINCULAR, REV, JUST, ato["id"], True)
+        self.assertEqual(r_ok["decisoes_vinculadas"], 2)
+        p_dep, proj_dep = self.painel_e_proj()
+        _assert_particoes_exatas(self, p_dep, proj_dep)
+        self.assertEqual((p_dep["indicadores"]["decisoes"], p_dep["indicadores"]["sem_efeito"]), (4, 1))
+        self.assertEqual(p_dep["series"]["eventos_detalhados"]["decisoes_sem_efeito"], 2)
 
 
 if __name__ == "__main__":

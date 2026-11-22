@@ -126,7 +126,9 @@ EXPRESSOES_SEM_GRUPO = (
 
 _PAT_TEC_ADM = re.compile(r"\bTEC\.?\s*-?\s*ADM\b")
 _PAT_STF = re.compile(r"\bSTF\b")
-_PAT_CARGO_COMPATIVEL_AST = re.compile(r"TECNIC[OA]?\s+ADMIN|TEC\.?\s*-?\s*ADM|ASSISTENTE\s+ADMIN|AUXILIAR\s+ADMIN")
+# Comprovação positiva estrita para AST: não presume que ASSISTENTE ADMINISTRATIVO,
+# AUXILIAR ADMINISTRATIVO ou cargos desconhecidos (ex.: ENGENHEIRO CIVIL, ADVOGADO) pertençam ao AST.
+_PAT_CARGO_COMPATIVEL_AST = re.compile(r"\bTECNIC[OA]?\s+ADMIN\w*|\bTEC\.?\s*-?\s*ADM\w*")
 _PAT_CARGO_INCOMPATIVEL_AST = re.compile(
     r"PROFESSOR|MAGISTERIO|POLICIAL|AUDITOR\s+FISCAL|FISCAL\s+TRIBUTAR|MEDIC[OA]|ENFERMEIR|"
     r"DELEGAD|AUDITOR\s+DE\s+CONTAS|FISCAL\s+ESTADUAL\s+AGROPECUAR|FARMACEUT|FISIOTERAP|PSICOLOG|ODONTOLOG"
@@ -247,10 +249,13 @@ def avaliar_grupo(preambulo_normalizado: str, *, cargos=None) -> tuple[str | Non
     if m_tec:
         exp_lit = m_tec.group(0)
         outros = codigos_presentes - {"AST"}
-        # Qualquer cargo incompatível na resenha (mesmo coexistindo com cargos compatíveis) impede
-        # a atribuição automática de AST e encaminha o ato para conferência, preservando o total geral.
+        # Quando há cargos informados, exige comprovação positiva (allowlist estrita): todos os cargos
+        # precisam ser comprovadamente compatíveis com AST (sem depender só de lista de incompatíveis).
+        # Cargos desconhecidos (ex.: ENGENHEIRO CIVIL, ADVOGADO) ou denominações não comprovadas
+        # (ex.: ASSISTENTE ADMINISTRATIVO, AUXILIAR ADMINISTRATIVO) impedem atribuição automática.
         cargo_incomp = bool(cargos_norm) and any(_PAT_CARGO_INCOMPATIVEL_AST.search(c) for c in cargos_norm)
-        if outros or cargo_incomp:
+        cargo_nao_comprovado = bool(cargos_norm) and not all(_PAT_CARGO_COMPATIVEL_AST.search(c) for c in cargos_norm)
+        if outros or cargo_incomp or cargo_nao_comprovado:
             return None, exp_lit, EXPRESSOES_SEM_GRUPO[0][2]
         return "AST", exp_lit, None
 
