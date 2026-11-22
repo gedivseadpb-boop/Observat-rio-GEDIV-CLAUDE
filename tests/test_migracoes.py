@@ -119,7 +119,7 @@ class TesteMigracoes(unittest.TestCase):
         for tabela, colunas in antes.items():
             if tabela != "evento":
                 self.assertEqual(depois[tabela][:len(colunas)], colunas, tabela)
-        self.assertEqual(set(depois) - set(antes), {"tentativa_leitura", "correcao", "conflito"})
+        self.assertEqual(set(depois) - set(antes), {"tentativa_leitura", "correcao", "conflito", "evento_decisao"})
         self.assertEqual(banco.con.execute("SELECT resultado, versao_coletor FROM download").fetchone()[:], ("NOVO", "0.5"))
         self.assertEqual(banco.con.execute("SELECT integridade FROM verificacao_arquivo").fetchone()[0], "OK")
         self.assertEqual(B.estruturas_pendentes(banco.con), {})

@@ -1,23 +1,18 @@
 """Adaptador bidirecional e reconciliador entre o modelo Python (Banco/API) e o modelo do Dashboard GEDIV.
 
-Preserva todos os campos relevantes sem perda de informação, aplicando a regra normativa estrita
-para grupos ocupacionais:
-- 'TEC. ADM' NÃO é equiparado automaticamente a 'AST' (permanece 'PENDENTE:TEC. ADM', rotulado
-  como categoria pendente de confirmação);
-- 'STF' NÃO é equiparado automaticamente a 'SFT' (permanece 'PENDENTE:STF', rotulado como
-  categoria pendente de confirmação);
+Preserva todos os campos relevantes sem perda de informação, aplicando a regra normativa controlada
+para grupos ocupacionais (Etapa 4B):
+- 'TEC. ADM' / 'TEC-ADM' normaliza para o grupo canônico 'AST' ('AST · Técnicos Administrativos')
+  em registros compatíveis, preservando a expressão original em `grupo_expressao`; registros
+  incompatíveis ou ambíguos permanecem em 'PENDENTE:TEC. ADM';
+- 'STF' normaliza para 'SFT' ('SFT · Fazenda · Auditor Fiscal') somente quando há cargo ou
+  enquadramento fiscal/tributário verificado, preservando `grupo_expressao = 'STF'`; registros
+  sem comprovação permanecem em 'PENDENTE:STF';
 - 'SAUDE' -> 'SSA' e 'ESPECIAL' -> 'ESP' possuem equivalência documental comprovada no catálogo
-  oficial (`observatorio.gerencias.gediv.catalogo.GRUPOS`).
-
-Suporta:
-1. Conversão de linha backend (`decisao` + `ato`) <-> linha frontend (`row`);
-2. Conversão de resposta `/api/painel` + `/api/outras` -> contrato do dashboard unificado;
-3. Simulação (dry-run) e importação idempotente e auditável da base de referência de 1.066 registros
-   (`window.GEDIV_BOOTSTRAP`) e dos PDFs oficiais para um banco SQLite v8, preservando separadamente:
-   - 1.065 registros pendentes;
-   - 1 registro rejeitado;
-   - 23 eventos pendentes;
-   - 101 observações preliminares (`nota_preliminar` em `detalhe`), sem auto-homologar nenhum registro.
+  oficial (`observatorio.gerencias.gediv.catalogo.GRUPOS`);
+- Publicações de `outra_publicacao` (incluindo Abono de Permanência, alterações de lei, portarias
+  e republicações por incorreção) são entregues separadamente em `otherPublications`, nunca
+  contaminando os totais de decisões primárias dos dois eixos.
 """
 from __future__ import annotations
 
@@ -28,10 +23,17 @@ from collections import Counter
 from pathlib import Path
 
 from ..gerencias.gediv import catalogo as C
-from ..nucleo.banco import Banco, agora, chave_ato, chave_decisao
+from ..nucleo.banco import (
+    Banco,
+    agora,
+    chave_ato,
+    chave_decisao,
+    chave_processo,
+    normalizar_matricula,
+)
 from . import indicadores
 
-# Equivalências documentais comprovadas no catálogo oficial (catalogo.py linhas 68 e 77):
+# Equivalências documentais comprovadas no catálogo oficial (catalogo.py):
 EQUIVALENCIAS_COMPROVADAS = {
     "SAUDE": "SSA",
     "GAJ-1700": "GAJ",
@@ -42,26 +44,48 @@ EQUIVALENCIAS_COMPROVADAS = {
     "FAZENDA": "SFT",
 }
 
-# Expressões cuja correspondência normativa NÃO deve ser presumida automaticamente (Item 8):
+# Expressões com normalização condicional (permanecem pendentes quando incompatíveis ou sem enquadramento verificado):
 EXPRESSOES_PENDENTES_CONFIRMACAO = {
-    "TEC-ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente de confirmação)"),
-    "TEC. ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente de confirmação)"),
-    "PENDENTE:TEC. ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente de confirmação)"),
-    "STF": ("PENDENTE:STF", "STF", "STF · Auditor Fiscal Tributário (vínculo com SFT pendente de confirmação)"),
-    "PENDENTE:STF": ("PENDENTE:STF", "STF", "STF · Auditor Fiscal Tributário (vínculo com SFT pendente de confirmação)"),
+    "TEC-ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente/incompatível)"),
+    "TEC. ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente/incompatível)"),
+    "PENDENTE:TEC. ADM": ("PENDENTE:TEC. ADM", "TEC. ADM", "TEC. ADM · Técnicos Administrativos (vínculo com AST pendente/incompatível)"),
+    "STF": ("PENDENTE:STF", "STF", "STF · Auditor Fiscal Tributário (enquadramento SFT pendente de confirmação)"),
+    "PENDENTE:STF": ("PENDENTE:STF", "STF", "STF · Auditor Fiscal Tributário (enquadramento SFT pendente de confirmação)"),
 }
 
 
-def mapear_grupo_para_backend(grupo_frontend: str | None, expressao_original: str | None = None) -> tuple[str | None, str | None, bool]:
+def mapear_grupo_para_backend(
+    grupo_frontend: str | None,
+    expressao_original: str | None = None,
+    *,
+    cargo: str | None = None,
+    evidencia: str | None = None,
+) -> tuple[str | None, str | None, bool]:
     """Converte código de grupo do frontend para (grupo_pccr_ou_None, grupo_expressao, pendente_confirmacao).
-    Nunca converte TEC-ADM em AST nem STF em SFT automaticamente.
+    - 'TEC-ADM' / 'TEC. ADM' -> ('AST', 'TEC. ADM', False) quando compatível; caso incompatível, permanece pendente.
+    - 'STF' -> ('SFT', 'STF', False) somente quando cargo ou evidência comprova enquadramento fiscal/tributário;
+      caso contrário, permanece pendente ('STF', True).
     """
     bruto = (grupo_frontend or "").strip().upper()
     if not bruto or bruto == "NAO_INFORMADO":
         return None, (expressao_original or None), False
-    if bruto in EXPRESSOES_PENDENTES_CONFIRMACAO:
+    if bruto in ("PENDENTE:TEC. ADM", "PENDENTE:STF"):
         _, exp_literal, _ = EXPRESSOES_PENDENTES_CONFIRMACAO[bruto]
         return None, (expressao_original or exp_literal), True
+    if bruto in ("TEC-ADM", "TEC. ADM"):
+        exp_lit = expressao_original or "TEC. ADM"
+        pre = C.normalizar(f"GRUPO {exp_lit} {evidencia or ''}")
+        codigo, _exp, pend = C.avaliar_grupo(pre, cargos=[cargo] if cargo else None)
+        if codigo == "AST" and pend is None:
+            return "AST", exp_lit, False
+        return None, exp_lit, True
+    if bruto == "STF":
+        exp_lit = expressao_original or "STF"
+        pre = C.normalizar(f"GRUPO {exp_lit} {evidencia or ''}")
+        codigo, _exp, pend = C.avaliar_grupo(pre, cargos=[cargo] if cargo else None)
+        if codigo == "SFT" and pend is None:
+            return "SFT", exp_lit, False
+        return None, exp_lit, True
     normalizado = EQUIVALENCIAS_COMPROVADAS.get(bruto, bruto)
     if normalizado in C.GRUPO_POR_CODIGO:
         return normalizado, (expressao_original or bruto), False
@@ -155,7 +179,8 @@ def backend_para_frontend_linha(linha: dict) -> dict:
         "orgao": sufixo or (linha.get("lotacao") or ""),
         "actType": linha.get("tipo") or "RESENHA",
         "natureza": str(linha.get("natureza") or "ORIGINAL").lower(),
-        "resultadoOriginal": str(linha.get("resultado") or ""),
+        "resultadoOriginal": str(linha.get("resultado_original") or linha.get("resultado") or ""),
+        "retificacoesAplicadas": list(linha.get("retificacoes_aplicadas") or []),
         "origemTempo": str(det.get("origem_tempo") or det.get("origem") or ""),
         "process": linha.get("processo") or "",
         "server": linha.get("servidor") or "",
@@ -210,7 +235,12 @@ def frontend_para_backend_linha(row: dict) -> dict:
     validacao = "CONFERIDO" if val_f == "conferido" else "REJEITADO" if val_f == "rejeitado" else "PENDENTE"
     vinculo = "EXPRESSO" if (row.get("sourceMention") or "").lower() == "expresso" else "NAO_EXPRESSO"
 
-    grupo_pccr, grupo_exp, pendente_conf = mapear_grupo_para_backend(row.get("group"), row.get("groupExpression"))
+    grupo_pccr, grupo_exp, pendente_conf = mapear_grupo_para_backend(
+        row.get("group"),
+        row.get("groupExpression"),
+        cargo=row.get("cargo"),
+        evidencia=row.get("evidence"),
+    )
     subcategoria = row.get("category") if (eixo == C.TEMPO and row.get("category") in C.SUBCATEGORIA_POR_CODIGO) else None
 
     temp_linha = {
@@ -274,15 +304,33 @@ def _eh_abono_permanencia(o: dict) -> bool:
 def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | None = None,
                                  linhas_rejeitadas: list[dict] | None = None) -> dict:
     """Converte a resposta de `indicadores.painel()` (+ `outras_publicacoes()`) para o contrato `window.GEDIV_BOOTSTRAP`
-    consumido pelo dashboard unificado GEDIV, de forma 100% dinâmica (sem contagens fixas no código).
-    Abono de Permanência é projetado como modalidade do eixo Tempo de Serviço (`category='ABONO_PERMANENCIA'`),
-    preservando TS-01 a TS-07 e sem criar TS-08.
+    consumido pelo dashboard unificado GEDIV, usando fonte única de cálculo (sem contaminação dos totais de
+    decisões por `outra_publicacao`, que permanecem preservadas em `otherPublications`).
     """
     meta_b = painel_resp.get("meta") or {}
     cob_b = meta_b.get("cobertura") or {}
     apoio_b = painel_resp.get("apoio") or {}
+    series_b = painel_resp.get("series") or {}
+    diag_vr = meta_b.get("versao_regras_diagnostico") or cob_b.get("versao_regras_diagnostico") or {}
     individual = bool(meta_b.get("dados_individuais"))
+    if not individual and isinstance(diag_vr, dict) and diag_vr:
+        incomp_pub = bool(diag_vr.get("incompativel"))
+        diag_vr = {
+            "versao_codigo": diag_vr.get("versao_codigo") or C.VERSAO_REGRAS,
+            "versoes_no_banco": [],
+            "edicoes_por_versao": None,
+            "compativel": not incomp_pub,
+            "incompativel": incomp_pub,
+            "edicoes_compativeis": None,
+            "edicoes_incompativeis": None,
+            "decisoes_afetadas": None,
+            "mensagem": (
+                "Incompatibilidade técnica de versão de regras detectada; os indicadores aguardam alinhamento interno."
+                if incomp_pub else None
+            ),
+        }
 
+    # 1. Somente decisões primárias dos dois eixos (PROGRESSAO e TEMPO_SERVICO) entram em `rows`
     rows_conv = [backend_para_frontend_linha(l) for l in (painel_resp.get("linhas") or [])]
     if individual and linhas_rejeitadas:
         ids_vistos = {r["id"] for r in rows_conv}
@@ -292,10 +340,11 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
                 rows_conv.append(rc)
                 ids_vistos.add(rc["id"])
 
+    # 2. `outra_publicacao` (Abono de Permanência, Alterações de Lei, Portarias, Atos Normativos,
+    #    Republicado por Incorreção, Tema Fora dos Eixos) fica estritamente em `otherPublications`!
+    other_pubs_conv: list[dict] = []
     if individual and outras_resp:
-        ids_vistos = {r["id"] for r in rows_conv}
-        # Evitar contagem duplicada entre registros individuais (pdf-/historico-) e atos genéricos
-        # de Abono de Permanência na mesma (sha256, página)
+        ids_outras_vistos: set[str] = set()
         abono_ind_refs = {
             o.get("pdf_no_acervo")
             for o in outras_resp
@@ -305,12 +354,13 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
         }
         for o in outras_resp:
             oid = o.get("id")
-            if oid in ids_vistos:
+            if oid in ids_outras_vistos:
                 continue
             eh_abono = _eh_abono_permanencia(o)
             eh_ind = str(oid or "").startswith(("pdf-", "historico-"))
             if eh_abono and not eh_ind and o.get("pdf_no_acervo") in abono_ind_refs:
                 continue
+            ids_outras_vistos.add(oid)
             trecho = o.get("trecho") or ""
             meta_o = {}
             if trecho.startswith("<!--GEDIV_META:") and "-->\n" in trecho:
@@ -333,7 +383,11 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             res_id_o = meta_o.get("ato_id") or oid
             res_lbl_o = meta_o.get("resenha") or str(o.get("titulo") or "").replace("Resenha ", "") or o.get("nome_tipo") or "Publicação GEDIV"
             url_of = str(o.get("url_oficial") or "").split("#")[0]
-            rows_conv.append({
+            res_txt = meta_o.get("resultado") or (
+                "DEFERIDO" if "DEFERI" in trecho.upper() and "INDEFERI" not in trecho.upper()
+                else ("INDEFERIDO" if "INDEFERI" in trecho.upper() else "NAO_INFORMADO")
+            )
+            other_pubs_conv.append({
                 "id": oid,
                 "act": res_id_o,
                 "resenha_id": res_id_o,
@@ -343,15 +397,14 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
                 "orgao": meta_o.get("orgao") or "",
                 "actType": o.get("tipo") or "OUTRA",
                 "natureza": "original",
-                "resultadoOriginal": "DEFERIDO" if "DEFERI" in trecho.upper() and "INDEFERI" not in trecho.upper() else (
-                    "INDEFERIDO" if "INDEFERI" in trecho.upper() else "NAO_INFORMADO"),
+                "resultadoOriginal": res_txt,
                 "origemTempo": "",
                 "process": proc,
                 "server": srv_outro or o.get("titulo") or o.get("nome_tipo") or "",
                 "registration": mat,
                 "lotacao": "",
                 "cargo": "",
-                "axis": "tempo" if eh_abono else "outros",
+                "axis": "outros",
                 "modality": "",
                 "condition": "NAO_INFORMADA",
                 "group": "",
@@ -360,8 +413,8 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
                 "groupLabel": "Grupo não informado",
                 "groupPendingConfirmation": False,
                 "category": "ABONO_PERMANENCIA" if eh_abono else "",
-                "merit": "deferido" if "DEFERI" in trecho.upper() and "INDEFERI" not in trecho.upper() else (
-                    "indeferido" if "INDEFERI" in trecho.upper() else "outro"),
+                "isOtherPublication": True,
+                "merit": "deferido" if res_txt == "DEFERIDO" else ("indeferido" if res_txt == "INDEFERIDO" else "outro"),
                 "validation": "pendente",
                 "revisor": "",
                 "revisadoEm": "",
@@ -395,7 +448,12 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
     for e in (painel_resp.get("eventos") or []):
         url_of = str(e.get("url_oficial") or "").split("#")[0]
         est = e.get("estado") or "PENDENTE_VINCULACAO"
-        val_ev = "conferido" if est == "VALIDADO" else "rejeitado" if est == "REJEITADO" else "pendente"
+        val_ev = (
+            "conferido" if est == "VALIDADO"
+            else "rejeitado" if est == "REJEITADO"
+            else "externo" if est == "FORA_DO_ACERVO"
+            else "pendente"
+        )
         events_conv.append({
             "id": e.get("id"),
             "date": e.get("data_publicacao") or "",
@@ -407,6 +465,7 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "state": est,
             "resenhasCitadas": e.get("resenhas_citadas") or [],
             "processosCitados": e.get("processos_citados") or [],
+            "decisoesVinculadas": e.get("decisoes_vinculadas") or [],
             "description": e.get("texto") or e.get("modificador") or "",
             "fundamento": e.get("fundamento") or "",
             "url": url_of,
@@ -422,29 +481,98 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
     total_cnt = len(rows_conv)
     ev_pend_cnt = sum(e["validation"] == "pendente" for e in events_conv) if individual else 0
 
+    ind_conf_b = painel_resp.get("indicadores_conferido") or painel_resp.get("indicadores") or {}
+    ev_det_b = painel_resp.get("eventos_detalhados_conferido") or series_b.get("eventos_detalhados") or {}
+    outras_summary = (
+        {
+            "total": len(other_pubs_conv),
+            "abonoPermanencia": sum(1 for x in other_pubs_conv if x["category"] == "ABONO_PERMANENCIA"),
+            "porTipo": dict(Counter(x["actType"] for x in other_pubs_conv)),
+        }
+        if individual
+        else {"total": 0, "abonoPermanencia": 0, "porTipo": {}}
+    )
+
     def _visao_resumo(escopo_alvo: str) -> dict:
         rs = [r for r in rows_conv if r["validation"] == escopo_alvo]
         vert = sum(r["axis"] == "progressao" and r["modality"] == "Vertical" for r in rs)
         horiz = sum(r["axis"] == "progressao" and r["modality"] == "Horizontal" for r in rs)
+        prog_sem_mod = sum(r["axis"] == "progressao" and r["modality"] not in ("Vertical", "Horizontal") for r in rs)
         tmp = sum(r["axis"] == "tempo" for r in rs)
-        oth = len(rs) - vert - horiz - tmp
+        oth = len(rs) - vert - horiz - prog_sem_mod - tmp
+
+        # Calcular unidades com a MESMA regra de indicadores._calcular_unidades
+        proc_res: dict[str, set[str]] = {}
+        proc_cnt: dict[str, int] = {}
+        serv_res: dict[str, set[str]] = {}
+        pedidos_k: set[tuple] = set()
+        sem_mat = 0
+        for r in rs:
+            pk = chave_processo(r.get("process"), r.get("lotacao") or r.get("orgao"), r.get("actType"))
+            mk = normalizar_matricula(r.get("registration"))
+            mer = "DEFERIDO" if r["merit"] == "deferido" else ("INDEFERIDO" if r["merit"] == "indeferido" else "NAO_INFORMADO")
+            if pk:
+                proc_res.setdefault(pk, set()).add(mer)
+                proc_cnt[pk] = proc_cnt.get(pk, 0) + 1
+            if mk:
+                serv_res.setdefault(mk, set()).add(mer)
+            else:
+                sem_mat += 1
+            pedidos_k.add((pk or f"SEM_PROC:{r['id']}", f"MAT:{mk}" if mk else f"SEM_MAT:{r['id']}", r["axis"], r["modality"] or r["category"] or ""))
+
+        proc_def = sum(v == {"DEFERIDO"} for v in proc_res.values())
+        proc_ind = sum(v == {"INDEFERIDO"} for v in proc_res.values())
+        proc_ni = sum(v == {"NAO_INFORMADO"} for v in proc_res.values())
+        proc_mis = sum(len(v) > 1 for v in proc_res.values())
+        serv_ben = sum("DEFERIDO" in v for v in serv_res.values())
+        serv_so_ind = sum("DEFERIDO" not in v and "INDEFERIDO" in v for v in serv_res.values())
+        serv_so_ni = sum(v == {"NAO_INFORMADO"} for v in serv_res.values())
+
+        def_n = sum(r["merit"] == "deferido" for r in rs)
+        ind_n = sum(r["merit"] == "indeferido" for r in rs)
+        ni_n = len(rs) - def_n - ind_n
+        eh_conf = escopo_alvo == "conferido"
         return {
             "rowIds": [r["id"] for r in rs],
             "metrics": {
-                "processes": len({r["process"] for r in rs if r["process"]}),
+                "processes": len(proc_res),
+                "processesDeferidos": proc_def,
+                "processesIndeferidos": proc_ind,
+                "processesMistos": proc_mis,
+                "processesNaoInformado": proc_ni,
+                "processesColetivos": sum(c > 1 for c in proc_cnt.values()),
                 "resenhas": len({r["resenha_id"] for r in rs if r["resenha_id"]}),
+                "pedidosIndividuais": len(pedidos_k),
                 "decisions": len(rs),
-                "deferidos": sum(r["merit"] == "deferido" for r in rs),
-                "indeferidos": sum(r["merit"] == "indeferido" for r in rs),
-                "refeitos": painel_resp.get("indicadores", {}).get("refeitos") if escopo_alvo == "conferido" else None,
-                "semEfeito": painel_resp.get("indicadores", {}).get("sem_efeito") if escopo_alvo == "conferido" else None,
+                "deferidos": def_n,
+                "indeferidos": ind_n,
+                "naoInformado": ni_n,
+                "servers": len(serv_res),
+                "benefitedServers": serv_ben,
+                "serversOnlyIndeferido": serv_so_ind,
+                "serversOnlyNaoInformado": serv_so_ni,
+                "rowsWithoutValidRegistration": sem_mat,
+                "refeitos": ind_conf_b.get("refeitos") if eh_conf else None,
+                "semEfeito": ind_conf_b.get("sem_efeito") if eh_conf else None,
+                "republicacoes": ev_det_b.get("republicacoes_atos") if eh_conf else None,
+                "retificacoes": ev_det_b.get("retificacoes_atos") if eh_conf else None,
+                "correcoes": ev_det_b.get("correcoes_atos") if eh_conf else None,
+                "decisoesSemEfeito": ev_det_b.get("decisoes_sem_efeito") if eh_conf else None,
+                "decisoesRetificadas": ev_det_b.get("decisoes_retificadas") if eh_conf else None,
+                "otherPublications": outras_summary["total"] if individual else 0,
             },
-            "series": {"vertical": vert, "horizontal": horiz, "tempo": tmp, "other": oth},
+            "series": {
+                "vertical": vert,
+                "horizontal": horiz,
+                "progressaoSemModalidade": prog_sem_mod,
+                "tempo": tmp,
+                "other": oth,
+            },
         }
 
     if individual:
         rev_fonte = {"n": total_cnt, "p": pendentes_cnt, "c": conferidos_cnt, "r": rejeitados_cnt,
-                     "u": cob_b.get("ultima_atualizacao")}
+                     "o": len(other_pubs_conv), "u": cob_b.get("ultima_atualizacao")}
     else:
         rev_fonte = {"perfil": "publico", "edicoes": int(cob_b.get("edicoes_no_acervo") or 0),
                      "regras": meta_b.get("versao_regras") or C.VERSAO_REGRAS}
@@ -454,6 +582,8 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
 
     return {
         "rows": rows_conv,
+        "otherPublications": other_pubs_conv,
+        "otherPublicationsSummary": outras_summary,
         "events": events_conv,
         "categories": [[s.codigo, s.nome] for s in C.SUBCATEGORIAS] + [
             ["ABONO_PERMANENCIA", "Abono de Permanência"],
@@ -467,17 +597,21 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "perfil": meta_b.get("perfil") or "publico",
             "autenticado": individual,
             "versaoRegras": meta_b.get("versao_regras") or C.VERSAO_REGRAS,
+            "incompatibilidadeVersaoRegras": bool(diag_vr.get("incompativel")),
+            "versaoRegrasDiagnostico": diag_vr,
             "indicadores": painel_resp.get("indicadores") or {},
             "apoio": apoio_b,
-            "series": painel_resp.get("series") or {},
+            "series": series_b,
             "resenhas": (painel_resp.get("resenhas") or []) if individual else [],
         },
         "meta": {
             "version": f"Painel Diário Oficial | GEDIV · Regras {meta_b.get('versao_regras') or C.VERSAO_REGRAS}",
-            "dictionary": "Catálogo controlado GEDIV (expressões não homologadas mantidas separadas)",
+            "dictionary": "Catálogo controlado GEDIV (AST e SFT normalizados em registros compatíveis; ambíguos separados)",
             "verifiedAt": cob_b.get("ultima_atualizacao") or agora(),
             "coverage": cob_b.get("parecer") or "",
-            "automation": "Motor Python/SQLite v8 conectado · Revisão auditada por servidor.",
+            "incompatibilidadeVersaoRegras": bool(diag_vr.get("incompativel")),
+            "versaoRegrasDiagnostico": diag_vr,
+            "automation": "Motor Python/SQLite v9 conectado · Revisão auditada por servidor.",
             "personal": ("Sessão gerencial autenticada: dados funcionais liberados para conferência."
                          if individual else
                          "Sessão pública: dados individuais e anotações internas protegidos (faça login gerencial para conferir)."),
@@ -487,11 +621,12 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "conferidos": conferidos_cnt if individual else 0,
             "pendentes": pendentes_cnt if individual else 0,
             "rejeitados": rejeitados_cnt if individual else 0,
+            "outrasPublicacoes": outras_summary["total"] if individual else 0,
             "eventosPendentes": ev_pend_cnt,
             "semDecisoesConferidas": (conferidos_cnt == 0) if individual else (not bool((painel_resp.get("indicadores") or {}).get("decisoes"))),
             "connection": {
                 "batches": int(cob_b.get("edicoes_classificadas") or cob_b.get("edicoes_no_acervo") or 1),
-                "source": "sqlite_v8_canonico",
+                "source": "sqlite_v9_canonico",
                 "overlaps": int(apoio_b.get("conflitos_abertos") or 0) if individual else 0,
                 "partialCoverage": not bool(cob_b.get("completa")),
                 "fullPeriodComplete": bool(cob_b.get("completa")),
@@ -510,6 +645,7 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
                 "pending": pendentes_cnt,
                 "confirmed": conferidos_cnt,
                 "rejected": rejeitados_cnt,
+                "otherPublications": outras_summary["total"] if individual else 0,
                 "unlinkedEvents": ev_pend_cnt,
             },
             "views": {

@@ -68,15 +68,21 @@ class TesteGruposDefinitivos(unittest.TestCase):
             with self.subTest(texto=texto):
                 self.assertIsNone(C.identificar_grupo(texto)[0])
 
-    def test_tec_adm_nao_vira_ast_nem_grupo(self):
-        self.assertEqual(C.identificar_grupo("DO GRUPO TEC. ADM."), (None, "TEC. ADM"))
-        self.assertEqual(C.identificar_grupo("DO GRUPO TEC ADM"), (None, "TEC ADM"))
-        # mesmo com AST no texto, a expressão sem homologação impede a atribuição automática
-        self.assertEqual(C.identificar_grupo("GRUPO TEC. ADM. E AST")[0], None)
+    def test_tec_adm_normaliza_para_ast_quando_compativel_e_preserva_expressao(self):
+        self.assertEqual(C.identificar_grupo("DO GRUPO TEC. ADM."), ("AST", "TEC. ADM"))
+        self.assertEqual(C.identificar_grupo("DO GRUPO TEC ADM"), ("AST", "TEC ADM"))
+        # ao lado do próprio AST é compatível; com outro grupo ou cargo incompatível permanece sem grupo
+        self.assertEqual(C.identificar_grupo("GRUPO TEC. ADM. E AST")[0], "AST")
+        self.assertEqual(C.identificar_grupo("GRUPO TEC. ADM. E MAG")[0], None)
+        self.assertEqual(C.identificar_grupo("DO GRUPO TEC. ADM.", cargos=["PROFESSOR"])[0], None)
         self.assertEqual(C.identificar_grupo("DO GRUPO TECNICO ADMINISTRATIVO - AST -")[0], "AST")
 
-    def test_stf_nao_e_presumido_sft(self):
-        self.assertEqual(C.identificar_grupo("GRUPO STF - AUDITOR FISCAL TRIBUTARIO"), (None, "STF"))
+    def test_stf_exige_enquadramento_fiscal_para_normalizar_em_sft(self):
+        # STF isolado (sem enquadramento fiscal) NÃO é presumido SFT
+        self.assertEqual(C.identificar_grupo("DO GRUPO STF"), (None, "STF"))
+        self.assertEqual(C.identificar_grupo("GRUPO STF - PROFESSOR"), (None, "STF"))
+        # Com cargo/enquadramento fiscal verificado, normaliza para SFT preservando "STF"
+        self.assertEqual(C.identificar_grupo("GRUPO STF - AUDITOR FISCAL TRIBUTARIO"), ("SFT", "STF"))
         self.assertEqual(C.identificar_grupo("DOS AUDITORES FISCAIS TRIBUTARIOS")[0], "SFT")
         self.assertEqual(C.identificar_grupo("DOS PROFISSIONAIS DA FAZENDA")[0], "SFT")
         self.assertEqual(C.identificar_grupo("DO GRUPO SFT")[0], "SFT")

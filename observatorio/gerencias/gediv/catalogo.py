@@ -64,28 +64,43 @@ class Grupo:
 # MAG, SSA, GAJ, FAP, AST, ANS, ESP, DPS, SFT, OSPB, GPC, SEI, SAT, ACI, PPGG, INT.
 # A ordem de avaliação é a de GRUPOS_AVALIACAO (casos específicos primeiro).
 GRUPOS = (
-    Grupo("MAG", "Magistério", r"\bMAG\b|MAGISTERIO", CONFIRMADA),
-    Grupo("SSA", "Saúde", r"\bSSA\b|GRUPO\s+(?:OCUPACIONAL\s+)?(?:DA\s+)?SAUDE", CONFIRMADA,
-          "Código SSA (antes registrado como SAUDE). Visto em resenha real como 'GRUPO SAUDE'."),
-    Grupo("GAJ", "Apoio Judiciário", r"\bGAJ\b|APOIO\s+JUDICIARIO", CONFIRMADA, "Visto também como GAJ-1700."),
+    Grupo("MAG", "Magistério",
+          r"\bMAG\b|MAGISTERIO|PROFISSI\w*\s+(?:D[AE]\s+)?EDUCACAO|(?:LEI\s*(?:N[O°.]*\s*)?)?7\.?419\s*/\s*(?:03|2003)",
+          CONFIRMADA,
+          "Inclui evidência normativa 'profissinais de Educação' e Lei nº 7.419/03."),
+    Grupo("SSA", "Saúde",
+          r"\bSSA\b|GRUPO\s+(?:OCUPACIONAL\s+)?(?:DA\s+)?SAUDE|PROFISSI\w*\s+(?:D[AE]\s+)?SAUDE|"
+          r"DA\s+SAUDE\s+PROFISSI\w*|(?:LEI\s*(?:N[O°.]*\s*)?)?7\.?376\s*/\s*(?:03|2003)",
+          CONFIRMADA,
+          "Código SSA (antes registrado como SAUDE). Inclui 'profissinais da Saúde' e Lei nº 7.376/03."),
+    Grupo("GAJ", "Apoio Judiciário",
+          r"\bGAJ\b|APOIO\s+JUDICIARIO|(?:LEI\s*(?:N[O°.]*\s*)?)?11\.?359\s*/\s*(?:19|2019)",
+          CONFIRMADA, "Visto também como GAJ-1700 e Lei nº 11.359/2019."),
     Grupo("FAP", "Fiscalização Agropecuária", r"\bFAP\b|FISCALIZACAO\s+AGROPECUARIA", CONFIRMADA,
           "Visto também como FAP-1300."),
-    Grupo("AST", "Técnicos Administrativos", r"\bAST\b", CONFIRMADA,
-          "Visto como 'Grupo TECNICO ADMINISTRATIVO - AST -'. A expressão 'TEC. ADM' NÃO é tratada como AST "
-          "sem decisão da GEDIV (ver EXPRESSOES_SEM_GRUPO)."),
+    Grupo("AST", "Técnicos Administrativos",
+          r"\bAST\b|(?:LEI\s*(?:N[O°.]*\s*)?)?14\.?386\s*/\s*2026",
+          CONFIRMADA,
+          "Grupo canônico AST — Técnicos Administrativos (Lei nº 14.386/2026). "
+          "'TEC. ADM' é normalizado para AST em registros compatíveis preservando grupo_expressao original."),
     Grupo("ANS", "Nível Superior", r"\bANS\b|ATIVIDADES\s+DE\s+NIVEL\s+SUPERIOR", PROVISORIA),
     Grupo("ESP", "Grupo Especial", r"\bESP\b|GRUPO\s+(?:OCUPACIONAL\s+)?ESPECIAL", PROVISORIA,
           "Código ESP (antes registrado como ESPECIAL)."),
     Grupo("DPS", "Divulgação e Promoção", r"\bDPS\b|DIVULGACAO\s+E\s+PROMOCAO", PROVISORIA),
-    Grupo("SFT", "Fazenda · Auditor Fiscal", r"\bSFT\b|SERVIDORES\s+FISCAIS\s+TRIBUTARIOS|"
-          r"(?:GRUPO|PROFISSI\w*)\s+(?:D[AO]\s+)?FAZENDA|AUDITOR(?:ES)?\s+FISCA(?:L|IS)\s+TRIBUTARIOS?", CONFIRMADA,
-          "Visto como 'profissionais da Fazenda'. A sigla 'STF' NÃO é tratada como SFT sem comprovação "
-          "(ver EXPRESSOES_SEM_GRUPO)."),
+    Grupo("SFT", "Fazenda · Auditor Fiscal",
+          r"\bSFT\b|SERVIDORES\s+FISCAIS\s+TRIBUTARIOS|(?:GRUPO|PROFISSI\w*)\s+(?:D[AO]\s+)?FAZENDA|"
+          r"AUDITOR(?:ES)?\s+FISCA(?:L|IS)\s+TRIBUTARIOS?|(?:LEI\s*(?:N[O°.]*\s*)?)?8\.?427\s*/\s*(?:07|2007)",
+          CONFIRMADA,
+          "Inclui 'profissinais da Fazenda', Lei nº 8.427/07 e 'STF' quando verificado com enquadramento fiscal/tributário."),
     Grupo("OSPB", "Orquestra Sinfônica", r"\bOSPB\b|ORQUESTRA\s+SINFONICA", PROVISORIA),
     Grupo("GPC", "Polícia Civil", r"\bGPC\b|GRUPO\s+(?:OCUPACIONAL\s+)?(?:D[AE]\s+)?POLICIA\s+CIVIL", PROVISORIA),
     Grupo("SEI", "Informática", r"\bSEI\b|GRUPO\s+(?:DE\s+)?INFORMATICA", PROVISORIA),
     Grupo("SAT", "Área Tecnológica", r"\bSAT\b|AREA\s+TECNOLOGICA", PROVISORIA),
-    Grupo("ACI", "Auditoria e Controle Interno", r"\bACI\b|AUDITORIA\s+E\s+CONTROLE\s+INTERNO", PROVISORIA),
+    Grupo("ACI", "Auditoria e Controle Interno",
+          r"\bACI\b|AUDITORIA\s+E\s+CONTROLE\s+INTERNO|PROFISSI\w*\s+(?:DA\s+)?CGE|"
+          r"(?:LEI\s*(?:N[O°.]*\s*)?)?8\.?698\s*/\s*(?:08|2008)",
+          PROVISORIA,
+          "Inclui evidência normativa 'profissinais CGE' e Lei nº 8.698/08 (Auditor de Contas Públicas)."),
     Grupo("PPGG", "PPGG", r"\bPPGG\b|POLITICAS\s+PUBLICAS\s+E\s+GESTAO", PROVISORIA,
           "O documento oficial lista a sigla sem a denominação."),
     # INT: incluído por regra da GEDIV; denominação e expressões ainda não confirmadas. Só a sigla em forma
@@ -102,11 +117,48 @@ GRUPOS_AVALIACAO = tuple(GRUPO_POR_CODIGO[c] for c in _ORDEM_AVALIACAO)
 assert tuple(g.codigo for g in GRUPOS) == CODIGOS_GRUPOS
 assert len(GRUPOS) == len(GRUPOS_AVALIACAO) == len(set(_ORDEM_AVALIACAO)) == 16
 
-# Expressões vistas em resenhas reais que NÃO têm grupo homologado: o ato fica sem grupo, com a expressão
-# literal guardada e uma pendência — nunca é atribuído por aproximação a um dos 16 grupos.
+# Expressões com normalização condicional sujeita a compatibilidade de contexto/cargo.
+# Registros incompatíveis ou ambíguos permanecem sem grupo atribuído, preservando a expressão original.
 EXPRESSOES_SEM_GRUPO = (
-    ("TEC. ADM", r"\bTEC\.?\s*ADM\b", "expressão 'TEC. ADM' sem grupo homologado: a GEDIV precisa decidir se corresponde a AST"),
-    ("STF", r"\bSTF\b", "sigla 'STF' sem grupo homologado: a equivalência com SFT não está comprovada"),
+    ("TEC. ADM", r"\bTEC\.?\s*-?\s*ADM\b", "expressão 'TEC. ADM' incompatível ou ambígua com o contexto/cargo do ato: grupo AST não atribuído automaticamente"),
+    ("STF", r"\bSTF\b", "sigla 'STF' sem cargo ou enquadramento fiscal/tributário verificado: grupo SFT não atribuído automaticamente"),
+)
+
+_PAT_TEC_ADM = re.compile(r"\bTEC\.?\s*-?\s*ADM\b")
+_PAT_STF = re.compile(r"\bSTF\b")
+# Comprovação positiva estrita para AST: não presume que ASSISTENTE ADMINISTRATIVO,
+# AUXILIAR ADMINISTRATIVO ou cargos desconhecidos (ex.: ENGENHEIRO CIVIL, ADVOGADO) pertençam ao AST.
+_PAT_CARGO_COMPATIVEL_AST = re.compile(r"\bTECNIC[OA]?\s+ADMIN\w*|\bTEC\.?\s*-?\s*ADM\w*")
+_PAT_CARGO_INCOMPATIVEL_AST = re.compile(
+    r"PROFESSOR|MAGISTERIO|POLICIAL|AUDITOR\s+FISCAL|FISCAL\s+TRIBUTAR|MEDIC[OA]|ENFERMEIR|"
+    r"DELEGAD|AUDITOR\s+DE\s+CONTAS|FISCAL\s+ESTADUAL\s+AGROPECUAR|FARMACEUT|FISIOTERAP|PSICOLOG|ODONTOLOG"
+)
+_PAT_CARGO_COMPATIVEL_SFT = re.compile(r"AUDITOR\s*FISCAL|FISCAL\s*TRIBUTAR|TRIBUTAR|FAZENDA")
+_PAT_CARGO_INCOMPATIVEL_SFT = re.compile(
+    r"PROFESSOR|TECNIC[OA]?\s+ADMIN|POLICIAL|MEDIC[OA]|ENFERMEIR|DELEGAD|FARMACEUT|FISIOTERAP|AUDITOR\s+DE\s+CONTAS"
+)
+_PAT_ENQUADRAMENTO_SFT = re.compile(
+    r"\bSFT\b|AUDITOR(?:ES)?\s+FISCA(?:L|IS)\s+TRIBUTARIOS?|FISCAL\s+TRIBUTARIO|"
+    r"SERVIDORES\s+FISCAIS\s+TRIBUTARIOS|FAZENDA|(?:LEI\s*(?:N[O°.]*\s*)?)?8\.?427\s*/\s*(?:07|2007)"
+)
+_PAT_CARGO_INCOMPATIVEL_ACI = re.compile(
+    r"PROFESSOR|TECNIC[OA]?\s+ADMIN|POLICIAL|AUDITOR\s+FISCAL|MEDIC[OA]|ENFERMEIR|DELEGAD"
+)
+
+# Padrões longos/inequívocos para fallback em preâmbulos com letras espaçadas ("G A J - 1 7 0 0", "L e i 1 1 . 3 5 9 / 2 0 1 9").
+# Nunca inclui siglas curtas de 3 letras sem delimitador (ex.: MAG, AST, INT, STF) para evitar falsos positivos.
+_GRUPOS_COMPACTOS = (
+    ("GAJ", re.compile(r"GAJ-?1700|APOIOJUDICIARIO|(?:LEIN?[O°.]*)?11\.?359/(?:19|2019)")),
+    ("MAG", re.compile(r"MAGISTERIO|PROFISSI\w*(?:D[AE])?EDUCACAO|(?:LEIN?[O°.]*)?7\.?419/(?:03|2003)")),
+    ("SSA", re.compile(r"GRUPO(?:OCUPACIONAL)?(?:DA)?SAUDE|PROFISSI\w*(?:D[AE])?SAUDE|DASAUDEPROFISSI\w*|(?:LEIN?[O°.]*)?7\.?376/(?:03|2003)")),
+    ("AST", re.compile(r"GRUPO(?:OCUPACIONAL)?TECNICOADMINISTRATIVO|(?:LEIN?[O°.]*)?14\.?386/2026")),
+    ("SFT", re.compile(r"SERVIDORESFISCAISTRIBUTARIOS|AUDITOR(?:ES)?FISCA(?:L|IS)TRIBUTARIOS?|(?:LEIN?[O°.]*)?8\.?427/(?:07|2007)")),
+    ("ACI", re.compile(r"AUDITORIAECONTROLEINTERNO|(?:LEIN?[O°.]*)?8\.?698/(?:08|2008)")),
+    ("FAP", re.compile(r"FAP-?1300|FISCALIZACAOAGROPECUARIA")),
+    ("ANS", re.compile(r"ANS-?900|ATIVIDADESDENIVELSUPERIOR")),
+    ("DPS", re.compile(r"DPS-?1600|DIVULGACAOEPROMOCAO")),
+    ("OSPB", re.compile(r"ORQUESTRASINFONICA")),
+    ("GPC", re.compile(r"GRUPO(?:OCUPACIONAL)?(?:D[AE])?POLICIACIVIL")),
 )
 
 
@@ -179,27 +231,76 @@ def grupos_presentes(preambulo_normalizado: str) -> list[tuple[str, str]]:
     return [(c, e) for _, c, e in sorted(achados)]
 
 
-def avaliar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None, str | None]:
-    """(código, expressão, pendência). Etapa 05.3.4: dois ou mais grupos no mesmo ato NÃO são resolvidos pela ordem
-    dos padrões — o ato fica sem grupo, com as expressões guardadas e uma pendência para a gerência.
-    Expressão sem grupo homologado (TEC. ADM, STF) continua sem grupo, nunca convertida (AST, SFT)."""
-    sem_grupo = expressao_sem_grupo(preambulo_normalizado)
-    if sem_grupo:
-        return None, sem_grupo[0], sem_grupo[1]
+def avaliar_grupo(preambulo_normalizado: str, *, cargos=None) -> tuple[str | None, str | None, str | None]:
+    """(código, expressão, pendência).
+    - Dois ou mais grupos distintos no mesmo ato NÃO são resolvidos pela ordem dos padrões (fica sem grupo + pendência).
+    - 'TEC. ADM' normaliza para 'AST' em registros compatíveis (sem conflito com outro grupo ou cargo incompatível),
+      preservando a expressão original em `grupo_expressao`.
+    - 'STF' normaliza para 'SFT' somente quando há cargo ou enquadramento fiscal/tributário verificado e sem conflito,
+      preservando a expressão original 'STF'. Registros ambíguos ou incompatíveis ficam sem grupo.
+    - Quando o preâmbulo possui letras espaçadas ("G A J - 1 7 0 0", "L e i 1 1 . 3 5 9 / 2 0 1 9"), aplica fallback
+      compacto restrito a expressões longas/normativas inequívocas.
+    """
+    cargos_norm = [normalizar(c) for c in (cargos or ()) if str(c or "").strip()]
     presentes = grupos_presentes(preambulo_normalizado)
+    codigos_presentes = {c for c, _ in presentes}
+
+    m_tec = _PAT_TEC_ADM.search(preambulo_normalizado)
+    if m_tec:
+        exp_lit = m_tec.group(0)
+        outros = codigos_presentes - {"AST"}
+        # Quando há cargos informados, exige comprovação positiva (allowlist estrita): todos os cargos
+        # precisam ser comprovadamente compatíveis com AST (sem depender só de lista de incompatíveis).
+        # Cargos desconhecidos (ex.: ENGENHEIRO CIVIL, ADVOGADO) ou denominações não comprovadas
+        # (ex.: ASSISTENTE ADMINISTRATIVO, AUXILIAR ADMINISTRATIVO) impedem atribuição automática.
+        cargo_incomp = bool(cargos_norm) and any(_PAT_CARGO_INCOMPATIVEL_AST.search(c) for c in cargos_norm)
+        cargo_nao_comprovado = bool(cargos_norm) and not all(_PAT_CARGO_COMPATIVEL_AST.search(c) for c in cargos_norm)
+        if outros or cargo_incomp or cargo_nao_comprovado:
+            return None, exp_lit, EXPRESSOES_SEM_GRUPO[0][2]
+        return "AST", exp_lit, None
+
+    m_stf = _PAT_STF.search(preambulo_normalizado)
+    if m_stf and "SUPREMO TRIBUNAL FEDERAL" not in preambulo_normalizado:
+        outros = codigos_presentes - {"SFT"}
+        enquadramento_ok = bool(_PAT_ENQUADRAMENTO_SFT.search(preambulo_normalizado)) or any(
+            _PAT_CARGO_COMPATIVEL_SFT.search(c) for c in cargos_norm
+        )
+        cargo_incomp = bool(cargos_norm) and any(_PAT_CARGO_INCOMPATIVEL_SFT.search(c) for c in cargos_norm)
+        if enquadramento_ok and not outros and not cargo_incomp:
+            return "SFT", "STF", None
+        return None, "STF", EXPRESSOES_SEM_GRUPO[1][2]
+
     if len(presentes) > 1:
         codigos = ", ".join(c for c, _ in presentes)
         return None, " | ".join(e for _, e in presentes), f"mais de um grupo do PCCR no mesmo ato ({codigos}); grupo não atribuído"
     if presentes:
-        return presentes[0][0], presentes[0][1], None
+        codigo, expressao = presentes[0]
+        if codigo == "ACI" and "CGE" in expressao and "8.698" not in preambulo_normalizado and "8698" not in preambulo_normalizado:
+            if cargos_norm and any(_PAT_CARGO_INCOMPATIVEL_ACI.search(c) for c in cargos_norm):
+                return None, expressao, "expressão 'CGE' com cargo incompatível com ACI; grupo não atribuído automaticamente"
+        return codigo, expressao, None
+
+    # Fallback compacto seguro para preâmbulos com letras espaçadas ("G A J - 1 7 0 0", "L e i 1 1 . 3 5 9 / 2 0 1 9")
+    comp = compactar(preambulo_normalizado)
+    achados_comp = []
+    for codigo, padrao in _GRUPOS_COMPACTOS:
+        m = padrao.search(comp)
+        if m:
+            achados_comp.append((m.start(), codigo, m.group(0)))
+    achados_comp.sort()
+    if len(achados_comp) > 1:
+        codigos = ", ".join(c for _, c, _ in achados_comp)
+        return None, " | ".join(e for _, _, e in achados_comp), f"mais de um grupo do PCCR no mesmo ato ({codigos}); grupo não atribuído"
+    if len(achados_comp) == 1:
+        return achados_comp[0][1], achados_comp[0][2], None
     return None, None, None
 
 
-def identificar_grupo(preambulo_normalizado: str) -> tuple[str | None, str | None]:
+def identificar_grupo(preambulo_normalizado: str, *, cargos=None) -> tuple[str | None, str | None]:
     """Código do grupo e a expressão literal que o demonstra. Sem expressão reconhecida: (None, None).
-    Expressão sem grupo homologado (TEC. ADM, STF) tem precedência: devolve (None, expressão).
-    Mais de um grupo: (None, expressões) — ver `avaliar_grupo`."""
-    codigo, expressao, _ = avaliar_grupo(preambulo_normalizado)
+    Expressões condicionais ('TEC. ADM', 'STF') preservam a expressão literal original e só normalizam quando
+    compatíveis com o contexto/cargo. Mais de um grupo: (None, expressões) — ver `avaliar_grupo`."""
+    codigo, expressao, _ = avaliar_grupo(preambulo_normalizado, cargos=cargos)
     return codigo, expressao
 
 

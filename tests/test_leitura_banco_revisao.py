@@ -453,14 +453,14 @@ class TesteMigracaoV8(unittest.TestCase):
                   "INSERT INTO evento (id, gerencia, sha256, ato_id, tipo, pagina, vinculo, texto, ato_original_id, estado) "
                   "VALUES ('e1', 'GEDIV', 's1', 'a1', 'SEM_EFEITO', 1, 'EXPRESSO', 't', 'a1', 'VALIDADO')")
         with B.Banco(caminho) as banco:
-            self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
             self.assertIsNotNone(banco.con.execute("SELECT revisao FROM leitura").fetchone()[0])
             self.assertEqual(banco.arquivos_sem_classificacao("GEDIV", "r1"), [])                     # não reclassifica tudo
             d = banco.con.execute("SELECT chave_logica, vigente, validacao FROM decisao").fetchone()
             self.assertEqual((d["vigente"], d["validacao"]), (1, "CONFERIDO"))
             self.assertTrue(d["chave_logica"].endswith("|P:SADPSE20261"))
             self.assertEqual(banco.con.execute("SELECT estado FROM evento").fetchone()[0], "VALIDADO")
-            self.assertTrue(Path(f"{caminho}.antes-v8.bak").exists())
+            self.assertTrue(Path(f"{caminho}.antes-v{B.VERSAO_ESQUEMA}.bak").exists())
         with B.Banco(caminho) as banco:                                                           # reabertura idempotente
             self.assertEqual(B.estruturas_pendentes(banco.con), {})
 

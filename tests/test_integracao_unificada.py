@@ -121,26 +121,42 @@ class TestIntegracaoUnificadaGEDIV(unittest.TestCase):
         )
 
     def test_01_regra_especial_grupos_ocupacionais(self) -> None:
-        """Etapa 8: TEC. ADM não pode virar AST e STF não pode virar SFT automaticamente."""
+        """Etapa 4B: TEC. ADM compatível normaliza para AST preservando expressão original;
+        casos incompatíveis/ambíguos (TEC-ADM+PROFESSOR, STF sem enquadramento fiscal) permanecem pendentes."""
         g_tec, exp_tec, pend_tec = adaptador.mapear_grupo_para_backend("TEC-ADM")
-        self.assertIsNone(g_tec)
+        self.assertEqual(g_tec, "AST")
         self.assertEqual(exp_tec, "TEC. ADM")
-        self.assertTrue(pend_tec)
+        self.assertFalse(pend_tec)
 
-        f_tec = adaptador.mapear_grupo_para_frontend(g_tec, exp_tec)
-        self.assertEqual(f_tec["group"], "PENDENTE:TEC. ADM")
-        self.assertIsNone(f_tec["groupCanonical"])
-        self.assertTrue(f_tec["groupPendingConfirmation"])
+        # Incompatível com AST (cargo do Magistério) permanece pendente
+        g_tec_inc, exp_tec_inc, pend_tec_inc = adaptador.mapear_grupo_para_backend(
+            "TEC-ADM", cargo="PROFESSOR DE EDUCACAO BASICA"
+        )
+        self.assertIsNone(g_tec_inc)
+        self.assertEqual(exp_tec_inc, "TEC. ADM")
+        self.assertTrue(pend_tec_inc)
+        f_tec_inc = adaptador.mapear_grupo_para_frontend(g_tec_inc, exp_tec_inc)
+        self.assertEqual(f_tec_inc["group"], "PENDENTE:TEC. ADM")
+        self.assertIsNone(f_tec_inc["groupCanonical"])
+        self.assertTrue(f_tec_inc["groupPendingConfirmation"])
 
+        # STF isolado (sem enquadramento fiscal) permanece pendente
         g_stf, exp_stf, pend_stf = adaptador.mapear_grupo_para_backend("STF")
         self.assertIsNone(g_stf)
         self.assertEqual(exp_stf, "STF")
         self.assertTrue(pend_stf)
-
         f_stf = adaptador.mapear_grupo_para_frontend(g_stf, exp_stf)
         self.assertEqual(f_stf["group"], "PENDENTE:STF")
         self.assertIsNone(f_stf["groupCanonical"])
         self.assertTrue(f_stf["groupPendingConfirmation"])
+
+        # STF com cargo/enquadramento fiscal verificado normaliza para SFT preservando "STF"
+        g_stf_ok, exp_stf_ok, pend_stf_ok = adaptador.mapear_grupo_para_backend(
+            "STF", cargo="AUDITOR FISCAL TRIBUTARIO EST"
+        )
+        self.assertEqual(g_stf_ok, "SFT")
+        self.assertEqual(exp_stf_ok, "STF")
+        self.assertFalse(pend_stf_ok)
 
         # Equivalências comprovadas no catálogo oficial
         g_ssa, _, pend_ssa = adaptador.mapear_grupo_para_backend("SAUDE")

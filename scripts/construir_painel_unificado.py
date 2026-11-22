@@ -55,9 +55,9 @@ def construir(
     idx_script_end = html.find("</script>", idx_model)
     assert m_boot and idx_model > m_boot.start() and idx_script_end > idx_model
 
-    esqueleto_publico = """window.GEDIV_BOOTSTRAP={"rows":[],"events":[],"categories":[["TS-01","Anotação de Tempo de Serviço/Contribuição"],["TS-02","Desaverbação de Tempo de Serviço"],["TS-03","Licença para Tratar de Interesses Particulares"],["TS-04","Desistência de Licença de Interesse Particular"],["TS-05","Licença Especial"],["TS-06","Conversão de Licença Especial em Tempo de Serviço"],["TS-07","Conversão de Férias"],["ABONO_PERMANENCIA","Abono de Permanência"]],"groups":[],"urls":{},"meta":{"version":"Painel Diário Oficial | GEDIV · Regras 0.4","dictionary":"Catálogo controlado GEDIV (expressões não homologadas mantidas separadas)","verifiedAt":"","coverage":"Conectando ao servidor do Observatório DOE · GEDIV...","automation":"Motor Python/SQLite v8 conectado · Revisão auditada por servidor.","personal":"Sessão pública: dados individuais e anotações internas protegidos (faça login gerencial para conferir).","semBaseCarregada":true,"edicoes":0,"edicoesPendentes":0,"conferidos":0,"pendentes":0,"rejeitados":0,"eventosPendentes":0,"semDecisoesConferidas":true,"connection":{"batches":0,"source":"sqlite_v8_canonico","overlaps":0,"partialCoverage":true,"fullPeriodComplete":false}},"dashboard":{"schemaVersion":1,"revision":"0000000000000000000000000000000000000000000000000000000000000000","defaultScope":"conferido","counts":{"received":0,"pending":0,"confirmed":0,"rejected":0,"unlinkedEvents":0},"views":{"pendente":{"rowIds":[],"metrics":{"processes":0,"resenhas":0,"decisions":0,"deferidos":0,"indeferidos":0,"refeitos":null,"semEfeito":null},"series":{"vertical":0,"horizontal":0,"tempo":0,"other":0}},"conferido":{"rowIds":[],"metrics":{"processes":0,"resenhas":0,"decisions":0,"deferidos":0,"indeferidos":0,"refeitos":0,"semEfeito":0},"series":{"vertical":0,"horizontal":0,"tempo":0,"other":0}}}}};"""
+    esqueleto_publico = """window.GEDIV_BOOTSTRAP={"rows":[],"events":[],"otherPublications":[],"otherPublicationsSummary":{"total":0,"abonoPermanencia":0,"porTipo":{}},"categories":[["TS-01","Anotação de Tempo de Serviço/Contribuição"],["TS-02","Desaverbação de Tempo de Serviço"],["TS-03","Licença para Tratar de Interesses Particulares"],["TS-04","Desistência de Licença de Interesse Particular"],["TS-05","Licença Especial"],["TS-06","Conversão de Licença Especial em Tempo de Serviço"],["TS-07","Conversão de Férias"],["ABONO_PERMANENCIA","Abono de Permanência"]],"groups":[],"urls":{},"meta":{"version":"Painel Diário Oficial | GEDIV · Regras 0.4","dictionary":"Catálogo controlado GEDIV (AST e SFT normalizados em registros compatíveis; ambíguos separados)","verifiedAt":"","coverage":"Conectando ao servidor do Observatório DOE · GEDIV...","incompatibilidadeVersaoRegras":false,"versaoRegrasDiagnostico":{},"automation":"Motor Python/SQLite v9 conectado · Revisão auditada por servidor.","personal":"Sessão pública: dados individuais e anotações internas protegidos (faça login gerencial para conferir).","semBaseCarregada":true,"edicoes":0,"edicoesPendentes":0,"conferidos":0,"pendentes":0,"rejeitados":0,"outrasPublicacoes":0,"eventosPendentes":0,"semDecisoesConferidas":true,"connection":{"batches":0,"source":"sqlite_v9_canonico","overlaps":0,"partialCoverage":true,"fullPeriodComplete":false}},"dashboard":{"schemaVersion":1,"revision":"0000000000000000000000000000000000000000000000000000000000000000","defaultScope":"conferido","counts":{"received":0,"pending":0,"confirmed":0,"rejected":0,"otherPublications":0,"unlinkedEvents":0},"views":{"pendente":{"rowIds":[],"metrics":{"processes":0,"processesDeferidos":0,"processesIndeferidos":0,"processesMistos":0,"processesNaoInformado":0,"resenhas":0,"decisions":0,"deferidos":0,"indeferidos":0,"naoInformado":0,"servers":0,"benefitedServers":0,"refeitos":null,"semEfeito":null,"republicacoes":null,"retificacoes":null,"correcoes":null,"decisoesSemEfeito":null,"otherPublications":0},"series":{"vertical":0,"horizontal":0,"progressaoSemModalidade":0,"tempo":0,"other":0}},"conferido":{"rowIds":[],"metrics":{"processes":0,"processesDeferidos":0,"processesIndeferidos":0,"processesMistos":0,"processesNaoInformado":0,"resenhas":0,"decisions":0,"deferidos":0,"indeferidos":0,"naoInformado":0,"servers":0,"benefitedServers":0,"refeitos":0,"semEfeito":0,"republicacoes":0,"retificacoes":0,"correcoes":0,"decisoesSemEfeito":0,"otherPublications":0},"series":{"vertical":0,"horizontal":0,"progressaoSemModalidade":0,"tempo":0,"other":0}}}}};"""
 
-    novo_model = """window.GEDIV_MODEL={dashboardModel:function t(e,t={}){let n=t.validation||e.dashboard?.defaultScope||`pendente`;if(![`pendente`,`conferido`,`rejeitado`].includes(n))throw Error(`Situação de conferência inválida.`);let r=e=>String(e??``).normalize(`NFD`).replace(/[\\u0300-\\u036f]/g,``).toLowerCase(),i=e=>(!t.from||e>=t.from)&&(!t.to||e<=t.to),a=(e,t)=>new Set(e.map(e=>e[t]).filter(Boolean)).size,o=new Map(e.categories||[]),s=e=>!(t.view===`outras`&&e.axis!==`outros`||t.axis&&e.axis!==t.axis||t.modality&&(e.axis!==`progressao`||e.modality!==t.modality)||t.group&&(e.axis!==`progressao`||(t.group===`NAO_INFORMADO`?e.group:e.group!==t.group))||t.category?.length&&(e.axis!==`tempo`||!t.category.includes(e.category))||t.merit&&e.merit!==t.merit||t.query&&!r([e.resenha,e.process,e.server,e.registration,e.group,e.groupExpression,t.groupNames?.[e.group],e.modality,o.get(e.category)].join(` `)).includes(r(t.query))),c=e.rows.filter(e=>e.validation===n&&s(e)),l=c.filter(e=>i(e.date)),u=new Set(c.map(e=>e.act).filter(Boolean)),d=n===`conferido`?e.events.filter(e=>e.validation===`conferido`&&e.act&&u.has(e.act)&&i(e.date)):[],f=d.filter(e=>[`Retificação`,`Correção`,`Republicação`].includes(e.type)),p=d.filter(e=>e.type===`Tornado sem efeito`),m={processes:a(l,`process`),resenhas:a(l,`resenha_id`),decisions:l.length,deferidos:l.filter(e=>e.merit===`deferido`).length,indeferidos:l.filter(e=>e.merit===`indeferido`).length,refeitos:n===`conferido`?new Set(f.map(e=>e.act)).size:null,semEfeito:n===`conferido`?new Set(p.map(e=>e.act)).size:null},h=l;if(t.card===`deferidos`||t.card===`indeferidos`)h=l.filter(e=>e.merit===(t.card===`deferidos`?`deferido`:`indeferido`));else if(t.card===`processes`)h=l.filter(e=>!!e.process);else if(t.card===`refeitos`||t.card===`semEfeito`){let e=new Set((t.card===`refeitos`?f:p).map(e=>e.act));h=c.filter(t=>t.act&&e.has(t.act))}let g={vertical:h.filter(e=>e.axis===`progressao`&&e.modality===`Vertical`).length,horizontal:h.filter(e=>e.axis===`progressao`&&e.modality===`Horizontal`).length,tempo:h.filter(e=>e.axis===`tempo`).length,other:h.filter(e=>![`tempo`,`progressao`].includes(e.axis)||e.axis===`progressao`&&![`Vertical`,`Horizontal`].includes(e.modality)).length},_=[...new Set(h.map(e=>e.date))].sort().map(e=>({date:e,records:h.filter(t=>t.date===e).length})),v=[...new Set(h.filter(e=>e.axis===`progressao`).map(e=>e.group||`NAO_INFORMADO`))].map(e=>({group:e,records:h.filter(t=>t.axis===`progressao`&&(t.group||`NAO_INFORMADO`)===e).length}));return{scope:n,preliminary:n!==`conferido`,label:n===`pendente`?`Em conferência · dados preliminares`:n===`rejeitado`?`Registros rejeitados`:`Decisões conferidas`,rows:h,original:l,metrics:m,redo:f,voided:p,series:g,timeline:_,groupSeries:v}},acceptSnapshot:function n(e){let t=e?.dashboard;if(!Array.isArray(e?.rows)||!Array.isArray(e?.events)||!Array.isArray(e?.categories)||!e?.meta?.connection||t?.schemaVersion!==1||!/^[0-9a-f]{64}$/.test(t.revision)||![`pendente`,`conferido`,`rejeitado`].includes(t.defaultScope))throw Error(`Resposta do backend incompatível; a base anterior foi mantida.`);let n=t.counts;if(!n||n.received!==e.rows.length||n.pending+n.confirmed+n.rejected!==n.received)throw Error(`Contagem do backend inconsistente; a base anterior foi mantida.`);for(let n of[`pendente`,`conferido`]){let r=e.rows.filter(e=>e.validation===n),i=t.views?.[n],a=new Set(r.map(e=>e.id));if(!i||!Array.isArray(i.rowIds)||i.rowIds.length!==r.length||new Set(i.rowIds).size!==r.length||i.rowIds.some(e=>!a.has(e))||i.metrics?.decisions!==r.length||!i.series||Object.values(i.series).reduce((e,t)=>e+t,0)!==r.length)throw Error(`Registros e gráficos do backend divergem; a base anterior foi mantida.`)}return e}};"""
+    novo_model = """window.GEDIV_MODEL={dashboardModel:function t(e,t={}){let n=t.validation||e.dashboard?.defaultScope||`pendente`;if(![`pendente`,`conferido`,`rejeitado`].includes(n))throw Error(`Situação de conferência inválida.`);let r=e=>String(e??``).normalize(`NFD`).replace(/[\\u0300-\\u036f]/g,``).toLowerCase(),i=e=>(!t.from||e>=t.from)&&(!t.to||e<=t.to),a=(e,t)=>new Set(e.map(e=>e[t]).filter(Boolean)).size,o=new Map(e.categories||[]),nm=v=>{let d=String(v??``).replace(/\\D/g,``);return d.length>=6&&d.length<=9&&new Set(d).size>1?d:``},np=row=>{let raw=String(row.process??``).normalize(`NFD`).replace(/[\\u0300-\\u036f]/g,``).toUpperCase().replace(/\\s+/g,``);if(!raw)return ``;if(/^[A-Z]{2,6}-(?:PSE|PRC|OFI)-\\d{4}[/-]\\d{3,9}$/.test(raw))return raw;let org=String(row.lotacao||row.orgao||``).normalize(`NFD`).replace(/[\\u0300-\\u036f]/g,``).toUpperCase().replace(/[^0-9A-Z]/g,``),ser=String(row.actType||``).normalize(`NFD`).replace(/[\\u0300-\\u036f]/g,``).toUpperCase().replace(/[^0-9A-Z]/g,``);return org||ser?`${org}|${ser}|${raw}`:raw},ehOutras=t.view===`outras`||t.axis===`outros`,baseArr=ehOutras?(e.otherPublications||[]):(e.rows||[]),s=e=>!(t.axis&&!ehOutras&&e.axis!==t.axis||t.modality&&(e.axis!==`progressao`||e.modality!==t.modality)||t.group&&(e.axis!==`progressao`||(t.group===`NAO_INFORMADO`?e.group:e.group!==t.group))||t.category?.length&&(!ehOutras&&e.axis!==`tempo`||!t.category.includes(e.category||`SEM_SUBCATEGORIA`))||t.merit&&e.merit!==t.merit||t.query&&!r([e.resenha,e.process,e.server,e.registration,e.group,e.groupExpression,t.groupNames?.[e.group],e.modality,o.get(e.category)||(!e.category&&e.axis===`tempo`?`Subcategoria pendente`:``)].join(` `)).includes(r(t.query))),c=ehOutras?baseArr.filter(s):baseArr.filter(e=>e.validation===n&&s(e)),l=c.filter(e=>i(e.date)),u=new Set(c.map(e=>e.act).filter(Boolean)),d=n===`conferido`&&!ehOutras?e.events.filter(e=>e.validation===`conferido`&&e.act&&u.has(e.act)&&i(e.date)):[],f=d.filter(e=>[`Retificação`,`Correção`,`Republicação`].includes(e.type)),p=d.filter(e=>e.type===`Tornado sem efeito`),fRep=d.filter(e=>e.type===`Republicação`),fRet=d.filter(e=>e.type===`Retificação`),fCor=d.filter(e=>e.type===`Correção`),decSeSet=new Set(p.flatMap(e=>Array.isArray(e.decisoesVinculadas)?e.decisoesVinculadas:[])),pMap=new Map(),sMap=new Map();for(let row of l){let pk=np(row),mk=nm(row.registration),mer=row.merit===`deferido`?`D`:row.merit===`indeferido`?`I`:`N`;if(pk){if(!pMap.has(pk))pMap.set(pk,new Set());pMap.get(pk).add(mer)}if(mk){if(!sMap.has(mk))sMap.set(mk,new Set());sMap.get(mk).add(mer)}}let pDef=0,pInd=0,pMis=0,pNi=0;for(let st of pMap.values()){if(st.size>1)pMis++;else if(st.has(`D`))pDef++;else if(st.has(`I`))pInd++;else pNi++}let sBen=0,sSoInd=0,sSoNi=0;for(let st of sMap.values()){if(st.has(`D`))sBen++;else if(st.has(`I`))sSoInd++;else sSoNi++}let defCnt=l.filter(e=>e.merit===`deferido`).length,indCnt=l.filter(e=>e.merit===`indeferido`).length,niCnt=l.length-defCnt-indCnt,m={processes:pMap.size,processesDeferidos:pDef,processesIndeferidos:pInd,processesMistos:pMis,processesNaoInformado:pNi,resenhas:a(l,`resenha_id`),decisions:l.length,deferidos:defCnt,indeferidos:indCnt,naoInformado:niCnt,servers:sMap.size,benefitedServers:sBen,serversOnlyIndeferido:sSoInd,serversOnlyNaoInformado:sSoNi,refeitos:n===`conferido`&&!ehOutras?new Set(f.map(e=>e.act)).size:null,semEfeito:n===`conferido`&&!ehOutras?new Set(p.map(e=>e.act)).size:null,republicacoes:n===`conferido`&&!ehOutras?new Set(fRep.map(e=>e.act)).size:null,retificacoes:n===`conferido`&&!ehOutras?new Set(fRet.map(e=>e.act)).size:null,correcoes:n===`conferido`&&!ehOutras?new Set(fCor.map(e=>e.act)).size:null,decisoesSemEfeito:n===`conferido`&&!ehOutras?decSeSet.size:null,otherPublications:(e.otherPublications||[]).length},h=l;if(t.card===`deferidos`||t.card===`indeferidos`)h=l.filter(e=>e.merit===(t.card===`deferidos`?`deferido`:`indeferido`));else if(t.card===`processes`)h=l.filter(e=>!!e.process);else if(t.card===`refeitos`||t.card===`semEfeito`){let e=new Set((t.card===`refeitos`?f:p).map(e=>e.act));h=c.filter(t=>t.act&&e.has(t.act))}let g={vertical:h.filter(e=>e.axis===`progressao`&&e.modality===`Vertical`).length,horizontal:h.filter(e=>e.axis===`progressao`&&e.modality===`Horizontal`).length,progressaoSemModalidade:h.filter(e=>e.axis===`progressao`&&![`Vertical`,`Horizontal`].includes(e.modality)).length,tempo:h.filter(e=>e.axis===`tempo`).length,other:h.filter(e=>![`tempo`,`progressao`].includes(e.axis)).length},_=[...new Set(h.map(e=>e.date))].sort().map(e=>({date:e,records:h.filter(t=>t.date===e).length})),v=[...new Set(h.filter(e=>e.axis===`progressao`).map(e=>e.group||`NAO_INFORMADO`))].map(e=>({group:e,records:h.filter(t=>t.axis===`progressao`&&(t.group||`NAO_INFORMADO`)===e).length}));return{scope:n,preliminary:n!==`conferido`,label:n===`pendente`?`Em conferência · dados preliminares`:n===`rejeitado`?`Registros rejeitados`:`Decisões conferidas`,rows:h,original:l,metrics:m,redo:f,voided:p,series:g,timeline:_,groupSeries:v}},acceptSnapshot:function n(e){let t=e?.dashboard;if(!Array.isArray(e?.rows)||!Array.isArray(e?.events)||!Array.isArray(e?.categories)||!e?.meta?.connection||t?.schemaVersion!==1||!/^[0-9a-f]{64}$/.test(t.revision)||![`pendente`,`conferido`,`rejeitado`].includes(t.defaultScope))throw Error(`Resposta do backend incompatível; a base anterior foi mantida.`);let n=t.counts;if(!n||n.received!==e.rows.length||n.pending+n.confirmed+n.rejected!==n.received)throw Error(`Contagem do backend inconsistente; a base anterior foi mantida.`);for(let n of[`pendente`,`conferido`]){let r=e.rows.filter(e=>e.validation===n),i=t.views?.[n],a=new Set(r.map(e=>e.id));if(!i||!Array.isArray(i.rowIds)||i.rowIds.length!==r.length||new Set(i.rowIds).size!==r.length||i.rowIds.some(e=>!a.has(e))||i.metrics?.decisions!==r.length||!i.series||Object.values(i.series).reduce((e,t)=>e+t,0)!==r.length)throw Error(`Registros e gráficos do backend divergem; a base anterior foi mantida.`)}return e}};"""
 
     html = (
         html[: m_boot.start()]
@@ -150,15 +150,10 @@ document.getElementById('sendBatch').onclick=async()=>{
         1,
     )
 
-    # 2b. Suporte a Abono de Permanência no eixo Tempo de Serviço (preservando TS-01 a TS-07, sem TS-08, 0 cores novas)
+    # 2b. Suporte a Tempo de Serviço (TS-01 a TS-07 + Subcategoria pendente) e Abono de Permanência em Outras Publicações (sem TS-08, 0 cores novas)
     html = html.replace(
         "<p>Os sete serviços permanecem visíveis · clique para filtrar</p>",
-        "<p>Os sete serviços (TS-01 a TS-07) e Abono de Permanência permanecem visíveis · clique para filtrar</p>",
-        1,
-    )
-    html = html.replace(
-        "let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb'];",
-        "let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#175ca8'];",
+        "<p>Os sete serviços (TS-01 a TS-07) permanecem visíveis · Abono de Permanência em Outras Publicações</p>",
         1,
     )
 
@@ -386,10 +381,10 @@ window.GEDIV_READY=(async()=>{
     assert old_boot_script in html
     html = html.replace(old_boot_script, new_boot_script, 1)
 
-    # 5. Atualizar groupNames e normalização de filtro de grupo para atender à Regra Especial da Etapa 8
+    # 5. Atualizar groupNames e normalização de filtro de grupo (AST e SFT canônicos + PENDENTE apenas para ambíguos/incompatíveis)
     old_group_names = """const groupNames={'NAO_INFORMADO':'Grupo não informado','MAG':'MAG · Magistério','SAUDE':'Saúde','GAJ':'GAJ · Apoio Judiciário','FAP':'FAP · Fiscalização Agropecuária','TEC-ADM':'TEC-ADM · Técnicos Administrativos','ANS':'ANS · Nível Superior','ESPECIAL':'Grupo Especial','DPS':'DPS · Divulgação e Promoção','STF':'STF · Auditor Fiscal Tributário','OSPB':'OSPB · Orquestra Sinfônica','GPC':'GPC · Polícia Civil','SEI':'SEI · Informática','SAT':'SAT · Área Tecnológica','ACI':'ACI · Auditoria e Controle Interno','PPGG':'PPGG · Políticas Públicas e Gestão'};"""
-    new_group_names = """const groupNames={'NAO_INFORMADO':'Grupo não informado','MAG':'MAG · Magistério','SSA':'SSA · Saúde','GAJ':'GAJ · Apoio Judiciário','FAP':'FAP · Fiscalização Agropecuária','AST':'AST · Técnicos Administrativos (PCCR)','PENDENTE:TEC. ADM':'TEC. ADM · Técnicos Administrativos (vínculo com AST pendente)','ANS':'ANS · Nível Superior','ESP':'ESP · Grupo Especial','DPS':'DPS · Divulgação e Promoção','SFT':'SFT · Serviço Fazendário Tributário (PCCR)','PENDENTE:STF':'STF · Auditor Fiscal Tributário (vínculo com SFT pendente)','OSPB':'OSPB · Orquestra Sinfônica','GPC':'GPC · Polícia Civil','SEI':'SEI · Informática','SAT':'SAT · Área Tecnológica','ACI':'ACI · Auditoria e Controle Interno','PPGG':'PPGG · Políticas Públicas e Gestão','INT':'INT · Interiorização'};
-const GROUP_ALIASES={'TEC-ADM':'PENDENTE:TEC. ADM','TEC. ADM':'PENDENTE:TEC. ADM','STF':'PENDENTE:STF','SAUDE':'SSA','ESPECIAL':'ESP','GAJ-1700':'GAJ','FAP-1300':'FAP','ANS-900':'ANS','DPS-1600':'DPS','FAZENDA':'SFT'};
+    new_group_names = """const groupNames={'NAO_INFORMADO':'Grupo não informado','MAG':'MAG · Magistério','SSA':'SSA · Saúde','GAJ':'GAJ · Apoio Judiciário','FAP':'FAP · Fiscalização Agropecuária','AST':'AST · Técnicos Administrativos','PENDENTE:TEC. ADM':'TEC. ADM · Técnicos Administrativos (pendente/incompatível)','ANS':'ANS · Nível Superior','ESP':'ESP · Grupo Especial','DPS':'DPS · Divulgação e Promoção','SFT':'SFT · Fazenda · Auditor Fiscal','PENDENTE:STF':'STF · Auditor Fiscal Tributário (pendente/incompatível)','OSPB':'OSPB · Orquestra Sinfônica','GPC':'GPC · Polícia Civil','SEI':'SEI · Informática','SAT':'SAT · Área Tecnológica','ACI':'ACI · Auditoria e Controle Interno','PPGG':'PPGG · Políticas Públicas e Gestão','INT':'INT · Interiorização'};
+const GROUP_ALIASES={'TEC-ADM':'AST','TEC. ADM':'AST','SAUDE':'SSA','ESPECIAL':'ESP','GAJ-1700':'GAJ','FAP-1300':'FAP','ANS-900':'ANS','DPS-1600':'DPS','FAZENDA':'SFT'};
 const resolveGroupKey=g=>GROUP_ALIASES[g]||g;"""
     assert old_group_names in html
     html = html.replace(old_group_names, new_group_names, 1)
@@ -450,6 +445,16 @@ const resolveGroupKey=g=>GROUP_ALIASES[g]||g;"""
  return /^Resenha\\b/i.test(raw)?raw:'Resenha '+raw;
 }
 function records(rows){
+ if(!data.backend?.autenticado&&!(data.rows||[]).length&&data.backend?.indicadores&&data.backend?.series){
+  $('#listHeading').textContent='CONSULTA PÚBLICA';
+  const pubDec=data.backend.indicadores.decisoes;
+  $('#resultCount').textContent=`Modo público · indicadores agregados protegidos${pubDec!=null?` (${pubDec} decisões, limiar ≥ 5)`:''}`;
+  $('#records').innerHTML='<div class="empty-small">Consulta pública ativa: os indicadores e gráficos exibem totais agregados protegidos (limiar mínimo de 5).<br>Use <b>Acesso gerencial</b> no topo para explorar resenhas, processos e conferir registros individuais.</div>';
+  $('#pagination').textContent='Modo público';
+  $('#prev').disabled=true;$('#next').disabled=true;
+  details(null);
+  return;
+ }
  let g=groups(rows),pages=Math.max(1,Math.ceil(g.length/5));
  S.page=Math.max(0,Math.min(S.page,pages-1));
  let shown=g.slice(S.page*5,S.page*5+5);
@@ -501,10 +506,13 @@ function records(rows){
 const TL_SERIES=[
  {k:'vertical',name:'Vertical',color:'#1265ef'},
  {k:'horizontal',name:'Horizontal',color:'#13b88a'},
- {k:'tempo',name:'Tempo de Serviço + Abono',color:'#ff973c'},
+ {k:'tempo',name:'Tempo de Serviço',color:'#ff973c'},
  {k:'outros',name:'Outros benefícios',color:'#7c5ce6'}
 ];
 let tlChartMode='monthly', tlOffSeries=new Set(), lastTlRows=[];
+function isPublicAgg(){
+ return !data.backend?.autenticado&&!(data.rows||[]).length&&!!(data.backend?.indicadores&&data.backend?.series);
+}
 function renderDelicateTimeline(rows){
  lastTlRows=rows||[];
  const tl=$('#timeline');if(!tl)return;
@@ -530,31 +538,51 @@ function renderDelicateTimeline(rows){
  }
  let wrap=card.querySelector('#delicateTlWrap');
  if(!wrap){wrap=document.createElement('div');wrap.id='delicateTlWrap';tl.parentElement.insertBefore(wrap,tl);}
- if(tlChartMode==='daily'||!lastTlRows.length){
+ const pubAgg=isPublicAgg();
+ const pubMonths=pubAgg?(data.backend?.series?.por_data||[]).filter(m=>/^\\d{4}-\\d{2}/.test(String(m.data||''))&&Number(m.total||0)>0):[];
+ if(!pubAgg&&(tlChartMode==='daily'||!lastTlRows.length)){
+  wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
+  return;
+ }
+ if(pubAgg&&!pubMonths.length){
   wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
   return;
  }
  tl.style.display='none';if(legOrig)legOrig.style.display='none';wrap.hidden=false;
- const byMonth={};
- lastTlRows.forEach(r=>{
-  const d=String(r.date||'');if(d.length<7)return;
-  const ym=d.slice(0,7);
-  if(!byMonth[ym])byMonth[ym]={ym,vertical:0,horizontal:0,tempo:0,outros:0};
-  if(r.axis==='tempo')byMonth[ym].tempo++;
-  else if(r.axis==='outros')byMonth[ym].outros++;
-  else if(r.modality==='Horizontal')byMonth[ym].horizontal++;
-  else byMonth[ym].vertical++;
- });
- const months=Object.values(byMonth).sort((a,b)=>a.ym.localeCompare(b.ym));
+ let months=[];
+ if(pubAgg){
+  months=pubMonths.map(m=>({
+   ym:String(m.data).slice(0,7),
+   vertical:S.view==='horizontal'||S.view==='tempo'||S.view==='outras'?0:(m.vertical??0),
+   horizontal:S.view==='vertical'||S.view==='tempo'||S.view==='outras'?0:(m.horizontal??0),
+   tempo:S.view==='vertical'||S.view==='horizontal'||S.view==='outras'?0:(m.tempo??0),
+   outros:0,
+   pubTotal:Number(m.total||0),
+   pubSuppressed:m.vertical==null&&m.horizontal==null&&m.tempo==null&&Number(m.total||0)>0
+  })).sort((a,b)=>a.ym.localeCompare(b.ym));
+ }else{
+  const byMonth={};
+  lastTlRows.forEach(r=>{
+   const d=String(r.date||'');if(d.length<7)return;
+   const ym=d.slice(0,7);
+   if(!byMonth[ym])byMonth[ym]={ym,vertical:0,horizontal:0,tempo:0,outros:0};
+   if(r.axis==='tempo')byMonth[ym].tempo++;
+   else if(r.axis==='outros')byMonth[ym].outros++;
+   else if(r.axis==='progressao'&&r.modality==='Horizontal')byMonth[ym].horizontal++;
+   else if(r.axis==='progressao'&&r.modality==='Vertical')byMonth[ym].vertical++;
+   else byMonth[ym].outros++;
+  });
+  months=Object.values(byMonth).sort((a,b)=>a.ym.localeCompare(b.ym));
+ }
  const active=TL_SERIES.filter(s=>!tlOffSeries.has(s.k));
  const subEl=$('#delicateTlSub');
- if(subEl)subEl.textContent=tlChartMode==='lines'?'Tendência mensal por modalidade · clique na legenda para isolar séries':'Composição mensal por modalidade · sem rolagem horizontal';
+ if(subEl)subEl.textContent=pubAgg?'Agregação mensal pública (limiar ≥ 5) · dados individuais protegidos':(tlChartMode==='lines'?'Tendência mensal por modalidade · clique na legenda para isolar séries':'Composição mensal por modalidade · sem rolagem horizontal');
  const W=620,H=168,padL=38,padR=14,padT=14,padB=24,plotW=W-padL-padR,plotH=H-padT-padB;
  const step=plotW/Math.max(1,months.length),barW=Math.min(34,Math.max(14,step*0.58));
  let svg=`<line x1="${padL}" y1="${padT}" x2="${W-padR}" y2="${padT}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH/2}" x2="${W-padR}" y2="${padT+plotH/2}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="#d5e3f1"/>`;
- if(tlChartMode==='lines'){
+ if(tlChartMode==='lines'&&!pubAgg){
   const maxV=Math.max(1,...months.flatMap(m=>active.map(s=>m[s.k])));
   svg+=`<text x="${padL-6}" y="${padT+4}" font-size="9.5" fill="#405d79" text-anchor="end">${maxV}</text>
         <text x="${padL-6}" y="${padT+plotH/2+4}" font-size="9.5" fill="#405d79" text-anchor="end">${Math.round(maxV/2)}</text>
@@ -570,21 +598,31 @@ function renderDelicateTimeline(rows){
    });
   });
  }else{
-  const maxT=Math.max(1,...months.map(m=>active.reduce((a,s)=>a+m[s.k],0)));
+  const barVal=m=>m.pubSuppressed?(S.view==='geral'||S.view==='historico'?m.pubTotal:0):active.reduce((a,s)=>a+m[s.k],0);
+  const maxT=Math.max(1,...months.map(barVal));
   svg+=`<text x="${padL-6}" y="${padT+4}" font-size="9.5" fill="#405d79" text-anchor="end">${maxT}</text>
         <text x="${padL-6}" y="${padT+plotH/2+4}" font-size="9.5" fill="#405d79" text-anchor="end">${Math.round(maxT/2)}</text>
         <text x="${padL-6}" y="${padT+plotH+3}" font-size="9.5" fill="#405d79" text-anchor="end">0</text>`;
   months.forEach((m,i)=>{
    let y=padT+plotH;const x=padL+step*i+(step-barW)/2;
    const lbl=MONTH_SHORT[Number(m.ym.slice(5,7))-1]+'/'+m.ym.slice(2,4);
-   const tot=m.vertical+m.horizontal+m.tempo+m.outros;
-   const tip=`${lbl} · Total: ${tot} (Vertical: ${m.vertical} · Horizontal: ${m.horizontal} · Tempo+Abono: ${m.tempo} · Outros: ${m.outros})`;
-   let rects='';
-   active.forEach(s=>{
-    if(!m[s.k])return;
-    const bh=Math.max(3,plotH*m[s.k]/maxT);y-=bh;
-    rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
-   });
+   let rects='',tip='';
+   if(m.pubSuppressed){
+    const v=barVal(m);
+    tip=`${lbl} · Total protegido: ${m.pubTotal} (detalhe por modalidade suprimido < 5)`;
+    if(v>0){
+     const bh=Math.max(3,plotH*v/maxT);y-=bh;
+     rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="#94a3b8"/>`;
+    }
+   }else{
+    const tot=m.vertical+m.horizontal+m.tempo+m.outros;
+    tip=`${lbl} · Total: ${tot} (Vertical: ${m.vertical} · Horizontal: ${m.horizontal} · Tempo: ${m.tempo} · Outros: ${m.outros})`;
+    active.forEach(s=>{
+     if(!m[s.k])return;
+     const bh=Math.max(3,plotH*m[s.k]/maxT);y-=bh;
+     rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
+    });
+   }
    svg+=`<g tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}">${rects}<rect x="${x.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${plotH}" fill="transparent"/></g>`;
   });
  }
@@ -592,10 +630,17 @@ function renderDelicateTimeline(rows){
   const cx=(padL+step*i+step/2).toFixed(1),lbl=MONTH_SHORT[Number(m.ym.slice(5,7))-1];
   svg+=`<text x="${cx}" y="${H-6}" font-size="9.5" fill="#405d79" text-anchor="middle">${lbl}</text>`;
  });
- const totals={vertical:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality!=='Horizontal').length,horizontal:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Horizontal').length,tempo:lastTlRows.filter(r=>r.axis==='tempo').length,outros:lastTlRows.filter(r=>r.axis==='outros').length};
+ const totals=pubAgg
+  ?{
+    vertical:((data.backend.series.por_assunto||[]).find(a=>a.chave==='VERTICAL')?.total)??0,
+    horizontal:((data.backend.series.por_assunto||[]).find(a=>a.chave==='HORIZONTAL')?.total)??0,
+    tempo:((data.backend.series.por_assunto||[]).find(a=>a.chave==='TEMPO_SERVICO')?.total)??0,
+    outros:0
+   }
+  :{vertical:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical').length,horizontal:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Horizontal').length,tempo:lastTlRows.filter(r=>r.axis==='tempo').length,outros:lastTlRows.filter(r=>r.axis==='outros'||(r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal')).length};
  wrap.innerHTML=`<svg class="delicate-tl-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução mensal das publicações">${svg}</svg>
   <div class="delicate-tl-leg">${TL_SERIES.map(s=>`<button type="button" class="delicate-lg-btn ${tlOffSeries.has(s.k)?'is-off':''}" data-tl-ser="${s.k}" aria-pressed="${!tlOffSeries.has(s.k)}"><i class="delicate-lg-dot" style="background:${s.color}"></i>${s.name} (${totals[s.k]})</button>`).join('')}</div>
-  <div class="delicate-tl-tip" id="delicateTlTip" role="status">Passe o mouse ou foque em um mês para ver a composição · clique na legenda para isolar séries.</div>
+  <div class="delicate-tl-tip" id="delicateTlTip" role="status">${pubAgg?'Passe o mouse ou foque em um mês para ver o agregado público (limiar ≥ 5).':'Passe o mouse ou foque em um mês para ver a composição · clique na legenda para isolar séries.'}</div>
   <div class="delicate-tl-note">Lacunas ou ausência de barra refletem falta de coleta no intervalo ou filtro aplicado — nunca equivalem a zero publicações confirmadas.</div>`;
  wrap.querySelectorAll('[data-tl-ser]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.tlSer;
@@ -627,6 +672,293 @@ function timeline(rows){
 }"""
     assert old_tl_fn in html
     html = html.replace(old_tl_fn, new_tl_fn, 1)
+
+    # 5c-bis. Paridade integral dos cartões, gráficos e filtros com a fonte única de cálculo (Etapa 4B, 0 cores novas)
+    html = html.replace(
+        "const catName=id=>data.categories.find(x=>x[0]===id)?.[1]||'Não informado';",
+        "const catName=id=>id==='SEM_SUBCATEGORIA'?'Subcategoria pendente de conferência':(data.categories.find(x=>x[0]===id)?.[1]||'Não informado');",
+        1,
+    )
+
+    old_sync_cats = """ const mNoCat=window.GEDIV_MODEL.dashboardModel(data,{...S,category:[],card:'',groupNames}).original;
+ const tempoRows=mNoCat.filter(r=>r.axis==='tempo');
+ $('#serviceFilters').innerHTML=data.categories.map(([id,label])=>{const count=tempoRows.filter(r=>r.category===id).length,active=S.category.includes(id);return `<button data-cat="${id}" class="${active?'active':''} ${count?'':'is-zero'}" aria-pressed="${active}" title="${esc(label)} (${count})"><span class="svc-main"><i></i><span>${esc(label)}</span></span><span class="svc-count">${count}</span></button>`;}).join('');"""
+    new_sync_cats = """ const mNoCat=window.GEDIV_MODEL.dashboardModel(data,{...S,category:[],card:'',groupNames}).original;
+ const tempoRows=mNoCat.filter(r=>r.axis==='tempo');
+ const tsCats=data.categories.filter(([id])=>id!=='ABONO_PERMANENCIA');
+ const semSubCnt=tempoRows.filter(r=>!r.category).length;
+ const allSvcCats=semSubCnt||S.category.includes('SEM_SUBCATEGORIA')?tsCats.concat([['SEM_SUBCATEGORIA','Subcategoria pendente de conferência']]):tsCats;
+ $('#serviceFilters').innerHTML=allSvcCats.map(([id,label])=>{const count=id==='SEM_SUBCATEGORIA'?semSubCnt:tempoRows.filter(r=>r.category===id).length,active=S.category.includes(id);return `<button data-cat="${id}" class="${active?'active':''} ${count?'':'is-zero'}" aria-pressed="${active}" title="${esc(label)} (${count})"><span class="svc-main"><i></i><span>${esc(label)}</span></span><span class="svc-count">${count}</span></button>`;}).join('');"""
+    assert old_sync_cats in html
+    html = html.replace(old_sync_cats, new_sync_cats, 1)
+
+    old_kpis = """function kpis(m){
+ const preliminary=S.validation==='pendente',total=m.decisions||0;
+ const cards=[['resenhas','Resenhas',m.resenhas,'publicações distintas','■',''],['processes','Processos',m.processes,'processos identificados','■',''],['decisions',preliminary?'Registros extraídos':'Decisões',m.decisions,preliminary?'conferência pendente':'decisões conferidas','■',''],['deferidos',preliminary?'Deferidos · extraídos':'Deferidos',m.deferidos,`${pct(m.deferidos,total)} do total · ${preliminary?'a conferir':'conferidas'}`,'✓','green'],['indeferidos',preliminary?'Indeferidos · extraídos':'Indeferidos',m.indeferidos,`${pct(m.indeferidos,total)} do total · ${preliminary?'a conferir':'conferidas'}`,'×','red'],['refeitos','Refeitos',m.refeitos,'atos com alteração','<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>','amber'],['semEfeito','Sem efeito',m.semEfeito,'atos na amostra','<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>','red']];
+ $('#kpis').innerHTML=cards.map(([id,label,value,sub,icon,color])=>{const active=(id==='deferidos'&&S.merit==='deferido')||(id==='indeferidos'&&S.merit==='indeferido')||S.card===id;return `<button class="kpi ${color} ${active?'active':''}" data-card="${id}" ${value==null?'disabled':''} title="${value==null?'Vinculação documental pendente':'Filtrar por '+esc(label)}"><span class="label">${esc(label)}</span><span class="marker" aria-hidden="true">${icon}</span><b class="val">${value==null?'—':value}</b><span class="sub">${value==null?'Vínculo ainda pendente':esc(sub)}</span></button>`;}).join('');
+}"""
+    new_kpis = """function kpis(m){
+ if(isPublicAgg()){
+  const bi=data.backend.indicadores||{},bs=data.backend.series||{},pa=bs.por_assunto||[];
+  const byK=k=>pa.find(x=>x.chave===k)||{};
+  let pRes=bi.resenhas,pProc=bi.processos,pDec=bi.decisoes,pDef=bi.deferidos,pInd=bi.indeferidos,pRef=bi.refeitos,pSe=bi.sem_efeito;
+  if(S.view==='vertical'||S.view==='horizontal'||S.view==='tempo'){
+   const item=byK(S.view==='vertical'?'VERTICAL':S.view==='horizontal'?'HORIZONTAL':'TEMPO_SERVICO');
+   pRes=null;pProc=null;pDec=item.total??null;pDef=item.deferido??null;pInd=item.indeferido??null;pRef=null;pSe=null;
+  }else if(S.view==='outras'){
+   pRes=null;pProc=null;pDec=null;pDef=null;pInd=null;pRef=null;pSe=null;
+  }else if(S.view==='hoje'){
+   pRes=null;pProc=null;pDec=null;pDef=null;pInd=null;pRef=null;pSe=null;
+  }
+  const pubSub=v=>v==null?'Protegido (< 5) ou restrito':'agregado público (≥ 5)';
+  const cards=[
+   ['resenhas','Resenhas',pRes,pubSub(pRes),'■',''],
+   ['processes','Processos',pProc,pubSub(pProc),'■',''],
+   ['decisions','Decisões',pDec,pubSub(pDec),'■',''],
+   ['deferidos','Deferidos',pDef,pDef!=null&&pDec?`${pct(pDef,pDec)} do total · público`:pubSub(pDef),'✓','green'],
+   ['indeferidos','Indeferidos',pInd,pInd!=null&&pDec?`${pct(pInd,pDec)} do total · público`:pubSub(pInd),'×','red'],
+   ['refeitos','Refeitos',pRef,pubSub(pRef),'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>','amber'],
+   ['semEfeito','Sem efeito',pSe,pubSub(pSe),'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>','red']
+  ];
+  $('#kpis').innerHTML=cards.map(([id,label,value,sub,icon,color])=>`<button class="kpi ${color}" data-card="${id}" ${value==null?'disabled':'aria-disabled="true" style="cursor:default"'} title="Modo público: indicadores agregados protegidos"><span class="label">${esc(label)}</span><span class="marker" aria-hidden="true">${icon}</span><b class="val">${value==null?'—':value}</b><span class="sub">${esc(sub)}</span></button>`).join('');
+  return;
+ }
+ const preliminary=S.validation==='pendente',total=m.decisions||0;
+ const procSub=m.processes?`${m.processesDeferidos||0} D · ${m.processesIndeferidos||0} I${m.processesMistos?` · ${m.processesMistos} mistos`:''}${m.processesNaoInformado?` · ${m.processesNaoInformado} NI`:''}`:'processos identificados';
+ const decSub=`${m.servers||0} serv. (${m.benefitedServers||0} benef.)${m.naoInformado?` · ${m.naoInformado} NI`:''} · ${preliminary?'não homologado':'conferidas'}`;
+ const refSub=`${m.republicacoes||0} rep. · ${m.retificacoes||0} ret.${m.correcoes?` · ${m.correcoes} corr.`:''}`;
+ const seSub=`${m.semEfeito||0} ato(s) · ${m.decisoesSemEfeito||0} dec. atingida(s)`;
+ const cards=[['resenhas','Resenhas',m.resenhas,'publicações distintas','■',''],['processes','Processos',m.processes,procSub,'■',''],['decisions',preliminary?'Registros extraídos':'Decisões',m.decisions,decSub,'■',''],['deferidos',preliminary?'Deferidos · extraídos':'Deferidos',m.deferidos,`${pct(m.deferidos,total)} do total · ${preliminary?'a conferir':'conferidas'}`,'✓','green'],['indeferidos',preliminary?'Indeferidos · extraídos':'Indeferidos',m.indeferidos,`${pct(m.indeferidos,total)} do total · ${preliminary?'a conferir':'conferidas'}`,'×','red'],['refeitos','Refeitos',m.refeitos,refSub,'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>','amber'],['semEfeito','Sem efeito',m.semEfeito,seSub,'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>','red']];
+ $('#kpis').innerHTML=cards.map(([id,label,value,sub,icon,color])=>{const active=(id==='deferidos'&&S.merit==='deferido')||(id==='indeferidos'&&S.merit==='indeferido')||S.card===id;return `<button class="kpi ${color} ${active?'active':''}" data-card="${id}" ${value==null?'disabled':''} title="${value==null?'Vinculação documental pendente':'Filtrar por '+esc(label)}"><span class="label">${esc(label)}</span><span class="marker" aria-hidden="true">${icon}</span><b class="val">${value==null?'—':value}</b><span class="sub">${value==null?'Vínculo ainda pendente':esc(sub)}</span></button>`;}).join('');
+}"""
+    assert old_kpis in html
+    html = html.replace(old_kpis, new_kpis, 1)
+
+    old_axis = """function axisChart(rows){
+ let list=[], title='Publicações por assunto',subtitle='Clique na fatia ou na legenda para detalhar';
+ if(S.group||S.category.length||S.axis==='outros'||S.view==='outras'){
+  title=(S.axis==='outros'||S.view==='outras')?'Resultados de Outros benefícios':'Resultados da seleção';subtitle='Clique em deferidos ou indeferidos';
+  list=[['Deferidos','deferido','#17a675'],['Indeferidos','indeferido','#e86167']].map(([label,key,color])=>({label,key,color,kind:'merit',value:rows.filter(r=>r.merit===key).length}));
+ }else if(S.axis==='tempo'||S.view==='tempo'){
+  title='Distribuição por serviço';subtitle='Participação dos serviços em Tempo de Serviço';
+  let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb'];
+  list=data.categories.map(([key,label],i)=>({key,label,color:colors[i],kind:'category',value:rows.filter(r=>r.category===key).length}));
+ }else if((S.axis==='progressao'||S.view==='vertical'||S.view==='horizontal')&&S.modality){
+  title='Distribuição por grupo';subtitle='Participação dos grupos na modalidade selecionada';
+  let colors=['#2480f3','#16a788','#f49b45','#9b73d6','#dd6877','#3f9faa','#9a9d54','#7773bc','#e2b451','#b76e83','#368cc2','#64a770','#c77f47','#9c8dc2','#899eaf'];
+  list=Object.entries(groupNames).map(([key,label],i)=>({key,label,color:colors[i%colors.length],kind:'group',value:rows.filter(r=>key==='NAO_INFORMADO'?!r.group:r.group===key).length})).filter(x=>x.value||x.key===S.group);
+ }else{
+  list=[['Vertical','vertical','#1265ef'],['Horizontal','horizontal','#13b88a'],['Tempo de Serviço','tempo','#ff973c'],['Outros benefícios','outros','#7c5ce6']].map(([label,key,color])=>({label,key,color,kind:'axis',value:rows.filter(r=>key==='tempo'?r.axis==='tempo':key==='outros'?r.axis==='outros':(r.modality||'').toLowerCase()===key).length}));
+ }
+ $('#axisChartTitle').textContent=title;$('#axisChartSubtitle').textContent=subtitle;
+ let n=list.reduce((a,x)=>a+x.value,0),offset=0;
+ let circles=n?list.filter(x=>x.value).map(x=>{let result=donutPath(x,x.value,n,offset);offset+=x.value;return result;}).join(''):'<circle cx="70" cy="70" r="52" fill="none" stroke="#e7eef5" stroke-width="26"></circle>';
+ $('#axisChart').innerHTML=`<div class="interactive-donut"><svg viewBox="0 0 140 140" role="group" aria-label="${esc(title)}">${circles}</svg><div class="donut-label"><b>${data.meta.semBaseCarregada?'—':n}</b><span>${n===1?'decisão':'decisões'}</span></div></div><div class="axis-legend">${list.map(x=>`<button data-kind="${esc(x.kind)}" data-key="${esc(x.key)}" aria-label="Selecionar ${esc(x.label)}, ${x.value} decisões"><i style="background:${x.color}"></i><span>${esc(x.label)} <b>${data.meta.semBaseCarregada?'—':x.value}</b>${n?' · '+Math.round(100*x.value/n)+'%':''}</span></button>`).join('')||'<small>Nenhum registro nesta visão e filtros. A cobertura continua parcial.</small>'}</div>`;
+}"""
+    new_axis = """function axisChart(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},bi=data.backend.indicadores||{};
+  let list=[],title='Publicações por assunto',subtitle='Agregados públicos protegidos (limiar ≥ 5)';
+  if(S.view==='tempo'||S.axis==='tempo'){
+   title='Distribuição por serviço';subtitle='Serviços em Tempo de Serviço (limiar ≥ 5)';
+   const colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#94a3b8'];
+   list=(bs.por_subcategoria||[]).map((x,i)=>({key:x.codigo,label:x.nome,color:colors[i%colors.length],kind:'category',value:Number(x.total||0)})).filter(x=>x.value>0);
+  }else if(S.view==='vertical'||S.view==='horizontal'){
+   title='Distribuição por grupo';subtitle='Participação dos grupos no agregado público (limiar ≥ 5)';
+   const colors=['#2480f3','#16a788','#f49b45','#9b73d6','#dd6877','#3f9faa','#9a9d54','#7773bc','#e2b451','#b76e83'];
+   const fld=S.view==='vertical'?'vertical':'horizontal';
+   list=(bs.por_grupo||[]).map((g,i)=>({key:g.grupo,label:labelGroup(g.grupo),color:colors[i%colors.length],kind:'group',value:Number(g[fld]||0)})).filter(x=>x.value>0);
+  }else if(S.view==='outras'||S.view==='hoje'){
+   title=S.view==='outras'?'Outras publicações':'Recorte diário protegido';subtitle='Consulte após login gerencial para detalhamento nominal';
+   list=[];
+  }else{
+   const pa=bs.por_assunto||[],valOf=k=>Number((pa.find(x=>x.chave===k)||{}).total||0);
+   list=[['Vertical','vertical','#1265ef','VERTICAL'],['Horizontal','horizontal','#13b88a','HORIZONTAL'],['Tempo de Serviço','tempo','#ff973c','TEMPO_SERVICO']].map(([label,key,color,ck])=>({label,key,color,kind:'axis',value:valOf(ck)}));
+  }
+  $('#axisChartTitle').textContent=title;$('#axisChartSubtitle').textContent=subtitle;
+  const sumList=list.reduce((a,x)=>a+x.value,0);
+  const centerVal=(S.view==='geral'||S.view==='historico')&&bi.decisoes!=null?bi.decisoes:sumList;
+  let offset=0;
+  const circles=sumList?list.filter(x=>x.value).map(x=>{let r=donutPath(x,x.value,sumList,offset);offset+=x.value;return r;}).join(''):'<circle cx="70" cy="70" r="52" fill="none" stroke="#e7eef5" stroke-width="26"></circle>';
+  $('#axisChart').innerHTML=`<div class="interactive-donut"><svg viewBox="0 0 140 140" role="group" aria-label="${esc(title)}">${circles}</svg><div class="donut-label"><b>${centerVal?centerVal:'—'}</b><span>${centerVal===1?'decisão':'decisões'}</span></div></div><div class="axis-legend">${list.map(x=>`<button data-kind="${esc(x.kind)}" data-key="${esc(x.key)}" aria-label="${esc(x.label)}, ${x.value} decisões"><i style="background:${x.color}"></i><span>${esc(x.label)} <b>${x.value}</b>${sumList?' · '+Math.round(100*x.value/sumList)+'%':''}</span></button>`).join('')||'<small>Detalhamento disponível após login gerencial.</small>'}</div>`;
+  return;
+ }
+ let list=[], title='Publicações por assunto',subtitle='Clique na fatia ou na legenda para detalhar';
+ if(S.group||S.category.length||S.axis==='outros'||S.view==='outras'){
+  title=(S.axis==='outros'||S.view==='outras')?'Resultados de Outras publicações':'Resultados da seleção';subtitle='Clique em deferidos, indeferidos ou não informados';
+  list=[['Deferidos','deferido','#17a675'],['Indeferidos','indeferido','#e86167']].map(([label,key,color])=>({label,key,color,kind:'merit',value:rows.filter(r=>r.merit===key).length}));
+  const niVal=rows.filter(r=>r.merit!=='deferido'&&r.merit!=='indeferido').length;
+  if(niVal>0)list.push({label:'Não informado',key:'outro',color:'#e0ad40',kind:'merit',value:niVal});
+ }else if(S.axis==='tempo'||S.view==='tempo'){
+  title='Distribuição por serviço';subtitle='Participação dos serviços em Tempo de Serviço';
+  let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#94a3b8'];
+  const tsCats=data.categories.filter(([k])=>k!=='ABONO_PERMANENCIA');
+  list=tsCats.map(([key,label],i)=>({key,label,color:colors[i%colors.length],kind:'category',value:rows.filter(r=>r.category===key).length}));
+  const semSub=rows.filter(r=>r.axis==='tempo'&&!r.category).length;
+  if(semSub>0)list.push({key:'SEM_SUBCATEGORIA',label:'Subcategoria pendente',color:'#94a3b8',kind:'category',value:semSub});
+ }else if((S.axis==='progressao'||S.view==='vertical'||S.view==='horizontal')&&S.modality){
+  title='Distribuição por grupo';subtitle='Participação dos grupos na modalidade selecionada';
+  let colors=['#2480f3','#16a788','#f49b45','#9b73d6','#dd6877','#3f9faa','#9a9d54','#7773bc','#e2b451','#b76e83','#368cc2','#64a770','#c77f47','#9c8dc2','#899eaf'];
+  list=Object.entries(groupNames).map(([key,label],i)=>({key,label,color:colors[i%colors.length],kind:'group',value:rows.filter(r=>key==='NAO_INFORMADO'?!r.group:r.group===key).length})).filter(x=>x.value||x.key===S.group);
+ }else{
+  list=[['Vertical','vertical','#1265ef'],['Horizontal','horizontal','#13b88a'],['Tempo de Serviço','tempo','#ff973c']].map(([label,key,color])=>({label,key,color,kind:'axis',value:rows.filter(r=>key==='tempo'?r.axis==='tempo':(r.axis==='progressao'&&(r.modality||'').toLowerCase()===key)).length}));
+  const semMod=rows.filter(r=>r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal').length;
+  if(semMod>0)list.push({label:'Modalidade pendente',key:'progressao',color:'#94a3b8',kind:'axis',value:semMod});
+  const outVal=rows.filter(r=>r.axis==='outros').length;
+  if(outVal>0)list.push({label:'Outros benefícios',key:'outros',color:'#7c5ce6',kind:'axis',value:outVal});
+ }
+ $('#axisChartTitle').textContent=title;$('#axisChartSubtitle').textContent=subtitle;
+ let n=list.reduce((a,x)=>a+x.value,0),offset=0;
+ let circles=n?list.filter(x=>x.value).map(x=>{let result=donutPath(x,x.value,n,offset);offset+=x.value;return result;}).join(''):'<circle cx="70" cy="70" r="52" fill="none" stroke="#e7eef5" stroke-width="26"></circle>';
+ $('#axisChart').innerHTML=`<div class="interactive-donut"><svg viewBox="0 0 140 140" role="group" aria-label="${esc(title)}">${circles}</svg><div class="donut-label"><b>${data.meta.semBaseCarregada?'—':n}</b><span>${n===1?'decisão':'decisões'}</span></div></div><div class="axis-legend">${list.map(x=>`<button data-kind="${esc(x.kind)}" data-key="${esc(x.key)}" aria-label="Selecionar ${esc(x.label)}, ${x.value} decisões"><i style="background:${x.color}"></i><span>${esc(x.label)} <b>${data.meta.semBaseCarregada?'—':x.value}</b>${n?' · '+Math.round(100*x.value/n)+'%':''}</span></button>`).join('')||'<small>Nenhum registro nesta visão e filtros. A cobertura continua parcial.</small>'}</div>`;
+}"""
+    assert old_axis in html
+    html = html.replace(old_axis, new_axis, 1)
+
+    old_service_bars = """function serviceBars(rows){
+ let tempo=rows.filter(r=>r.axis==='tempo'),totalTempo=tempo.length,max=Math.max(1,...data.categories.map(c=>tempo.filter(r=>r.category===c[0]).length)),isPct=metricMode.service==='pct',den=isPct?Math.max(1,totalTempo):max;
+ $('#serviceBars').innerHTML=data.categories.map(([id,label])=>{let items=tempo.filter(r=>r.category===id),n=items.length,d=items.filter(r=>r.merit==='deferido').length,i=items.filter(r=>r.merit==='indeferido').length,txt=n?(isPct?`${pct(n,totalTempo)} (${Math.round(100*d/n)}% def.)`:`${d} def. · ${i} ind.`):'sem registros nesta visão';return `<div class="service-row ${S.category.includes(id)?'selected-row':''}"><button class="service-name" data-cat="${id}" title="Selecionar ${esc(label)}">${esc(label)}</button><button class="result-track" data-cat="${id}" aria-label="${esc(label)}: ${d} deferidos e ${i} indeferidos na amostra (${pct(n,totalTempo)})" title="${n} de ${totalTempo} (${pct(n,totalTempo)}) · ${d} def. · ${i} ind."><span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span></button><span class="service-value ${n?'':'pending'}">${txt}</span></div>`;}).join('');
+}"""
+    new_service_bars = """function serviceBars(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},subs=bs.por_subcategoria||[],isPct=metricMode.service==='pct';
+  const totalTempo=subs.reduce((a,x)=>a+Number(x.total||0),0);
+  const max=Math.max(1,...subs.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalTempo):max;
+  $('#serviceBars').innerHTML=subs.map(x=>{
+   const n=x.total,d=x.deferido,i=x.indeferido,hasN=n!=null&&n>0,hasDI=hasN&&d!=null&&i!=null;
+   const txt=n==null?'suprimido (< 5)':n===0?'sem registros nesta visão':hasDI?(isPct?`${pct(n,totalTempo)} (${Math.round(100*d/n)}% def.)`:`${d} def. · ${i} ind.`):`${n} (D/I < 5)`;
+   const bars=hasDI?`<span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>`:(hasN?`<span class="part" style="width:${n*100/den}%;background:#1265ef"></span>`:'');
+   return `<div class="service-row"><button class="service-name" data-cat="${esc(x.codigo)}" disabled>${esc(x.nome)}</button><button class="result-track" data-cat="${esc(x.codigo)}" disabled aria-label="${esc(x.nome)}: ${esc(txt)}">${bars}</button><span class="service-value ${hasN?'':'pending'}">${txt}</span></div>`;
+  }).join('');
+  return;
+ }
+ let tempo=rows.filter(r=>r.axis==='tempo'),totalTempo=tempo.length,tsCats=data.categories.filter(([id])=>id!=='ABONO_PERMANENCIA');
+ const semSubItems=tempo.filter(r=>!r.category);
+ const catsVis=semSubItems.length||S.category.includes('SEM_SUBCATEGORIA')?tsCats.concat([['SEM_SUBCATEGORIA','Subcategoria pendente de conferência']]):tsCats;
+ let max=Math.max(1,...catsVis.map(([id])=>(id==='SEM_SUBCATEGORIA'?semSubItems:tempo.filter(r=>r.category===id)).length)),isPct=metricMode.service==='pct',den=isPct?Math.max(1,totalTempo):max;
+ $('#serviceBars').innerHTML=catsVis.map(([id,label])=>{let items=id==='SEM_SUBCATEGORIA'?semSubItems:tempo.filter(r=>r.category===id),n=items.length,d=items.filter(r=>r.merit==='deferido').length,i=items.filter(r=>r.merit==='indeferido').length,ni=n-d-i,txt=n?(isPct?`${pct(n,totalTempo)} (${Math.round(100*d/n)}% def.)`:`${d} def. · ${i} ind.${ni?` · ${ni} NI`:''}`):'sem registros nesta visão';return `<div class="service-row ${S.category.includes(id)?'selected-row':''}"><button class="service-name" data-cat="${id}" title="Selecionar ${esc(label)}">${esc(label)}</button><button class="result-track" data-cat="${id}" aria-label="${esc(label)}: ${d} deferidos, ${i} indeferidos e ${ni} não informados (${pct(n,totalTempo)})" title="${n} de ${totalTempo} (${pct(n,totalTempo)}) · ${d} def. · ${i} ind.${ni?` · ${ni} NI`:''}"><span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>${ni?`<span class="part" style="width:${ni*100/den}%;background:#e0ad40"></span>`:''}</button><span class="service-value ${n?'':'pending'}">${txt}</span></div>`;}).join('');
+}"""
+    assert old_service_bars in html
+    html = html.replace(old_service_bars, new_service_bars, 1)
+
+    old_group_chart = """function groupChart(rows){
+ let progress=rows.filter(r=>r.axis==='progressao'),totalProg=progress.length,isPct=metricMode.group==='pct',entries=Object.entries(groupNames).map(([id,name])=>{let items=progress.filter(r=>(id==='NAO_INFORMADO'?!r.group:r.group===id));return {id,name,items,d:items.filter(r=>r.merit==='deferido').length,i:items.filter(r=>r.merit==='indeferido').length,n:items.length};});
+ let max=Math.max(1,...entries.map(x=>x.n)),den=isPct?Math.max(1,totalProg):max,zeroCount=entries.filter(x=>!x.n).length,shown=showZeroGroups?entries:entries.filter(x=>x.n>0||S.group===x.id);
+ const btn=$('#toggleZeroGroups');
+ if(btn){btn.hidden=zeroCount===0;btn.textContent=showZeroGroups?'Ocultar zerados':`Mostrar zerados (${zeroCount})`;}
+ $('#groupChart').innerHTML=shown.length?shown.map(x=>{const txt=x.n?(isPct?`${pct(x.n,totalProg)} (${Math.round(100*x.d/x.n)}% D)`:`${x.d} D · ${x.i} I`):'—';return `<button class="group-row ${S.group===x.id?'selected-row':''}" data-group="${esc(x.id)}" aria-label="${esc(x.name)}: ${x.d} deferidos e ${x.i} indeferidos na amostra (${pct(x.n,totalProg)})" title="${x.n} de ${totalProg} (${pct(x.n,totalProg)}) · ${x.d} D · ${x.i} I"><span>${esc(x.name)}</span><span class="result-track"><span class="part good" style="width:${x.d*100/den}%"></span><span class="part bad" style="width:${x.i*100/den}%"></span></span><b>${txt}</b></button>`;}).join(''):'<div class="empty-small">Nenhum grupo com registros neste recorte.</div>';
+}"""
+    new_group_chart = """function groupChart(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},grps=bs.por_grupo||[],isPct=metricMode.group==='pct';
+  const fld=S.view==='vertical'?'vertical':S.view==='horizontal'?'horizontal':'total';
+  const entries=grps.map(g=>({id:g.grupo,name:labelGroup(g.grupo),n:g[fld],d:fld==='total'?g.deferido:null,i:fld==='total'?g.indeferido:null})).filter(x=>x.n!=null&&x.n>0);
+  const totalProg=entries.reduce((a,x)=>a+x.n,0),max=Math.max(1,...entries.map(x=>x.n)),den=isPct?Math.max(1,totalProg):max;
+  const btn=$('#toggleZeroGroups');if(btn)btn.hidden=true;
+  $('#groupChart').innerHTML=entries.length?entries.map(x=>{
+   const hasDI=x.d!=null&&x.i!=null;
+   const txt=hasDI?(isPct?`${pct(x.n,totalProg)} (${Math.round(100*x.d/x.n)}% D)`:`${x.d} D · ${x.i} I`):(isPct?`${pct(x.n,totalProg)}`:`${x.n} (≥ 5)`);
+   const bars=hasDI?`<span class="part good" style="width:${x.d*100/den}%"></span><span class="part bad" style="width:${x.i*100/den}%"></span>`:`<span class="part" style="width:${x.n*100/den}%;background:#1265ef"></span>`;
+   return `<button class="group-row" data-group="${esc(x.id)}" disabled aria-label="${esc(x.name)}: ${esc(txt)}"><span>${esc(x.name)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
+  }).join(''):'<div class="empty-small">Nenhum grupo acima do limiar público (≥ 5) neste recorte.</div>';
+  return;
+ }
+ let progress=rows.filter(r=>r.axis==='progressao'),totalProg=progress.length,isPct=metricMode.group==='pct',entries=Object.entries(groupNames).map(([id,name])=>{let items=progress.filter(r=>(id==='NAO_INFORMADO'?!r.group:r.group===id)),d=items.filter(r=>r.merit==='deferido').length,i=items.filter(r=>r.merit==='indeferido').length;return {id,name,items,d,i,ni:items.length-d-i,n:items.length};});
+ let max=Math.max(1,...entries.map(x=>x.n)),den=isPct?Math.max(1,totalProg):max,zeroCount=entries.filter(x=>!x.n).length,shown=showZeroGroups?entries:entries.filter(x=>x.n>0||S.group===x.id);
+ const btn=$('#toggleZeroGroups');
+ if(btn){btn.hidden=zeroCount===0;btn.textContent=showZeroGroups?'Ocultar zerados':`Mostrar zerados (${zeroCount})`;}
+ $('#groupChart').innerHTML=shown.length?shown.map(x=>{const txt=x.n?(isPct?`${pct(x.n,totalProg)} (${Math.round(100*x.d/x.n)}% D)`:`${x.d} D · ${x.i} I${x.ni?` · ${x.ni} NI`:''}`):'—';return `<button class="group-row ${S.group===x.id?'selected-row':''}" data-group="${esc(x.id)}" aria-label="${esc(x.name)}: ${x.d} deferidos, ${x.i} indeferidos e ${x.ni} não informados (${pct(x.n,totalProg)})" title="${x.n} de ${totalProg} (${pct(x.n,totalProg)}) · ${x.d} D · ${x.i} I${x.ni?` · ${x.ni} NI`:''}"><span>${esc(x.name)}</span><span class="result-track"><span class="part good" style="width:${x.d*100/den}%"></span><span class="part bad" style="width:${x.i*100/den}%"></span>${x.ni?`<span class="part" style="width:${x.ni*100/den}%;background:#e0ad40"></span>`:''}</span><b>${txt}</b></button>`;}).join(''):'<div class="empty-small">Nenhum grupo com registros neste recorte.</div>';
+}"""
+    assert old_group_chart in html
+    html = html.replace(old_group_chart, new_group_chart, 1)
+
+    old_results_chart = """function resultsChart(rows){
+ let all=[['Horizontal','horizontal'],['Vertical','vertical'],['Tempo de Serviço','tempo'],['Outros benefícios','outros']],max=Math.max(1,...all.map(([l,k])=>rows.filter(r=>k==='tempo'?r.axis==='tempo':k==='outros'?r.axis==='outros':(r.modality||'').toLowerCase()===k).length)),isPct=metricMode.results==='pct';
+ $('#resultsChart').innerHTML=all.map(([label,key])=>{let rr=rows.filter(r=>key==='tempo'?r.axis==='tempo':key==='outros'?r.axis==='outros':(r.modality||'').toLowerCase()===key),d=rr.filter(r=>r.merit==='deferido').length,i=rr.filter(r=>r.merit==='indeferido').length,den=isPct?Math.max(1,rr.length):max,txt=rr.length?(isPct?`${pct(d,rr.length)} D · ${pct(i,rr.length)} I`:`${d} D · ${i} I`):'sem dados';return `<div class="result-line"><span>${label}</span><div class="result-track"><button class="part good" data-series="${key}" data-merit="deferido" style="width:${d*100/den}%" aria-label="${label}: ${d} deferidos (${pct(d,rr.length)})" title="${label}: ${d} deferidos (${pct(d,rr.length)})" ${d?'':'disabled'}></button><button class="part bad" data-series="${key}" data-merit="indeferido" style="width:${i*100/den}%" aria-label="${label}: ${i} indeferidos (${pct(i,rr.length)})" title="${label}: ${i} indeferidos (${pct(i,rr.length)})" ${i?'':'disabled'}></button></div><b>${txt}</b></div>`;}).join('')+'<div class="result-key"><span><i class="good"></i>Deferidos</span><span><i class="bad"></i>Indeferidos</span></div>';
+}"""
+    new_results_chart = """function resultsChart(rows){
+ if(isPublicAgg()){
+  const pa=data.backend.series?.por_assunto||[],isPct=metricMode.results==='pct';
+  const rowsPub=[['Horizontal','HORIZONTAL'],['Vertical','VERTICAL'],['Tempo de Serviço','TEMPO_SERVICO']].map(([label,ck])=>{
+   const it=pa.find(x=>x.chave===ck)||{};
+   return {label,ck,total:it.total??0,d:it.deferido,i:it.indeferido};
+  });
+  const max=Math.max(1,...rowsPub.map(x=>x.total||0));
+  $('#resultsChart').innerHTML=rowsPub.map(x=>{
+   const hasN=x.total!=null&&x.total>0,hasDI=hasN&&x.d!=null&&x.i!=null,den=isPct?Math.max(1,x.total):max;
+   const txt=!hasN?'sem dados':hasDI?(isPct?`${pct(x.d,x.total)} D · ${pct(x.i,x.total)} I`:`${x.d} D · ${x.i} I`):`${x.total} (D/I < 5)`;
+   const bars=hasDI?`<button class="part good" disabled style="width:${x.d*100/den}%"></button><button class="part bad" disabled style="width:${x.i*100/den}%"></button>`:(hasN?`<button class="part" disabled style="width:${x.total*100/den}%;background:#1265ef"></button>`:'');
+   return `<div class="result-line"><span>${x.label}</span><div class="result-track">${bars}</div><b>${txt}</b></div>`;
+  }).join('')+'<div class="result-key"><span><i class="good"></i>Deferidos</span><span><i class="bad"></i>Indeferidos</span><span><i style="background:#1265ef"></i>Total protegido (D/I &lt; 5)</span></div>';
+  return;
+ }
+ let all=[['Horizontal','horizontal'],['Vertical','vertical'],['Tempo de Serviço','tempo']];
+ if(rows.some(r=>r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal'))all.push(['Modalidade pendente','sem_modalidade']);
+ if(rows.some(r=>r.axis==='outros')||S.view==='outras'||S.axis==='outros')all.push(['Outros benefícios','outros']);
+ const matchRow=(r,k)=>k==='tempo'?r.axis==='tempo':k==='outros'?r.axis==='outros':k==='sem_modalidade'?(r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal'):(r.axis==='progressao'&&(r.modality||'').toLowerCase()===k);
+ let max=Math.max(1,...all.map(([l,k])=>rows.filter(r=>matchRow(r,k)).length)),isPct=metricMode.results==='pct',hasAnyNi=rows.some(r=>r.merit!=='deferido'&&r.merit!=='indeferido');
+ $('#resultsChart').innerHTML=all.map(([label,key])=>{let rr=rows.filter(r=>matchRow(r,key)),d=rr.filter(r=>r.merit==='deferido').length,i=rr.filter(r=>r.merit==='indeferido').length,ni=rr.length-d-i,den=isPct?Math.max(1,rr.length):max,txt=rr.length?(isPct?`${pct(d,rr.length)} D · ${pct(i,rr.length)} I${ni?` · ${pct(ni,rr.length)} NI`:''}`:`${d} D · ${i} I${ni?` · ${ni} NI`:''}`):'sem dados';return `<div class="result-line"><span>${label}</span><div class="result-track"><button class="part good" data-series="${key}" data-merit="deferido" style="width:${d*100/den}%" aria-label="${label}: ${d} deferidos (${pct(d,rr.length)})" title="${label}: ${d} deferidos (${pct(d,rr.length)})" ${d?'':'disabled'}></button><button class="part bad" data-series="${key}" data-merit="indeferido" style="width:${i*100/den}%" aria-label="${label}: ${i} indeferidos (${pct(i,rr.length)})" title="${label}: ${i} indeferidos (${pct(i,rr.length)})" ${i?'':'disabled'}></button>${ni?`<button class="part" data-series="${key}" data-merit="outro" style="width:${ni*100/den}%;background:#e0ad40" aria-label="${label}: ${ni} não informados (${pct(ni,rr.length)})" title="${label}: ${ni} não informados (${pct(ni,rr.length)})"></button>`:''}</div><b>${txt}</b></div>`;}).join('')+`<div class="result-key"><span><i class="good"></i>Deferidos</span><span><i class="bad"></i>Indeferidos</span>${hasAnyNi?'<span><i style="background:#e0ad40"></i>Não informado</span>':''}</div>`;
+}"""
+    assert old_results_chart in html
+    html = html.replace(old_results_chart, new_results_chart, 1)
+
+    # 5c-ter. Permitir clique nos cartoes Refeitos / Sem efeito (em modo autenticado) e bloquear clique KPI em modo publico
+    old_kpi_click = """ $('#kpis').addEventListener('click',e=>{
+  let b=e.target.closest('[data-card]');if(!b||b.disabled)return;
+  const id=b.dataset.card;
+  if(id==='deferidos'||id==='indeferidos'){const target=id==='deferidos'?'deferido':'indeferido';S.merit=S.merit===target?'':target;S.card='';resultPrev=null;}
+  else if(id==='processes'){
+   if(S.card==='processes'){S.card='';if(cardPrevMode){S.mode=cardPrevMode;cardPrevMode=null;}}
+   else{cardPrevMode=S.mode;S.card='processes';S.mode='processo';}
+  }
+  else if(id==='resenhas'){S.card='';cardPrevMode=null;S.mode='resenha';toast('Lista agrupada por resenha.');}
+  else{S.card='';cardPrevMode=null;S.merit='';resultPrev=null;}
+  S.page=0;S.selected='';commitHistory();render();
+ });"""
+    new_kpi_click = """ $('#kpis').addEventListener('click',e=>{
+  if(isPublicAgg())return;
+  let b=e.target.closest('[data-card]');if(!b||b.disabled)return;
+  const id=b.dataset.card;
+  if(id==='deferidos'||id==='indeferidos'){const target=id==='deferidos'?'deferido':'indeferido';S.merit=S.merit===target?'':target;S.card='';resultPrev=null;}
+  else if(id==='processes'){
+   if(S.card==='processes'){S.card='';if(cardPrevMode){S.mode=cardPrevMode;cardPrevMode=null;}}
+   else{cardPrevMode=S.mode;S.card='processes';S.mode='processo';}
+  }
+  else if(id==='refeitos'||id==='semEfeito'){S.card=S.card===id?'':id;cardPrevMode=null;S.merit='';resultPrev=null;}
+  else if(id==='resenhas'){S.card='';cardPrevMode=null;S.mode='resenha';toast('Lista agrupada por resenha.');}
+  else{S.card='';cardPrevMode=null;S.merit='';resultPrev=null;}
+  S.page=0;S.selected='';commitHistory();render();
+ });"""
+    assert old_kpi_click in html
+    html = html.replace(old_kpi_click, new_kpi_click, 1)
+
+    old_card_chip = " if(S.card==='processes')chips.push(['card','Com processo identificado']);"
+    new_card_chip = " if(S.card==='processes')chips.push(['card','Com processo identificado']);else if(S.card==='refeitos')chips.push(['card','Atos refeitos / retificados']);else if(S.card==='semEfeito')chips.push(['card','Atos tornados sem efeito']);"
+    assert old_card_chip in html
+    html = html.replace(old_card_chip, new_card_chip, 1)
+
+    # 5c-bis. Adaptar levelChart() para exibir agregados públicos protegidos (limiar >= 5) quando não autenticado
+    old_level_start = """function levelChart(){
+ const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;"""
+    new_level_start = """function levelChart(){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},lvs=bs.por_nivel_vertical||[],res=bs.resumo_nivel_vertical||{},isPct=metricMode.level==='pct';
+  const totalV=Number(res.total_vertical||0),max=Math.max(1,...lvs.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalV):max;
+  $('#levelCardTitle').textContent='Progressões Verticais (A–F)';
+  $('#levelCardSub').textContent='Distribuição pública por nível de destino (limiar ≥ 5)';
+  $('#levelChart').innerHTML=lvs.map(lv=>{
+   const n=lv.total,d=lv.deferido,i=lv.indeferido,hasN=n!=null&&n>0,hasDI=hasN&&d!=null&&i!=null;
+   const lbl=lv.nivel==='NAO_IDENTIFICADO'?'Não identificado':`Nível ${lv.nivel}`;
+   const txt=n==null?'suprimido (< 5)':n===0?'—':hasDI?(isPct?`${pct(n,totalV)} (${Math.round(100*d/n)}% D)`:`${d} D · ${i} I`):`${n} (≥ 5)`;
+   const bars=hasDI?`<span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>`:(hasN?`<span class="part" style="width:${n*100/den}%;background:#1265ef"></span>`:'');
+   return `<button class="group-row" disabled aria-label="${esc(lbl)}: ${esc(txt)}"><span>${esc(lbl)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
+  }).join('');
+  $('#levelReconcileNote').textContent=`${res.classificados??'—'} classif. + ${res.nao_identificados??'—'} NI · ${res.total_vertical??'—'} Verticais · ${res.total_horizontal??'—'} Horiz. (agregado público)`;
+  return;
+ }
+ const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;"""
+    assert old_level_start in html
+    html = html.replace(old_level_start, new_level_start, 1)
 
     # 5d. Proteger exportXlsx() e exportCsv() no modo público para zero vazamento e explicitar escopo
     old_exports = """function exportXlsx(){let m=model(),summary=[['Visão',views[S.view][1]],['Filtros',filterText()],['Cobertura',data.meta.coverage],['Atualização',data.meta.automation],[],['Indicador','Valor'],...Object.entries(m.metrics)],list=[['Resenha / processo','Assunto','Resultado','Data','Quantidade'],...exportRows()];exp.download(exp.xlsx({'Resumo':summary,'Visão selecionada':list,'Decisões':decisionRows()}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-visao-selecionada.xlsx');toast('Planilha da visão selecionada gerada.');}
@@ -1237,7 +1569,7 @@ function openReviewModal(targetType,items){
    }
    await refreshData();
    if(!data.backend?.autenticado){window.GEDIV_AUTH.clear();throw new Error('Credencial não autorizada pelo servidor.');}
-   S.validation='pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
+   S.validation=data.rows.some(r=>r.validation==='conferido')?'conferido':'pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
    $('#loginPass').value='';$('#loginTokenInput').value='';
    $('#loginDialog').close();
    toast(data.backend?.ehAdmin?'Sessão administrativa autenticada.':'Sessão gerencial autenticada.');

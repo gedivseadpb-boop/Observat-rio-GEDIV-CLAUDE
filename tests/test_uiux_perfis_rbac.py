@@ -561,10 +561,14 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 self.assertEqual(st_dg, 200)
                 self.assertEqual(d_ger["backend"]["papel"], "gerencia")
                 self.assertFalse(d_ger["backend"]["ehAdmin"])
-                abono_rows = [r for r in d_ger["rows"] if r["category"] == "ABONO_PERMANENCIA"]
-                self.assertEqual(len(abono_rows), 1)
-                self.assertEqual(abono_rows[0]["axis"], "tempo")
+                # Etapa 4B: `outra_publicacao` (incluindo Abono de Permanência) fica isolada em `otherPublications`,
+                # sem contaminar `rows` (decisões primárias GEDIV) e sem jamais introduzir TS-08.
+                self.assertEqual([r for r in d_ger["rows"] if r["category"] == "ABONO_PERMANENCIA"], [])
+                abono_pubs = [p for p in d_ger["otherPublications"] if p["category"] == "ABONO_PERMANENCIA"]
+                self.assertEqual(len(abono_pubs), 1)
+                self.assertEqual(abono_pubs[0]["axis"], "outros")
                 self.assertFalse(any("TS-08" in str(r) for r in d_ger["rows"]))
+                self.assertFalse(any("TS-08" in str(p) for p in d_ger["otherPublications"]))
 
                 # Acesso ao PDF oficial no acervo sem regressão
                 with urlopen(Request(f"{base}/api/pdf/{sha_pdf}", headers={"Authorization": f"Bearer {tok_ger}"}), timeout=10) as r_pdf:

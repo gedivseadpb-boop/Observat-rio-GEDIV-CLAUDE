@@ -389,7 +389,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 return self._arquivo(rota[len("/estatico/"):], ESTATICO)
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
-                                   "papel": self._papel(), "cobertura": indicadores.cobertura(banco)})
+                                   "papel": self._papel(), "cobertura": indicadores.cobertura(banco, perfil=perfil)})
             if rota == "/api/sessao":
                 conta = self._conta()
                 if not conta:
@@ -415,7 +415,12 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 p_pend = p_resp if p_resp["meta"]["escopo"] == "pendente" else indicadores.painel(banco, {"escopo": "pendente"}, perfil)
                 p_conf = p_resp if p_resp["meta"]["escopo"] == "conferido" else indicadores.painel(banco, {"escopo": "conferido"}, perfil)
                 todas_linhas = list(p_pend.get("linhas") or []) + list(p_conf.get("linhas") or [])
-                p_combinado = {**p_resp, "linhas": todas_linhas}
+                p_combinado = {
+                    **p_resp,
+                    "linhas": todas_linhas,
+                    "indicadores_conferido": p_conf.get("indicadores") or {},
+                    "eventos_detalhados_conferido": (p_conf.get("series") or {}).get("eventos_detalhados") or {},
+                }
                 outras_resp = indicadores.outras_publicacoes(banco, perfil)
                 rej_consulta = banco.con.execute(
                     "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
@@ -623,7 +628,17 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 r = servico.revisar_decisoes(banco, [str(i) for i in ids if i], *comuns, bool(p.get("confirma_fonte")),
                                              bool(p.get("confirma_vinculo")), p.get("correcoes") if isinstance(p.get("correcoes"), dict) else None)
             elif alvo == "evento":
-                r = servico.revisar_evento(banco, str(p.get("id", "")), *comuns, p.get("ato_original_id") or None, bool(p.get("confirma_fonte")))
+                decs_ev = p.get("decisoes_ids")
+                r = servico.revisar_evento(
+                    banco,
+                    str(p.get("id", "")),
+                    *comuns,
+                    p.get("ato_original_id") or None,
+                    bool(p.get("confirma_fonte")),
+                    decisoes_ids=[str(i) for i in decs_ev if i] if isinstance(decs_ev, list) else None,
+                    resultado_novo=str(p.get("resultado_novo")) if p.get("resultado_novo") else None,
+                    campos_corrigidos=p.get("campos_corrigidos") if isinstance(p.get("campos_corrigidos"), dict) else None,
+                )
             elif alvo == "ato_classificacao":
                 r = servico.corrigir_ato(banco, str(p.get("id", "")), p.get("correcoes") if isinstance(p.get("correcoes"), dict) else {},
                                          comuns[1], comuns[2], bool(p.get("confirma_fonte")))

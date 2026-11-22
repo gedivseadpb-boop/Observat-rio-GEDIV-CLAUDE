@@ -50,6 +50,16 @@ PAT_PUBLIQUE = re.compile(r"^\W*PUBLIQUE-?\s?SE")
 PAT_MOBILIARIO = re.compile(r"^(?:\d{1,3}\s+)?JOAO\s+PESSOA\s*-\s*[\w-]+\s*,\s*\d{1,2}\s+DE\s+\w+\s+DE\s+20\d{2}"
                             r"(?:\s+DIARIO\s+OFICIAL)?(?:\s+\d{1,3})?$|^DIARIO\s+OFICIAL\s+JOAO\s+PESSOA\b.{0,60}$")
 PAT_MERITO = re.compile(r"\b(IN)?DEFER(?:I(?:U|R|D[AO]S?|MOS|MENTO)|E)\b")
+PAT_MERITO_NEGADO = re.compile(r"\b(?:NAO|SEM)\s+DEFER(?:I(?:U|R|D[AO]S?|MOS|MENTO)|E)\b")
+# Expressões com letras espaçadas ("Q U E D E F E R IU", "I N D E F E R I U"), exigindo:
+# - espaço interno (texto justificado letra a letra),
+# - terminação verbal/nominal inequívoca (DEFERIU/DEFERIR/DEFERIDO(S)/DEFERIDA(S)/DEFERIMOS/DEFERIMENTO),
+# - guarda explícita contra negações ("N A O D E F E R I U", "S E M D E F E R I M E N T O") e prefixos espúrios.
+PAT_MERITO_ESPACADO = re.compile(
+    r"(?<![A-Z])(?:(?P<neg>(?:N\s*A\s*O|S\s*E\s*M)\s+)|(?P<in>I\s*N\s*)|(?P<pref>(?:R\s*E|C\s*O\s*N|P\s*R\s*E|I\s*N\s*D\s*I)\s+))?"
+    r"(?P<corpo>D\s*E\s*F\s*E\s*R\s*I\s*(?:U|R|D\s*[AO](?:\s*S)?|M\s*O\s*S|M\s*E\s*N\s*T\s*O))"
+    r"(?![A-Z])"
+)
 PAT_MATRICULA = re.compile(r"(?<![\w/.-])(\d{3}\.\d{3}-\d|\d{5,7}-\d|\d{6,8})(?![\w/-])")
 PAT_PROGRESSAO = re.compile(r"PROGRESSAO\s+FUNCIONAL|PROGRESSAO\s+(?:HORIZONTAL|VERTICAL)")
 # Referência à publicação do ato ORIGINAL dentro de uma retificação, republicação ou "sem efeito":
@@ -303,7 +313,26 @@ def _continuidade_duvidosa(corpo: list[Linha], pendencia_de_fim: str | None) -> 
 
 
 def _merito(norm: str) -> str:
-    achados = {bool(m.group(1)) for m in PAT_MERITO.finditer(norm)}
+    negados = {m.end() for m in PAT_MERITO_NEGADO.finditer(norm)}
+    achados = set()
+    teve_negacao = bool(negados)
+    for m in PAT_MERITO.finditer(norm):
+        if not m.group(1) and m.end() in negados:
+            continue
+        achados.add(bool(m.group(1)))
+    if not achados and not teve_negacao:
+        for m in PAT_MERITO_ESPACADO.finditer(norm):
+            trecho = m.group(0)
+            if " " not in trecho:
+                continue
+            if m.group("pref"):
+                continue
+            if m.group("neg"):
+                teve_negacao = True
+                continue
+            achados.add(bool(m.group("in")))
+    if teve_negacao and achados == {False}:
+        return "NAO_INFORMADO"
     if achados == {False}:
         return "DEFERIDO"
     return "INDEFERIDO" if achados == {True} else "NAO_INFORMADO"
@@ -705,7 +734,7 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
             data_expediente=f"{expediente.group(3)}-{expediente.group(2)}-{expediente.group(1)}" if expediente else None,
             natureza=natureza, eixo=tema["eixo"], modalidade=tema["modalidade"], condicao=tema["condicao"],
             grupo=tema["grupo"], grupo_expressao=tema["grupo_expressao"], subcategoria=tema["subcategoria"],
-            resultado=_merito(preambulo) if _merito(preambulo) != "NAO_INFORMADO" else _merito(_juntar_letras_espacadas(preambulo)), texto=trecho[:6000], pendencias=list(tema["pendencias"]),
+            resultado=_merito(preambulo), texto=trecho[:6000], pendencias=list(tema["pendencias"]),
         )
         if pendencia:
             ato.pendencias.append(pendencia)
@@ -729,6 +758,18 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
                                               titulo, vinculo, trecho[:600]))
         if tipo == "RESENHA" and ato.eixo:
             decisoes = _decisoes(ato, corpo, chave_arquivo)
+            if ato.eixo == C.PROGRESSAO and decisoes:
+                cargos_ato = [d.cargo for d in decisoes if d.cargo]
+                if cargos_ato:
+                    novo_grp, nova_exp, nova_pend = C.avaliar_grupo(preambulo, cargos=cargos_ato)
+                    if (novo_grp, nova_exp) != (ato.grupo, ato.grupo_expressao):
+                        ato.grupo, ato.grupo_expressao = novo_grp, nova_exp
+                        ato.pendencias = [
+                            p for p in ato.pendencias
+                            if "grupo" not in p.lower() and "tec. adm" not in p.lower() and "stf" not in p.lower()
+                        ]
+                        if not ato.grupo:
+                            ato.pendencias.append(nova_pend or "grupo do PCCR não informado ou não reconhecido")
             if not decisoes:
                 ato.pendencias.append("nenhum processo extraído neste ato; exige revisão")
             sem_processo = sum(d.processo is None for d in decisoes)
