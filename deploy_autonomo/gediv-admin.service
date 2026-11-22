@@ -15,7 +15,7 @@ Environment=GEDIV_LOGIN_SOMENTE_COOKIE=1
 Environment=GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1
 Environment=GEDIV_HABILITAR_TOKEN_TECNICO=0
 EnvironmentFile=-/etc/gediv/admin.env
-ExecStart=/opt/observatorio-gediv/.venv/bin/python -m observatorio.web --dados /var/lib/gediv/dados --endereco 127.0.0.1 --porta 8000
+ExecStart=/opt/observatorio-gediv/.venv/bin/python -m observatorio.web --dados /var/lib/gediv/dados --endereco 127.0.0.1 --porta 8000 --modo-producao
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

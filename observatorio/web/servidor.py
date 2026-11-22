@@ -24,6 +24,7 @@ import json
 import mimetypes
 import os
 import re
+from collections.abc import Mapping
 from datetime import date
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +52,13 @@ SEGURANCA = {
 COOKIE_SESSAO = "gediv_sessao"
 MIN_TOKEN_TECNICO_LEGADO = 16
 MIN_TOKEN_TECNICO_PRODUCAO = 32
+POLITICA_PRODUCAO: dict[str, str] = {
+    "GEDIV_MODO_PRODUCAO": "1",
+    "GEDIV_COOKIE_SECURE": "1",
+    "GEDIV_LOGIN_SOMENTE_COOKIE": "1",
+    "GEDIV_EXIGIR_SNAPSHOT_PUBLICO": "1",
+    "GEDIV_HABILITAR_TOKEN_TECNICO": "0",
+}
 _ACOES_RESTRITAS_AUDITORIA = frozenset({
     "RECEBER_LOTE_ADMIN",
     "PUBLICAR_SNAPSHOT_PUBLICO",
@@ -655,8 +663,39 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
     return Manipulador
 
 
+def validar_ambiente_producao(
+    env: Mapping[str, str] | None = None,
+    *,
+    habilitar_token_tecnico: bool = False,
+    exigir_producao: bool = False,
+) -> None:
+    """Garante que, no modo de produção, nenhuma proteção obrigatória tenha sido
+    desabilitada ou sobrescrita (por exemplo, por `/etc/gediv/admin.env`).
+    Falha de maneira segura (`ValueError`) em vez de operar com segurança reduzida."""
+    mapa = os.environ if env is None else env
+    ativo = exigir_producao or (mapa.get("GEDIV_MODO_PRODUCAO") == "1")
+    if not ativo:
+        return
+    violacoes: list[str] = []
+    for chave, esperado in POLITICA_PRODUCAO.items():
+        atual = mapa.get(chave)
+        if atual != esperado:
+            violacoes.append(f"{chave}={atual!r} (esperado {esperado!r})")
+    if habilitar_token_tecnico:
+        violacoes.append("credencial técnica legada proibida no modo de produção")
+    if violacoes:
+        raise ValueError(
+            "Configuração insegura bloqueada na inicialização de produção: "
+            + "; ".join(violacoes)
+        )
+
+
 def criar_servidor(pasta_dados: str | Path, token_gerencia: str | None = None, endereco: str = "127.0.0.1", porta: int = 8000,
-                   origens_admin=(), *, exigir_token_32: bool = False) -> ThreadingHTTPServer:
+                   origens_admin=(), *, exigir_token_32: bool = False, modo_producao: bool = False) -> ThreadingHTTPServer:
+    validar_ambiente_producao(
+        habilitar_token_tecnico=bool(token_gerencia),
+        exigir_producao=modo_producao,
+    )
     if token_gerencia is not None and token_gerencia != "":
         min_len = (
             MIN_TOKEN_TECNICO_PRODUCAO

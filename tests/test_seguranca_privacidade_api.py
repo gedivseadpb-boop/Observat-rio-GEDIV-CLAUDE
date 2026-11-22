@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import os
 import pathlib
+import re
+import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -19,7 +24,7 @@ from observatorio.nucleo.acervo import Acervo
 from observatorio.nucleo.banco import Banco
 from observatorio.painel import adaptador, indicadores
 from observatorio.web.contas import Contas
-from observatorio.web.servidor import criar_servidor
+from observatorio.web.servidor import POLITICA_PRODUCAO, criar_servidor, validar_ambiente_producao
 
 
 def _http(url: str, token: str | None = None, payload: dict | None = None, headers: dict | None = None, method: str | None = None):
@@ -795,6 +800,171 @@ class TestSegurancaPrivacidadeAPI(unittest.TestCase):
                 os.environ.pop("GEDIV_PROXIES_CONFIAVEIS", None)
             else:
                 os.environ["GEDIV_PROXIES_CONFIAVEIS"] = antigo_prx
+
+    def test_10_modo_producao_falha_fechada_se_protecao_sobrescrita(self) -> None:
+        """Etapa 3F-bis: no modo de produção (--modo-producao / gediv-admin.service), qualquer
+        sobrescrita insegura (ex.: via /etc/gediv/admin.env) de qualquer uma das 5 proteções
+        obrigatórias aborta a inicialização de forma segura (ValueError), em vez de operar com
+        segurança reduzida."""
+        from observatorio.web import __main__ as web_main
+
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        unit_txt = (repo / "deploy_autonomo" / "gediv-admin.service").read_text(encoding="utf-8")
+        self.assertIn("--modo-producao", unit_txt)
+        for chave, esperado in POLITICA_PRODUCAO.items():
+            self.assertIn(f"Environment={chave}={esperado}", unit_txt)
+
+        chaves_gerenciadas = tuple(POLITICA_PRODUCAO.keys()) + ("GEDIV_PROXIES_CONFIAVEIS", "GEDIV_TOKEN_GERENCIA")
+        snapshot_env = {k: os.environ.get(k) for k in chaves_gerenciadas}
+
+        def _aplicar_env(valores: dict[str, str | None]) -> None:
+            for k in chaves_gerenciadas:
+                os.environ.pop(k, None)
+            for k, v in valores.items():
+                if v is not None:
+                    os.environ[k] = v
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            try:
+                # 1. Configuração de produção íntegra (+ variável opcional compatível) inicia normalmente
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_PROXIES_CONFIAVEIS": "10.0.0.5"})
+                validar_ambiente_producao(exigir_producao=True)
+                srv_ok = criar_servidor(pasta, None, "127.0.0.1", 0, modo_producao=True)
+                srv_ok.server_close()
+
+                # 2. Enfraquecer, esvaziar ou omitir QUALQUER uma das 5 variáveis falha de forma fechada
+                for chave, esperado in POLITICA_PRODUCAO.items():
+                    inseguro = "1" if esperado == "0" else "0"
+                    for valor_ruim in (inseguro, "", None):
+                        env_ruim: dict[str, str | None] = dict(POLITICA_PRODUCAO)
+                        env_ruim[chave] = valor_ruim
+                        _aplicar_env(env_ruim)
+                        with self.assertRaises(ValueError, msg=f"Deveria bloquear {chave}={valor_ruim!r}") as ctx:
+                            validar_ambiente_producao(exigir_producao=True)
+                        self.assertIn(chave, str(ctx.exception))
+                        with self.assertRaises(ValueError):
+                            criar_servidor(pasta, None, "127.0.0.1", 0, modo_producao=True)
+                        with self.assertRaises(ValueError):
+                            web_main.main(["--dados", str(pasta), "--endereco", "127.0.0.1", "--porta", "0", "--modo-producao"])
+
+                # 3. Token técnico legado é bloqueado em modo de produção (por CLI ou argumento direto)
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_TOKEN_GERENCIA": "x" * 40})
+                with self.assertRaises(ValueError):
+                    web_main.main([
+                        "--dados", str(pasta), "--endereco", "127.0.0.1", "--porta", "0",
+                        "--modo-producao", "--habilitar-token-tecnico",
+                    ])
+                with self.assertRaises(ValueError):
+                    criar_servidor(pasta, "x" * 40, "127.0.0.1", 0, modo_producao=True)
+
+                # 4. Mesmo sem --modo-producao, GEDIV_MODO_PRODUCAO=1 com proteção faltante falha fechado
+                _aplicar_env({**POLITICA_PRODUCAO, "GEDIV_COOKIE_SECURE": "0"})
+                with self.assertRaises(ValueError):
+                    criar_servidor(pasta, None, "127.0.0.1", 0)
+            finally:
+                _aplicar_env(snapshot_env)
+
+    def test_11_homologacao_linux_isolada_sem_expor_banco_real_nem_senha_fixa(self) -> None:
+        """Etapa 3F-bis: comprova que homologar_ambiente_linux.sh:
+        - separa totalmente a verificação somente leitura do banco real dos testes HTTP;
+        - não copia nem disponibiliza registros reais na instância HTTP temporária;
+        - usa exclusivamente banco sintético descartável e senha administrativa aleatória não logada."""
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        script = repo / "deploy_autonomo" / "homologar_ambiente_linux.sh"
+        raw = script.read_bytes()
+        self.assertEqual(raw.count(b"\r\n"), 0, "homologar_ambiente_linux.sh deve usar apenas LF")
+        txt = raw.decode("utf-8")
+
+        # Invariantes estruturais: sem senha fixa, sem cópia de banco real para HTTP, com mktemp/cleanup/umask/secrets
+        self.assertNotIn("SenhaHomolog", txt)
+        self.assertNotIn("s.backup(", txt)
+        self.assertIn("mktemp -d", txt)
+        self.assertIn("trap cleanup EXIT", txt)
+        self.assertIn("umask 0027", txt)
+        self.assertIn("secrets.token_urlsafe(", txt)
+        self.assertIn("modo_producao=True", txt)
+        self.assertIn("DADOS_SINTETICOS=", txt)
+        self.assertNotRegex(txt, r'contas\.criar\([^)]*"[^"]*202\d')
+
+        # Extrai os blocos Python exatos das etapas [4/7] (verificação RO) e [5/7] (HTTP sintético)
+        blocos = re.findall(r"<<'PY'\n(.*?)\nPY", txt, flags=re.DOTALL)
+        self.assertGreaterEqual(len(blocos), 4, "Esperados blocos Python nas etapas do script de homologação")
+        bloco_ro = blocos[1]
+        bloco_http = blocos[2]
+        self.assertIn("?mode=ro", bloco_ro)
+        self.assertIn("secrets.token_urlsafe", bloco_http)
+        self.assertIn('j_d["rows"] == []', bloco_http)
+
+        # Cria um banco operacional simulado com registros nominais sentinela
+        sentinela_nome = "MARIA SENTINELA OPERACIONAL"
+        sentinela_proc = "SAD-PSE-2026/999999"
+        sentinela_mat = "9988776"
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            base_tmp = pathlib.Path(tmp)
+            db_real = base_tmp / "operacional_sentinela.sqlite3"
+            snap_real = _bootstrap_privacidade()
+            snap_real["rows"][0]["servidor"] = sentinela_nome
+            snap_real["rows"][0]["processo"] = sentinela_proc
+            snap_real["rows"][0]["matricula"] = sentinela_mat
+            with Banco(db_real) as b_real:
+                adaptador.importar_snapshot_reconciliado(b_real, snap_real)
+            sha_real_antes = hashlib.sha256(db_real.read_bytes()).hexdigest()
+
+            env_base = {
+                **os.environ,
+                "PYTHONPATH": str(repo),
+                "PYTHONSAFEPATH": "1",
+                "PYTHONIOENCODING": "utf-8",
+            }
+
+            # 1. Etapa [4/7] valida o banco real estritamente em modo somente leitura, sem alterá-lo nem vazar PII
+            r_ro = subprocess.run(
+                [sys.executable, "-c", bloco_ro, str(db_real)],
+                capture_output=True, text=True, encoding="utf-8", env=env_base, timeout=30,
+            )
+            self.assertEqual(r_ro.returncode, 0, r_ro.stderr)
+            self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+            for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                self.assertNotIn(termo, r_ro.stdout + r_ro.stderr)
+
+            # 2. Etapa [5/7] roda o servidor HTTP EXCLUSIVAMENTE em diretório sintético vazio (sem tocar no banco real)
+            dados_sint = base_tmp / "dados_sinteticos"
+            dados_sint.mkdir()
+            env_prod = {**env_base, **POLITICA_PRODUCAO}
+            r_http = subprocess.run(
+                [sys.executable, "-c", bloco_http, str(dados_sint)],
+                capture_output=True, text=True, encoding="utf-8", env=env_prod, timeout=30,
+            )
+            self.assertEqual(r_http.returncode, 0, r_http.stderr)
+            self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+            for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                self.assertNotIn(termo, r_http.stdout + r_http.stderr)
+            with Banco.somente_leitura(dados_sint / "observatorio.sqlite3") as b_sin:
+                self.assertEqual(b_sin.con.execute("SELECT COUNT(*) FROM ato").fetchone()[0], 0)
+                self.assertEqual(b_sin.con.execute("SELECT COUNT(*) FROM decisao").fetchone()[0], 0)
+
+            # 3. Se alguém apontar [5/7] para um diretório que já contenha observatorio.sqlite3, a etapa recusa executar
+            dir_contaminado = base_tmp / "dir_contaminado"
+            dir_contaminado.mkdir()
+            shutil.copyfile(db_real, dir_contaminado / "observatorio.sqlite3")
+            r_recusa = subprocess.run(
+                [sys.executable, "-c", bloco_http, str(dir_contaminado)],
+                capture_output=True, text=True, encoding="utf-8", env=env_prod, timeout=30,
+            )
+            self.assertNotEqual(r_recusa.returncode, 0, "Etapa HTTP deve recusar diretório com banco pré-existente")
+
+            # 4. Em ambiente Linux com bash e flock disponíveis (ex.: CI ubuntu-24.04), executa o script completo
+            if sys.platform.startswith("linux") and shutil.which("bash") and shutil.which("flock"):
+                r_sh = subprocess.run(
+                    ["bash", str(script), str(db_real)],
+                    capture_output=True, text=True, encoding="utf-8",
+                    env={**os.environ, "PYTHON_BIN": sys.executable}, timeout=60,
+                )
+                self.assertEqual(r_sh.returncode, 0, f"STDOUT:\n{r_sh.stdout}\nSTDERR:\n{r_sh.stderr}")
+                self.assertEqual(hashlib.sha256(db_real.read_bytes()).hexdigest(), sha_real_antes)
+                for termo in (sentinela_nome, sentinela_proc, sentinela_mat):
+                    self.assertNotIn(termo, r_sh.stdout + r_sh.stderr)
 
 
 if __name__ == "__main__":
