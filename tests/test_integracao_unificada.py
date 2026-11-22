@@ -293,13 +293,14 @@ class TestIntegracaoUnificadaGEDIV(unittest.TestCase):
             t.start()
             base_url = f"http://127.0.0.1:{porta}"
             try:
-                # 1. Consulta pública anônima a /api/data não deve retornar linhas individuais
+                # 1. Consulta pública anônima a /api/data não deve retornar linhas individuais nem fila interna
                 with urlopen(f"{base_url}/api/data") as resp:
                     d_pub = json.loads(resp.read().decode("utf-8"))
                 self.assertFalse(d_pub["backend"]["autenticado"])
                 self.assertEqual(len(d_pub["rows"]), 0)
-                self.assertEqual(d_pub["meta"]["pendentes"], exp_pend_dec)
-                self.assertEqual(d_pub["meta"]["rejeitados"], exp_rej)
+                self.assertEqual(d_pub["meta"]["pendentes"], 0)
+                self.assertEqual(d_pub["meta"]["rejeitados"], 0)
+                self.assertEqual(d_pub["dashboard"]["counts"]["unlinkedEvents"], 0)
 
                 # 2. Tentativa de revisão sem autenticação -> HTTP 401
                 req_unauth = Request(

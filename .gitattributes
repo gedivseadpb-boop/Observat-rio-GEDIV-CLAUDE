@@ -11,3 +11,6 @@ revisao-2910/*.js text eol=lf
 revisao-2910/*.css text eol=lf
 revisao-2910/*.json text eol=lf
 revisao-2910/*.png binary
+*.sh text eol=lf
+deploy_autonomo/*.service text eol=lf
+deploy_autonomo/*.timer text eol=lf

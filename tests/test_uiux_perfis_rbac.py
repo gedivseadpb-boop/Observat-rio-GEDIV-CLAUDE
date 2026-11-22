@@ -317,7 +317,12 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 'id="selectedProcCard"',
                 'id="docModal"',
                 'id="reviewDialog"',
+                'id="conflictsDialog"',
+                'id="auditDialog"',
                 'id="batchDialog"',
+                'id="revCorrCargo"',
+                'id="revCorrLotacao"',
+                'id="revActClassBox"',
                 'data-unit="qty"',
                 'data-unit="pct"',
                 'TS-01',
@@ -328,8 +333,13 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 'PENDENTE:STF',
                 'parseVerticalLevel',
                 'delicateAcctBtn',
+                'delicateConflictsAct',
+                'delicateAuditAct',
                 'delicateBatchAct',
                 'delicateScopeProxy',
+                'serverAuditedExport',
+                'setSession',
+                'handleAuthExpiry',
                 'Exportar visualização',
                 'Empilhadas (Mês)',
                 'Linhas (Mês)',
@@ -383,13 +393,17 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
             threading.Thread(target=srv.serve_forever, daemon=True).start()
             base = f"http://127.0.0.1:{srv.server_address[1]}"
             try:
-                # Token técnico acessa rota gerencial, mas NÃO possui papel 'admin' (não faz bypass de RBAC)
+                # Token técnico acessa rota gerencial, mas NÃO possui papel 'admin' (não faz bypass de RBAC) e não consulta /api/auditoria
                 self.assertEqual(_req(f"{base}/api/conflitos", token=token_forte)[0], 200)
+                self.assertEqual(_req(f"{base}/api/auditoria", token=token_forte)[0], 403)
                 self.assertEqual(_req(f"{base}/api/admin/usuarios", token=token_forte)[0], 403)
                 self.assertEqual(_req(f"{base}/api/admin/lote", token=token_forte, payload={"rows": [{"id": "x"}]})[0], 403)
 
-                # Auditoria registra uso do token técnico pelo prefixo SHA-256 sem expor o segredo em texto
-                st_aud, aud = _req(f"{base}/api/auditoria", token=token_forte)
+                # Conta admin nominal enxerga trilha global (inclusive USO_TOKEN_TECNICO_LEGADO sem expor o segredo)
+                Contas(pasta / "contas.sqlite3").criar("admin.rbac", "Admin RBAC", "AdminForte#2026", papel="admin")
+                st_adm_l, s_adm_l = _req(f"{base}/api/login", payload={"usuario": "admin.rbac", "senha": "AdminForte#2026"})
+                self.assertEqual(st_adm_l, 200)
+                st_aud, aud = _req(f"{base}/api/auditoria", token=s_adm_l["token"])
                 self.assertEqual(st_aud, 200)
                 texto_aud = json.dumps(aud, ensure_ascii=False)
                 self.assertNotIn(token_forte, texto_aud)
@@ -416,16 +430,164 @@ class TestUiUxPerfisRBAC(unittest.TestCase):
                 with urlopen(req_sess, timeout=10) as r_s:
                     self.assertEqual(json.loads(r_s.read().decode("utf-8"))["usuario"], "analista.ger")
 
-                # Ataque CSRF cross-site usando cookie deve ser recusado com HTTP 403
-                req_csrf = Request(
+                # Ataques CSRF com cookie (cross-site, same-site e ausência de Origin/Sec-Fetch-Site/Referer) -> 403
+                for headers_csrf in (
+                    {"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "cross-site"},
+                    {"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "same-site"},
+                    {"Content-Type": "application/json", "Cookie": cookie_par},
+                ):
+                    req_csrf = Request(f"{base}/api/logout", data=b"{}", headers=headers_csrf, method="POST")
+                    with self.assertRaises(HTTPError) as ctx_csrf:
+                        urlopen(req_csrf, timeout=10)
+                    self.assertEqual(ctx_csrf.exception.code, 403)
+
+                # Pedido same-origin legítimo via cookie -> 200
+                req_ok_csrf = Request(
                     f"{base}/api/logout",
                     data=b"{}",
-                    headers={"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "cross-site"},
+                    headers={"Content-Type": "application/json", "Cookie": cookie_par, "Sec-Fetch-Site": "same-origin"},
                     method="POST",
                 )
-                with self.assertRaises(HTTPError) as ctx_csrf:
-                    urlopen(req_csrf, timeout=10)
-                self.assertEqual(ctx_csrf.exception.code, 403)
+                with urlopen(req_ok_csrf, timeout=10) as r_out:
+                    self.assertEqual(r_out.status, 200)
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
+    def test_06_rota_principal_unificada_rotas_legadas_e_compatibilidade_d1_d4(self) -> None:
+        """Etapa 2B.2: garante que / e /index.html sirvam o painel unificado definitivo,
+        preservando temporariamente /estatico/* e os endpoints das divergências D1–D4,
+        o acesso autenticado aos PDFs, o Abono de Permanência (sem TS-08) e o bloqueio de path traversal.
+        """
+        import hashlib
+        from observatorio.nucleo.acervo import Acervo
+
+        html_esperado = UNIFICADO_HTML.read_bytes()
+        sha_esperado = hashlib.sha256(html_esperado).hexdigest().upper()
+
+        boot = _bootstrap_sintetico()
+        # Inclui um item de Abono de Permanência para validar projeção e ausência de TS-08
+        boot["rows"].append(
+            {
+                "id": "out-abono-001",
+                "act": "Resenha nº 904/2026 — Abono de Permanência (conceito candidato)",
+                "actType": "TEMA_FORA_DOS_EIXOS",
+                "resenha": "Resenha 904/2026",
+                "date": "2026-10-18",
+                "page": 4,
+                "url": "snapshot:rbac-4",
+                "process": "PROC-TESTE-2026/004",
+                "server": "SERVIDOR FICTICIO ABONO",
+                "registration": "900004",
+                "axis": "outros",
+                "modality": "",
+                "category": "ABONO_PERMANENCIA",
+                "merit": "deferido",
+                "validation": "pendente",
+                "evidence": "ABONO DE PERMANÊNCIA DEFERIDO PROCESSO PROC-TESTE-2026/004 SERVIDOR FICTICIO ABONO.",
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = pathlib.Path(tmp)
+            with Banco(pasta / "observatorio.sqlite3") as banco:
+                adaptador.importar_snapshot_reconciliado(banco, boot)
+                # Registra um PDF sintético no acervo para testar /api/pdf/<sha256>
+                pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+                acervo = Acervo(pasta / "acervo")
+                sha_pdf = acervo.guardar(pdf_bytes)[0]
+                pub_id = banco.con.execute("SELECT id FROM publicacao LIMIT 1").fetchone()[0]
+                banco.registrar_arquivo(pub_id, sha_pdf, len(pdf_bytes), acervo.caminho_relativo(sha_pdf))
+                ato_id = banco.con.execute("SELECT id FROM ato LIMIT 1").fetchone()[0]
+
+            contas = Contas(pasta / "contas.sqlite3")
+            contas.criar("ger.rota", "Gerencia Rota", "Gerencia#2026", papel="gerencia")
+            contas.criar("adm.rota", "Admin Rota", "AdminRota#2026", papel="admin")
+
+            srv = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{srv.server_address[1]}"
+            try:
+                # 1. Rotas principais (/, /index.html, /painel, /painel/, /painel/index.html) servem o HTML unificado idêntico
+                for rota_unif in ("/", "/index.html", "/painel", "/painel/", "/painel/index.html"):
+                    with self.subTest(rota_unif=rota_unif):
+                        with urlopen(Request(f"{base}{rota_unif}"), timeout=10) as r:
+                            corpo = r.read()
+                            csp = r.headers.get("Content-Security-Policy") or ""
+                        self.assertEqual(r.status, 200)
+                        self.assertEqual(hashlib.sha256(corpo).hexdigest().upper(), sha_esperado)
+                        self.assertIn("default-src 'self'", csp)
+                        self.assertNotIn(b"SERVIDOR FICTICIO", corpo)
+
+                # 2. Rotas legadas temporariamente preservadas para D1–D4 (/estatico/index.html e /estatico/app.js)
+                for rota_leg in ("/estatico", "/estatico/", "/estatico/index.html", "/estatico/app.js", "/estatico/estilo.css"):
+                    with self.subTest(rota_leg=rota_leg):
+                        with urlopen(Request(f"{base}{rota_leg}"), timeout=10) as r_leg:
+                            self.assertEqual(r_leg.status, 200)
+
+                # 3. Bloqueio estrito de path traversal e arquivos internos do servidor
+                for rota_proibida in (
+                    "/../servidor.py",
+                    "/painel/../servidor.py",
+                    "/estatico/../servidor.py",
+                    "/painel/modelo-base-sanitizado.html/../../servidor.py",
+                    "/api/pdf/../../observatorio.sqlite3",
+                ):
+                    with self.subTest(rota_proibida=rota_proibida):
+                        self.assertEqual(_req(f"{base}{rota_proibida}")[0], 404)
+
+                # 4. Perfil Público: ausência total de dados individuais e bloqueio de PDF/endpoints restritos
+                st_pub, d_pub = _req(f"{base}/api/data")
+                self.assertEqual(st_pub, 200)
+                self.assertEqual(d_pub["backend"]["papel"], "publico")
+                self.assertEqual(d_pub["rows"], [])
+                self.assertNotIn("SERVIDOR FICTICIO", json.dumps(d_pub, ensure_ascii=False))
+                cats_pub = [c[0] for c in d_pub["categories"]]
+                self.assertIn("ABONO_PERMANENCIA", cats_pub)
+                self.assertNotIn("TS-08", cats_pub)
+
+                self.assertEqual(_req(f"{base}/api/pdf/{sha_pdf}")[0], 401)
+                self.assertEqual(_req(f"{base}/api/ato/{ato_id}")[0], 401)
+                self.assertEqual(_req(f"{base}/api/conflitos")[0], 401)
+                self.assertEqual(_req(f"{base}/api/auditoria")[0], 401)
+                self.assertEqual(_req(f"{base}/api/exportar?formato=xlsx")[0], 401)
+
+                # 5. Perfil Gerência: login, Abono sem TS-08, acesso ao PDF e compatibilidade com endpoints D1–D4
+                st_lg, sess_ger = _req(f"{base}/api/login", payload={"usuario": "ger.rota", "senha": "Gerencia#2026"})
+                self.assertEqual(st_lg, 200)
+                tok_ger = sess_ger["token"]
+
+                st_dg, d_ger = _req(f"{base}/api/data", token=tok_ger)
+                self.assertEqual(st_dg, 200)
+                self.assertEqual(d_ger["backend"]["papel"], "gerencia")
+                self.assertFalse(d_ger["backend"]["ehAdmin"])
+                abono_rows = [r for r in d_ger["rows"] if r["category"] == "ABONO_PERMANENCIA"]
+                self.assertEqual(len(abono_rows), 1)
+                self.assertEqual(abono_rows[0]["axis"], "tempo")
+                self.assertFalse(any("TS-08" in str(r) for r in d_ger["rows"]))
+
+                # Acesso ao PDF oficial no acervo sem regressão
+                with urlopen(Request(f"{base}/api/pdf/{sha_pdf}", headers={"Authorization": f"Bearer {tok_ger}"}), timeout=10) as r_pdf:
+                    self.assertEqual(r_pdf.status, 200)
+                    self.assertEqual(r_pdf.read(), pdf_bytes)
+
+                # Endpoints D1–D4 preservados para a gerência (/api/ato, /api/conflitos, /api/auditoria, /api/exportar)
+                self.assertEqual(_req(f"{base}/api/ato/{ato_id}", token=tok_ger)[0], 200)
+                self.assertEqual(_req(f"{base}/api/conflitos", token=tok_ger)[0], 200)
+                with urlopen(Request(f"{base}/api/exportar?formato=csv", headers={"Authorization": f"Bearer {tok_ger}"}), timeout=10) as r_exp:
+                    self.assertEqual(r_exp.status, 200)
+                st_aud, d_aud = _req(f"{base}/api/auditoria", token=tok_ger)
+                self.assertEqual(st_aud, 200)
+                self.assertIn("EXPORTAR", [t["acao"] for t in d_aud["trilha"]])
+
+                # Gerência permanece bloqueada em rotas exclusivas de Admin
+                self.assertEqual(_req(f"{base}/api/admin/usuarios", token=tok_ger)[0], 403)
+
+                # 6. Perfil Administração: acesso completo às rotas administrativas
+                st_la, sess_adm = _req(f"{base}/api/login", payload={"usuario": "adm.rota", "senha": "AdminRota#2026"})
+                self.assertEqual(st_la, 200)
+                tok_adm = sess_adm["token"]
+                self.assertEqual(_req(f"{base}/api/admin/usuarios", token=tok_adm)[0], 200)
             finally:
                 srv.shutdown()
                 srv.server_close()

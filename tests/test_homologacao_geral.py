@@ -330,16 +330,17 @@ class TesteCadeiaVersoesERevisao(Cadeia):
         self.assertEqual(banco.con.execute("SELECT cargo FROM decisao WHERE id = ?", (ids[1],)).fetchone()[0], "ANALISTA DE SISTEMAS")
         correcao = banco.con.execute("SELECT campo, valor_anterior, valor_corrigido, autor FROM correcao").fetchone()
         self.assertEqual((correcao[0], json.loads(correcao[1]), json.loads(correcao[2]), correcao[3]),
-                         ("cargo", "TECNICO ADMINISTRATIVO", "ANALISTA DE SISTEMAS", REV))
+                         ("cargo", "TECNICO ADMINISTRATIVO", "ANALISTA DE SISTEMAS", f"credencial_tecnica_legada: {REV}"))
         self.assertEqual(banco.con.execute("SELECT COUNT(*) FROM auditoria WHERE alvo_tipo = 'decisao'").fetchone()[0], 3)
         # indicadores: só as conferidas; a rejeitada continua visível para a gerência, fora da contagem
         status, corpo = pedir(url, "/api/painel", TOKEN)
         painel = json.loads(corpo)
         self.assertEqual((painel["indicadores"]["decisoes"], painel["apoio"]["decisoes_rejeitadas"]), (2, 1))
-        # público: os mesmos números, nenhuma linha, nenhum nome, nenhuma justificativa
+        # público: nenhuma linha, nenhuma pequena contagem (<5), nenhum nome, nenhuma justificativa
         status, corpo = pedir(url, "/api/painel")
         publico = json.loads(corpo)
-        self.assertEqual((status, publico["indicadores"]["decisoes"], publico["linhas"]), (200, 2, []))
+        self.assertEqual((status, publico["indicadores"]["decisoes"], publico["linhas"], publico["resenhas"]), (200, None, [], []))
+        self.assertIsNone(publico["apoio"]["decisoes_pendentes"])
         for proibido in ("PESSOA FICTICIA", JUST, REV, "ANALISTA DE SISTEMAS"):
             self.assertNotIn(proibido, corpo.decode())
         self.assertEqual(pedir(url, "/api/auditoria")[0], 401)

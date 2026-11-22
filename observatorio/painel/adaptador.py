@@ -420,7 +420,7 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
     conferidos_cnt = sum(r["validation"] == "conferido" for r in rows_conv)
     rejeitados_cnt = sum(r["validation"] == "rejeitado" for r in rows_conv)
     total_cnt = len(rows_conv)
-    ev_pend_cnt = sum(e["validation"] == "pendente" for e in events_conv) if individual else int(apoio_b.get("eventos_sem_vinculo") or 0)
+    ev_pend_cnt = sum(e["validation"] == "pendente" for e in events_conv) if individual else 0
 
     def _visao_resumo(escopo_alvo: str) -> dict:
         rs = [r for r in rows_conv if r["validation"] == escopo_alvo]
@@ -442,10 +442,13 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "series": {"vertical": vert, "horizontal": horiz, "tempo": tmp, "other": oth},
         }
 
-    rev_hash = hashlib.sha256(
-        json.dumps({"n": total_cnt, "p": pendentes_cnt, "c": conferidos_cnt, "r": rejeitados_cnt,
-                    "u": cob_b.get("ultima_atualizacao")}, sort_keys=True).encode("utf-8")
-    ).hexdigest()
+    if individual:
+        rev_fonte = {"n": total_cnt, "p": pendentes_cnt, "c": conferidos_cnt, "r": rejeitados_cnt,
+                     "u": cob_b.get("ultima_atualizacao")}
+    else:
+        rev_fonte = {"perfil": "publico", "edicoes": int(cob_b.get("edicoes_no_acervo") or 0),
+                     "regras": meta_b.get("versao_regras") or C.VERSAO_REGRAS}
+    rev_hash = hashlib.sha256(json.dumps(rev_fonte, sort_keys=True).encode("utf-8")).hexdigest()
 
     escopo_padrao = "pendente" if (individual and conferidos_cnt == 0 and pendentes_cnt > 0) else (meta_b.get("escopo") or "conferido")
 
@@ -467,7 +470,7 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "indicadores": painel_resp.get("indicadores") or {},
             "apoio": apoio_b,
             "series": painel_resp.get("series") or {},
-            "resenhas": painel_resp.get("resenhas") or [],
+            "resenhas": (painel_resp.get("resenhas") or []) if individual else [],
         },
         "meta": {
             "version": f"Painel Diário Oficial | GEDIV · Regras {meta_b.get('versao_regras') or C.VERSAO_REGRAS}",
@@ -481,15 +484,15 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
             "semBaseCarregada": total_cnt == 0,
             "edicoes": int(cob_b.get("edicoes_no_acervo") or 0),
             "edicoesPendentes": int(cob_b.get("edicoes_com_pendencia_de_leitura") or 0),
-            "conferidos": conferidos_cnt if individual else int(apoio_b.get("decisoes_conferidas") or 0),
-            "pendentes": pendentes_cnt if individual else int(apoio_b.get("decisoes_pendentes") or 0),
-            "rejeitados": rejeitados_cnt if individual else int(apoio_b.get("decisoes_rejeitadas") or 0),
+            "conferidos": conferidos_cnt if individual else 0,
+            "pendentes": pendentes_cnt if individual else 0,
+            "rejeitados": rejeitados_cnt if individual else 0,
             "eventosPendentes": ev_pend_cnt,
-            "semDecisoesConferidas": (conferidos_cnt if individual else int(apoio_b.get("decisoes_conferidas") or 0)) == 0,
+            "semDecisoesConferidas": (conferidos_cnt == 0) if individual else (not bool((painel_resp.get("indicadores") or {}).get("decisoes"))),
             "connection": {
                 "batches": int(cob_b.get("edicoes_classificadas") or cob_b.get("edicoes_no_acervo") or 1),
                 "source": "sqlite_v8_canonico",
-                "overlaps": int(apoio_b.get("conflitos_abertos") or 0),
+                "overlaps": int(apoio_b.get("conflitos_abertos") or 0) if individual else 0,
                 "partialCoverage": not bool(cob_b.get("completa")),
                 "fullPeriodComplete": bool(cob_b.get("completa")),
             },

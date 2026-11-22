@@ -286,8 +286,12 @@ class TesteAPI(Base):
         status, _, corpo = self.pedir("/api/painel?escopo=pendente")
         dados = json.loads(corpo)
         self.assertEqual((status, dados["meta"]["perfil"], dados["meta"]["escopo"], dados["linhas"]), (200, "publico", "conferido", []))
-        self.assertEqual(dados["indicadores"]["decisoes"], 2)
+        self.assertIsNone(dados["indicadores"]["decisoes"])
+        self.assertEqual(dados["resenhas"], [])
+        self.assertIsNone(dados["apoio"]["decisoes_pendentes"])
         self.assertNotIn("PESSOA FICTICIA", corpo.decode())
+        priv = json.loads(self.pedir("/api/painel", self.TOKEN)[2])
+        self.assertEqual(priv["indicadores"]["decisoes"], 2)
 
     def test_rotas_restritas_exigem_credencial_valida(self):
         ato = self.ato("901/2026")
@@ -322,7 +326,9 @@ class TesteAPI(Base):
         catalogo = json.loads(self.pedir("/api/catalogo")[2])
         self.assertEqual((len(catalogo["eixos"]), len(catalogo["grupos"]), len(catalogo["subcategorias"])), (2, 16, 7))
         self.assertEqual(json.loads(self.pedir("/api/saude")[2])["cobertura"]["completa"], False)
-        self.assertEqual(self.pedir("/api/outras")[0], 200)
+        self.assertEqual(self.pedir("/api/outras")[0], 401)
+        self.assertEqual(self.pedir("/api/outras", "credencial-errada-0123456789")[0], 403)
+        self.assertEqual(self.pedir("/api/outras", self.TOKEN)[0], 200)
         self.assertEqual(self.pedir("/api/nada")[0], 404)
 
     def test_credencial_curta_e_recusada_na_inicializacao(self):

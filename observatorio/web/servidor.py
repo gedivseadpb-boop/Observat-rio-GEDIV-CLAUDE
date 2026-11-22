@@ -51,6 +51,15 @@ SEGURANCA = {
 COOKIE_SESSAO = "gediv_sessao"
 MIN_TOKEN_TECNICO_LEGADO = 16
 MIN_TOKEN_TECNICO_PRODUCAO = 32
+_ACOES_RESTRITAS_AUDITORIA = frozenset({
+    "RECEBER_LOTE_ADMIN",
+    "PUBLICAR_SNAPSHOT_PUBLICO",
+    "USO_TOKEN_TECNICO_LEGADO",
+    "CRIAR_USUARIO",
+    "ALTERAR_PAPEL",
+    "DESATIVAR_USUARIO",
+    "ATIVAR_USUARIO",
+})
 
 
 class Erro(Exception):
@@ -93,6 +102,8 @@ def _validar_origens_cors(origens_admin) -> frozenset[str]:
 
 def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, origens_admin=()):
     caminho_banco, acervo = pasta_dados / "observatorio.sqlite3", Acervo(pasta_dados / "acervo")
+    caminho_snapshot_publico = pasta_dados / indicadores.ARQUIVO_SNAPSHOT_PUBLICO
+    _cache_snapshot_publico: dict[str, object] = {"mtime_ns": None, "snap": None}
     contas = Contas(pasta_dados / "contas.sqlite3")
     origens = _validar_origens_cors(origens_admin)
     token_legado = (token_gerencia or "").strip()
@@ -151,19 +162,39 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                         "Acesso autenticado via credencial técnica legada",
                     )
 
-        def _verificar_csrf_cookie(self) -> None:
-            if not self._usando_cookie_sessao():
-                return
+        def _verificar_origem_post(self, exigir_cabecalho: bool) -> None:
             sec_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
-            if sec_site == "cross-site":
+            host_req = (self.headers.get("Host") or "").strip()
+            if exigir_cabecalho and sec_site and sec_site != "same-origin":
                 raise Erro(403, "pedido bloqueado por proteção CSRF")
             if "Origin" in self.headers:
                 orig_req = (self.headers.get("Origin") or "").strip().rstrip("/")
-                host_req = (self.headers.get("Host") or "").strip()
                 if not orig_req or orig_req.lower() == "null" or "*" in orig_req:
                     raise Erro(403, "origem inválida (proteção CSRF)")
                 if orig_req not in origens and urlsplit(orig_req).netloc != host_req:
                     raise Erro(403, "origem não autorizada (proteção CSRF)")
+                if not exigir_cabecalho and sec_site and sec_site != "same-origin" and orig_req not in origens:
+                    raise Erro(403, "pedido bloqueado por proteção CSRF")
+                return
+            if not exigir_cabecalho:
+                if sec_site and sec_site not in ("same-origin", "none"):
+                    raise Erro(403, "pedido bloqueado por proteção CSRF")
+                return
+            if sec_site == "same-origin":
+                return
+            ref = (self.headers.get("Referer") or "").strip()
+            if ref:
+                u = urlsplit(ref)
+                orig_ref = f"{u.scheme}://{u.netloc}" if u.scheme and u.netloc else ""
+                if u.scheme in ("http", "https") and (orig_ref in origens or u.netloc == host_req):
+                    return
+                raise Erro(403, "referência de origem não autorizada (proteção CSRF)")
+            raise Erro(403, "origem não verificável (proteção CSRF)")
+
+        def _verificar_csrf_cookie(self) -> None:
+            if not self._usando_cookie_sessao():
+                return
+            self._verificar_origem_post(exigir_cabecalho=True)
 
         def _cabecalho_cookie_sessao(self, valor: str, max_age: int) -> str:
             secure = (
@@ -220,14 +251,42 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
         def _exigir_gerencia(self) -> None:
             if not self._tem_credencial():
                 raise Erro(401, "credencial necessária")
+            if self._usando_cookie_sessao() and not self._conta():
+                raise Erro(401, "sessão inexistente ou expirada")
             if self._perfil() != indicadores.GERENCIA_PERFIL:
                 raise Erro(403, "credencial inválida ou sem permissão")
 
         def _exigir_admin(self) -> None:
             if not self._tem_credencial():
                 raise Erro(401, "credencial necessária")
+            if self._usando_cookie_sessao() and not self._conta():
+                raise Erro(401, "sessão inexistente ou expirada")
             if self._papel() != "admin":
                 raise Erro(403, "permissão administrativa necessária")
+
+        def _obter_snapshot_publico(self, banco: Banco) -> dict:
+            """Devolve o snapshot público congelado e validado (`snapshot_publico.json`).
+            Confirmações unitárias em `POST /api/revisao` não alteram este snapshot até nova publicação."""
+            if caminho_snapshot_publico.is_file():
+                try:
+                    mtime_ns = caminho_snapshot_publico.stat().st_mtime_ns
+                    if _cache_snapshot_publico["snap"] is not None and _cache_snapshot_publico["mtime_ns"] == mtime_ns:
+                        return _cache_snapshot_publico["snap"]  # type: ignore[return-value]
+                    snap = indicadores.carregar_snapshot_publico(caminho_snapshot_publico)
+                    if snap is not None:
+                        _cache_snapshot_publico["mtime_ns"] = mtime_ns
+                        _cache_snapshot_publico["snap"] = snap
+                        return snap
+                except Exception:
+                    if _cache_snapshot_publico["snap"] is not None:
+                        return _cache_snapshot_publico["snap"]  # type: ignore[return-value]
+                    raise Erro(503, "snapshot público inválido ou indisponível")
+            if _cache_snapshot_publico["snap"] is not None:
+                return _cache_snapshot_publico["snap"]  # type: ignore[return-value]
+            snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
+            _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
+            _cache_snapshot_publico["snap"] = snap
+            return snap
 
         def _enviar(self, status: int, corpo: bytes, tipo: str, extras: dict | None = None) -> None:
             self.send_response(status)
@@ -293,14 +352,14 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
             rota = url.path
             consulta = {k: (v[0] if len(v) == 1 else v) for k, v in parse_qs(url.query).items()}
             perfil = self._perfil()
-            if rota in ("/", "/index.html"):
-                return self._arquivo("index.html")
-            if rota in ("/painel", "/painel/", "/painel/index.html"):
+            if rota in ("/", "/index.html", "/painel", "/painel/", "/painel/index.html"):
                 return self._arquivo("index.html", UNIFICADO)
             if rota.startswith("/painel/"):
                 return self._arquivo(rota[len("/painel/"):], UNIFICADO)
+            if rota in ("/estatico", "/estatico/"):
+                return self._arquivo("index.html", ESTATICO)
             if rota.startswith("/estatico/"):
-                return self._arquivo(rota[len("/estatico/"):])
+                return self._arquivo(rota[len("/estatico/"):], ESTATICO)
             if rota == "/api/saude":
                 return self._json({"sistema": NOME, "versao": __version__, "regras": catalogo.VERSAO_REGRAS, "perfil": perfil,
                                    "papel": self._papel(), "cobertura": indicadores.cobertura(banco)})
@@ -312,47 +371,55 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
             if rota == "/api/catalogo":
                 return self._json(catalogo.como_dicionario())
             if rota == "/api/painel":
-                return self._json(indicadores.painel(banco, consulta, perfil))
+                if perfil != indicadores.GERENCIA_PERFIL:
+                    return self._json(self._obter_snapshot_publico(banco)["painel"])
+                return self._json(indicadores.painel(banco, consulta, perfil, proteger_publico=False))
             if rota == "/api/data":
-                escopo_padrao = "pendente" if perfil == indicadores.GERENCIA_PERFIL else "conferido"
-                p_resp = indicadores.painel(banco, {**consulta, "escopo": consulta.get("escopo") or escopo_padrao}, perfil)
-                if perfil == indicadores.GERENCIA_PERFIL:
-                    # Carrega ambos os escopos (pendente e conferido) e rejeitados para o perfil autenticado
-                    p_pend = p_resp if p_resp["meta"]["escopo"] == "pendente" else indicadores.painel(banco, {"escopo": "pendente"}, perfil)
-                    p_conf = p_resp if p_resp["meta"]["escopo"] == "conferido" else indicadores.painel(banco, {"escopo": "conferido"}, perfil)
-                    todas_linhas = list(p_pend.get("linhas") or []) + list(p_conf.get("linhas") or [])
-                    p_combinado = {**p_resp, "linhas": todas_linhas}
-                    outras_resp = indicadores.outras_publicacoes(banco, perfil)
-                    rej_consulta = banco.con.execute(
-                        "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
-                        "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
-                        "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
-                        "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
-                        "a.gerencia AS gerencia_painel, SUBSTR(a.texto,1,1200) AS texto_identificacao, l.numero_edicao, l.data_edicao, "
-                        "0 AS conflito_aberto "
-                        "FROM decisao d JOIN ato a ON a.id = d.ato_id JOIN leitura l ON l.sha256 = d.sha256 "
-                        "WHERE a.gerencia = 'GEDIV' AND d.validacao = 'REJEITADO'"
-                    ).fetchall()
-                    rej_linhas = []
-                    for r in rej_consulta:
-                        lr = dict(r)
-                        lr.update(documental.identificar(lr))
-                        lr.pop("texto_identificacao", None)
-                        lr["detalhe"] = json.loads(lr["detalhe"] or "{}")
-                        lr["pendencias"] = json.loads(lr["pendencias"] or "[]")
-                        url_of = banco.url_oficial(lr["sha256"])
-                        lr["url_oficial"] = f"{url_of}#page={lr['pagina']}" if url_of else None
-                        lr["pdf_no_acervo"] = f"/api/pdf/{lr['sha256']}#page={lr['pagina']}"
-                        rej_linhas.append(lr)
-                    resp = adaptador.projetar_para_dashboard_2910(p_combinado, outras_resp, rej_linhas)
-                    resp["backend"]["papel"] = self._papel()
-                    resp["backend"]["ehAdmin"] = self._papel() == "admin"
-                    return self._json(resp)
-                resp = adaptador.projetar_para_dashboard_2910(p_resp, [], [])
+                if perfil != indicadores.GERENCIA_PERFIL:
+                    return self._json(self._obter_snapshot_publico(banco)["data"])
+                escopo_padrao = "pendente"
+                p_resp = indicadores.painel(
+                    banco,
+                    {**consulta, "escopo": consulta.get("escopo") or escopo_padrao},
+                    perfil,
+                    proteger_publico=False,
+                )
+                # Carrega ambos os escopos (pendente e conferido) e rejeitados para o perfil autenticado
+                p_pend = p_resp if p_resp["meta"]["escopo"] == "pendente" else indicadores.painel(banco, {"escopo": "pendente"}, perfil)
+                p_conf = p_resp if p_resp["meta"]["escopo"] == "conferido" else indicadores.painel(banco, {"escopo": "conferido"}, perfil)
+                todas_linhas = list(p_pend.get("linhas") or []) + list(p_conf.get("linhas") or [])
+                p_combinado = {**p_resp, "linhas": todas_linhas}
+                outras_resp = indicadores.outras_publicacoes(banco, perfil)
+                rej_consulta = banco.con.execute(
+                    "SELECT d.id, d.ato_id, d.sha256, d.pagina, d.processo, d.servidor, d.matricula, d.lotacao, d.cargo, d.detalhe, "
+                    "d.resultado, d.trecho, d.validacao, d.revisor, d.revisado_em, d.justificativa, a.numero AS resenha, a.sufixo, a.tipo, "
+                    "a.data_publicacao AS data, a.data_expediente, a.vinculo, a.natureza, a.eixo, a.modalidade, a.condicao, a.grupo, "
+                    "a.grupo_expressao, a.subcategoria, a.pendencias, a.chave_logica, "
+                    "a.gerencia AS gerencia_painel, SUBSTR(a.texto,1,1200) AS texto_identificacao, l.numero_edicao, l.data_edicao, "
+                    "0 AS conflito_aberto "
+                    "FROM decisao d JOIN ato a ON a.id = d.ato_id JOIN leitura l ON l.sha256 = d.sha256 "
+                    "WHERE a.gerencia = 'GEDIV' AND d.validacao = 'REJEITADO'"
+                ).fetchall()
+                rej_linhas = []
+                for r in rej_consulta:
+                    lr = dict(r)
+                    lr.update(documental.identificar(lr))
+                    lr.pop("texto_identificacao", None)
+                    lr["detalhe"] = json.loads(lr["detalhe"] or "{}")
+                    lr["pendencias"] = json.loads(lr["pendencias"] or "[]")
+                    url_of = banco.url_oficial(lr["sha256"])
+                    lr["url_oficial"] = f"{url_of}#page={lr['pagina']}" if url_of else None
+                    lr["pdf_no_acervo"] = f"/api/pdf/{lr['sha256']}#page={lr['pagina']}"
+                    rej_linhas.append(lr)
+                resp = adaptador.projetar_para_dashboard_2910(p_combinado, outras_resp, rej_linhas)
+                conta = self._conta()
                 resp["backend"]["papel"] = self._papel()
-                resp["backend"]["ehAdmin"] = False
+                resp["backend"]["ehAdmin"] = self._papel() == "admin"
+                resp["backend"]["usuario"] = conta["usuario"] if conta else None
+                resp["backend"]["nome"] = conta["nome"] if conta else None
                 return self._json(resp)
             if rota == "/api/outras":
+                self._exigir_gerencia()
                 return self._json({"itens": indicadores.outras_publicacoes(banco, perfil)})
             if rota == "/api/exportar":
                 self._exigir_gerencia()
@@ -400,7 +467,19 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                                    "classificacoes_desatualizadas": banco.classificacoes_desatualizadas("GEDIV", catalogo.VERSAO_REGRAS)})
             if rota == "/api/auditoria":
                 self._exigir_gerencia()
-                return self._json({"trilha": [dict(t) for t in banco.trilha(limite=300)]})
+                if self._usando_token_tecnico():
+                    raise Erro(403, "consulta de auditoria exige conta nominal")
+                if self._papel() == "admin":
+                    return self._json({"escopo": "global", "trilha": [dict(t) for t in banco.trilha(limite=300)]})
+                ator = self._ator()
+                return self._json({
+                    "escopo": "proprio",
+                    "trilha": [
+                        dict(t)
+                        for t in banco.trilha(limite=300)
+                        if t["autor"] == ator and t["acao"] not in _ACOES_RESTRITAS_AUDITORIA
+                    ],
+                })
             if rota == "/api/admin/usuarios":
                 self._exigir_admin()
                 return self._json({"usuarios": contas.listar()})
@@ -425,6 +504,7 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
         def _post(self, banco: Banco) -> None:
             rota = urlsplit(self.path).path
             if rota == "/api/login":
+                self._verificar_origem_post(exigir_cabecalho=False)
                 p = self._corpo_json()
                 try:
                     sessao = contas.entrar(str(p.get("usuario", ""))[:80], str(p.get("senha", ""))[:200])
@@ -461,12 +541,40 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                                    "modo": "SOMENTE_VALIDACAO", "recebidos": len(itens),
                                    "ja_existentes": dup, "novos": len(itens) - dup,
                                    "mensagem": "Registros validados preliminarmente e tentativa registrada em auditoria; nenhum registro foi importado ou incorporado ao banco principal (PENDENCIA_OPERACIONAL)."})
+            if rota == "/api/admin/snapshot-publico":
+                self._exigir_admin()
+                snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
+                _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
+                _cache_snapshot_publico["snap"] = snap
+                with banco.con:
+                    banco.auditar(
+                        self._ator(),
+                        "PUBLICAR_SNAPSHOT_PUBLICO",
+                        "painel",
+                        indicadores.ARQUIVO_SNAPSHOT_PUBLICO,
+                        None,
+                        {
+                            "gerado_em": snap["gerado_em"],
+                            "decisoes_faixa": snap["painel"]["indicadores"]["decisoes"],
+                            "revision": snap["data"]["dashboard"]["revision"],
+                        },
+                        "Publicação controlada de snapshot público",
+                    )
+                return self._json({
+                    "ok": True,
+                    "gerado_em": snap["gerado_em"],
+                    "indicadores": snap["painel"]["indicadores"],
+                    "revision": snap["data"]["dashboard"]["revision"],
+                })
             if rota != "/api/revisao":
                 raise Erro(404, "rota inexistente")
             self._exigir_gerencia()
             p = self._corpo_json()
             # Com conta individual, o responsável é SEMPRE a pessoa logada (o nome enviado pelo navegador é ignorado).
-            responsavel = self._ator() if self._conta() else str(p.get("responsavel", ""))
+            informado = str(p.get("responsavel", "")).strip()[:80]
+            responsavel = self._ator() if self._conta() else (
+                f"credencial_tecnica_legada: {informado}" if informado else ""
+            )
             comuns = (str(p.get("decisao", "")), responsavel, str(p.get("justificativa", "")))
             alvo = p.get("alvo")
             if alvo == "ato":
