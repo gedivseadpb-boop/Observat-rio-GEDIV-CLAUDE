@@ -1557,7 +1557,7 @@ function bind(){
    }else{
     const usuario=$('#loginUser').value.trim(),senha=$('#loginPass').value;
     if(!usuario||!senha)throw new Error('Informe usuário e senha ou cole o token técnico.');
-    const r=await fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha})});
+    const r=await fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha,modo_cookie:true})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.erro||'Credenciais inválidas.');
     window.GEDIV_AUTH.setSession({usuario:d.usuario,nome:d.nome,papel:d.papel||'gerencia'});

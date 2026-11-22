@@ -266,7 +266,8 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
 
         def _obter_snapshot_publico(self, banco: Banco) -> dict:
             """Devolve o snapshot público congelado e validado (`snapshot_publico.json`).
-            Confirmações unitárias em `POST /api/revisao` não alteram este snapshot até nova publicação."""
+            Confirmações unitárias em `POST /api/revisao` não alteram este snapshot até nova publicação.
+            Com `GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1`, falha de forma fechada (503) se o arquivo estiver ausente."""
             if caminho_snapshot_publico.is_file():
                 try:
                     mtime_ns = caminho_snapshot_publico.stat().st_mtime_ns
@@ -283,10 +284,15 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                     raise Erro(503, "snapshot público inválido ou indisponível")
             if _cache_snapshot_publico["snap"] is not None:
                 return _cache_snapshot_publico["snap"]  # type: ignore[return-value]
-            snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
-            _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
-            _cache_snapshot_publico["snap"] = snap
-            return snap
+            if os.environ.get("GEDIV_EXIGIR_SNAPSHOT_PUBLICO") == "1":
+                raise Erro(503, "snapshot público ainda não publicado")
+            try:
+                snap = indicadores.publicar_snapshot_publico(banco, caminho_snapshot_publico)
+                _cache_snapshot_publico["mtime_ns"] = caminho_snapshot_publico.stat().st_mtime_ns
+                _cache_snapshot_publico["snap"] = snap
+                return snap
+            except OSError:
+                raise Erro(503, "snapshot público indisponível para gravação")
 
         def _enviar(self, status: int, corpo: bytes, tipo: str, extras: dict | None = None) -> None:
             self.send_response(status)
@@ -512,7 +518,19 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                     raise Erro(401, "usuário ou senha inválidos, ou acesso bloqueado temporariamente")
                 with banco.con:
                     banco.auditar(f"{sessao['nome']} ({sessao['usuario']})", "ENTRAR", "sessao", sessao["usuario"], None, None, None)
-                return self._json(sessao, extras={"Set-Cookie": self._cabecalho_cookie_sessao(sessao["token"], 28800)})
+                somente_cookie = bool(p.get("modo_cookie") is True) or (
+                    os.environ.get("GEDIV_LOGIN_SOMENTE_COOKIE") == "1"
+                    and self._origem_permitida() is None
+                )
+                resposta_login = (
+                    {k: v for k, v in sessao.items() if k != "token"} | {"autenticacao": "cookie_httponly"}
+                    if somente_cookie
+                    else sessao
+                )
+                return self._json(
+                    resposta_login,
+                    extras={"Set-Cookie": self._cabecalho_cookie_sessao(sessao["token"], 28800)},
+                )
             self._verificar_csrf_cookie()
             if rota == "/api/logout":
                 if self._conta():

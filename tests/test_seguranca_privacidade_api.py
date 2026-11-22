@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import pathlib
 import tempfile
 import threading
@@ -618,6 +619,139 @@ class TestSegurancaPrivacidadeAPI(unittest.TestCase):
         d_apos_exp = json.loads(_http(f"{self.base}/api/data", headers=hdrs_get)[2])
         self.assertFalse(d_apos_exp["backend"]["autenticado"])
         self.assertEqual(d_apos_exp["rows"], [])
+
+    def test_07_login_somente_cookie_sem_token_json_e_compatibilidade_cors(self) -> None:
+        """Etapa 3A: POST /api/login com modo_cookie=True ou GEDIV_LOGIN_SOMENTE_COOKIE=1 (same-origin)
+        emite cookie HttpOnly/SameSite=Strict (+ Secure sob HTTPS) e OMITE 'token' do JSON,
+        preservando 'token' apenas para origens CORS autorizadas ou clientes legados."""
+        host_local = self.base.replace("http://", "")
+
+        # 1. Login explícito modo_cookie=True sob HTTPS: sem 'token' no JSON e com Set-Cookie HttpOnly+Secure
+        st, hdrs, body = _http(
+            f"{self.base}/api/login",
+            payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026", "modo_cookie": True},
+            headers={"X-Forwarded-Proto": "https", "Origin": f"http://{host_local}", "Sec-Fetch-Site": "same-origin"},
+        )
+        self.assertEqual(st, 200, body)
+        dados = json.loads(body)
+        self.assertNotIn("token", dados)
+        self.assertEqual(dados.get("autenticacao"), "cookie_httponly")
+        self.assertEqual(dados.get("usuario"), "ger1.gediv")
+        set_cookie = hdrs.get("Set-Cookie") or ""
+        self.assertIn("gediv_sessao=", set_cookie)
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=Strict", set_cookie)
+        self.assertIn("Secure", set_cookie)
+        cookie = set_cookie.split(";", 1)[0]
+
+        # Sessão e logout funcionam integralmente só com esse cookie
+        self.assertEqual(_http(f"{self.base}/api/sessao", headers={"Cookie": cookie})[0], 200)
+        self.assertEqual(_http(f"{self.base}/api/auditoria", headers={"Cookie": cookie})[0], 200)
+        st_out, _, _ = _http(
+            f"{self.base}/api/logout",
+            payload={},
+            headers={"Cookie": cookie, "Sec-Fetch-Site": "same-origin", "Origin": f"http://{host_local}"},
+            method="POST",
+        )
+        self.assertEqual(st_out, 200)
+        self.assertEqual(_http(f"{self.base}/api/sessao", headers={"Cookie": cookie})[0], 401)
+
+        # 2. Com GEDIV_LOGIN_SOMENTE_COOKIE=1: same-origin sem modo_cookie também omite 'token',
+        # mas origem CORS autorizada (--origem-admin) mantém 'token' para compatibilidade do admin-painel
+        antigo = os.environ.get("GEDIV_LOGIN_SOMENTE_COOKIE")
+        os.environ["GEDIV_LOGIN_SOMENTE_COOKIE"] = "1"
+        try:
+            st_so, _, body_so = _http(
+                f"{self.base}/api/login",
+                payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026"},
+                headers={"Origin": f"http://{host_local}", "Sec-Fetch-Site": "same-origin"},
+            )
+            self.assertEqual(st_so, 200)
+            self.assertNotIn("token", json.loads(body_so))
+
+            st_co, _, body_co = _http(
+                f"{self.base}/api/login",
+                payload={"usuario": "ger1.gediv", "senha": "SenhaGer1#2026"},
+                headers={"Origin": "https://admin-oficial.exemplo.gov.br", "Sec-Fetch-Site": "cross-site"},
+            )
+            self.assertEqual(st_co, 200)
+            self.assertIn("token", json.loads(body_co))
+        finally:
+            if antigo is None:
+                os.environ.pop("GEDIV_LOGIN_SOMENTE_COOKIE", None)
+            else:
+                os.environ["GEDIV_LOGIN_SOMENTE_COOKIE"] = antigo
+
+    def test_08_snapshot_ausente_corrompido_e_modo_estrito_503(self) -> None:
+        """Etapa 3A: comprova comportamento fail-closed (503) quando snapshot_publico.json está ausente
+        sob GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1 ou corrompido em disco, preservando acesso da gerência e
+        validando o endurecimento de gediv-admin.service e homologar_ambiente_linux.sh."""
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            pasta = pathlib.Path(tmp)
+            with Banco(pasta / "observatorio.sqlite3") as banco:
+                adaptador.importar_snapshot_reconciliado(banco, _bootstrap_privacidade())
+            contas = Contas(pasta / "contas.sqlite3")
+            contas.criar("adm.estrito", "Admin Estrito", "SenhaAdm#2026", papel="admin")
+
+            antigo = os.environ.get("GEDIV_EXIGIR_SNAPSHOT_PUBLICO")
+            os.environ["GEDIV_EXIGIR_SNAPSHOT_PUBLICO"] = "1"
+            srv = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            base_est = f"http://127.0.0.1:{srv.server_address[1]}"
+            try:
+                # 1. Sem snapshot_publico.json em modo estrito -> 503 fail-closed para público
+                self.assertEqual(_http(f"{base_est}/api/painel")[0], 503)
+                self.assertEqual(_http(f"{base_est}/api/data")[0], 503)
+
+                # Admin autenticado continua operando e publica snapshot controlado
+                st_l, hdrs_l, _ = _http(
+                    f"{base_est}/api/login",
+                    payload={"usuario": "adm.estrito", "senha": "SenhaAdm#2026", "modo_cookie": True},
+                )
+                self.assertEqual(st_l, 200)
+                cookie = (hdrs_l.get("Set-Cookie") or "").split(";", 1)[0]
+                self.assertEqual(_http(f"{base_est}/api/data", headers={"Cookie": cookie})[0], 200)
+
+                st_pub, _, _ = _http(
+                    f"{base_est}/api/admin/snapshot-publico",
+                    payload={},
+                    headers={"Cookie": cookie, "Sec-Fetch-Site": "same-origin"},
+                    method="POST",
+                )
+                self.assertEqual(st_pub, 200)
+                self.assertEqual(_http(f"{base_est}/api/painel")[0], 200)
+                self.assertEqual(_http(f"{base_est}/api/data")[0], 200)
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                if antigo is None:
+                    os.environ.pop("GEDIV_EXIGIR_SNAPSHOT_PUBLICO", None)
+                else:
+                    os.environ["GEDIV_EXIGIR_SNAPSHOT_PUBLICO"] = antigo
+
+            # 2. Snapshot corrompido em disco em servidor recém-iniciado (sem cache) -> 503 fail-closed
+            (pasta / indicadores.ARQUIVO_SNAPSHOT_PUBLICO).write_text("{corrompido", encoding="utf-8")
+            srv2 = criar_servidor(pasta, None, "127.0.0.1", 0)
+            threading.Thread(target=srv2.serve_forever, daemon=True).start()
+            base2 = f"http://127.0.0.1:{srv2.server_address[1]}"
+            try:
+                self.assertEqual(_http(f"{base2}/api/painel")[0], 503)
+                self.assertEqual(_http(f"{base2}/api/data")[0], 503)
+            finally:
+                srv2.shutdown()
+                srv2.server_close()
+
+        # 3. Validar unit endurecida e script de homologação Linux em LF
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        unit_txt = (repo / "deploy_autonomo" / "gediv-admin.service").read_text(encoding="utf-8")
+        self.assertIn("GEDIV_COOKIE_SECURE=1", unit_txt)
+        self.assertIn("GEDIV_LOGIN_SOMENTE_COOKIE=1", unit_txt)
+        self.assertIn("GEDIV_EXIGIR_SNAPSHOT_PUBLICO=1", unit_txt)
+        self.assertIn("GEDIV_HABILITAR_TOKEN_TECNICO=0", unit_txt)
+        self.assertNotIn("https://gedivseadpb-boop.github.io", unit_txt)
+        homolog_sh = repo / "deploy_autonomo" / "homologar_ambiente_linux.sh"
+        self.assertTrue(homolog_sh.is_file())
+        self.assertEqual(homolog_sh.read_bytes().count(b"\r\n"), 0)
 
 
 if __name__ == "__main__":
