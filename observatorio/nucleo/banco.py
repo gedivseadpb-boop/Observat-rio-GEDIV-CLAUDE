@@ -27,7 +27,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSAO_ESQUEMA = 8
+VERSAO_ESQUEMA = 9
 
 DESCOBERTA = "DESCOBERTA"
 BAIXADA = "BAIXADA"
@@ -339,6 +339,47 @@ def normalizar_texto(valor) -> str:
     return re.sub(r"\s+", " ", texto).strip()
 
 
+_PAT_PROCESSO_PREFIXO = re.compile(r"^([A-Z]{2,6})-(PSE|PRC|OFI)-(\d{4})([/-])(\d{3,9})$")
+
+
+def normalizar_processo(valor) -> str | None:
+    """Normaliza o número do processo sem alterar o valor original gravado no banco.
+    Preserva o prefixo institucional (ex.: SAD-PSE, SEE-PRC, SDS-OFI) e o separador numérico,
+    eliminando espaços espúrios de OCR."""
+    bruto = re.sub(r"\s+", "", normalizar_texto(valor))
+    if not bruto:
+        return None
+    m = _PAT_PROCESSO_PREFIXO.match(bruto)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}{m.group(4)}{m.group(5)}"
+    return bruto
+
+
+def chave_processo(processo, orgao=None, serie=None) -> str | None:
+    """Chave de identidade de processo administrativo que evita colisões entre órgãos e séries.
+    - Processos com prefixo institucional explícito (ex.: SAD-PSE-2026/00123 vs SEE-PRC-2026/00123 vs
+      SDS-OFI-2026/00123) já carregam órgão e série distintos no próprio identificador normalizado.
+    - Números legados ou sem prefixo institucional são qualificados por órgão/série quando disponíveis."""
+    proc = normalizar_processo(processo)
+    if not proc:
+        return None
+    if _PAT_PROCESSO_PREFIXO.match(proc):
+        return proc
+    org = _normalizar_chave(orgao)
+    ser = _normalizar_chave(serie)
+    if org or ser:
+        return f"{org}|{ser}|{proc}"
+    return proc
+
+
+def normalizar_matricula(valor) -> str | None:
+    """Normaliza matrícula para dígitos válidos (6 a 9 dígitos, excluindo sequências repetitivas),
+    preservando o valor original no banco e retornando None para valores vazios ou inválidos
+    (impedindo fusões inseguras de identificadores ausentes ou incompletos)."""
+    digitos = re.sub(r"\D", "", str(valor or ""))
+    return digitos if 6 <= len(digitos) <= 9 and len(set(digitos)) > 1 else None
+
+
 def chave_ato(gerencia, tipo, numero, sufixo, natureza) -> str | None:
     if not _normalizar_chave(numero):
         return None
@@ -451,8 +492,27 @@ CREATE TABLE conflito (
 CREATE UNIQUE INDEX conflito_unico ON conflito (alvo_tipo, alvo_id, campo, valor_proposto, origem)
 """
 
+# Versão 9 (Etapa 4B): vínculo de eventos modificadores no nível da decisão individual (`evento_decisao`),
+# permitindo que portarias de "tornado sem efeito" e retificações atinjam exclusivamente as decisões afetadas,
+# preservando o histórico original e sem alterar o restante do ato.
+_ESQUEMA_V9 = """
+CREATE TABLE evento_decisao (
+    id                INTEGER PRIMARY KEY,
+    evento_id         TEXT NOT NULL REFERENCES evento (id),
+    decisao_id        TEXT NOT NULL REFERENCES decisao (id),
+    efeito            TEXT NOT NULL,
+    resultado_novo    TEXT,
+    campos_corrigidos TEXT,
+    criado_em         TEXT NOT NULL,
+    autor             TEXT,
+    justificativa     TEXT
+);
+CREATE UNIQUE INDEX evento_decisao_unico ON evento_decisao (evento_id, decisao_id);
+CREATE INDEX evento_decisao_decisao ON evento_decisao (decisao_id)
+"""
+
 _MIGRACOES = ((1, _ESQUEMA), (2, _ESQUEMA_V2), (3, _ESQUEMA_V3), (4, _ESQUEMA_V4), (5, _ESQUEMA_V5), (6, _ESQUEMA_V6),
-              (7, _ESQUEMA_V7), (8, _ESQUEMA_V8))
+              (7, _ESQUEMA_V7), (8, _ESQUEMA_V8), (9, _ESQUEMA_V9))
 _CRIAR = re.compile(r"^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(\w+)", re.I)
 _ADICIONAR = re.compile(r"^ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)", re.I)
 
@@ -611,6 +671,78 @@ class Banco:
         """Encerra a conexão. Pode ser chamado mais de uma vez. (`with sqlite3.connect(...)` controla a transação,
         não fecha a conexão; use `with Banco(...)` ou `fechar()`.)"""
         self.con.close()
+
+    def tem_tabela(self, nome: str) -> bool:
+        """Verifica se uma tabela existe no esquema atual (compatível com bancos v8 abertos em somente-leitura)."""
+        return self.con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (nome,)
+        ).fetchone() is not None
+
+    def eventos_decisoes(self, evento_id: str | None = None):
+        """Vínculos no nível da decisão individual (`evento_decisao`). Devolve lista vazia em bancos v8 somente-leitura."""
+        if not self.tem_tabela("evento_decisao"):
+            return []
+        if evento_id is not None:
+            return self.con.execute(
+                "SELECT * FROM evento_decisao WHERE evento_id = ? ORDER BY id", (evento_id,)
+            ).fetchall()
+        return self.con.execute("SELECT * FROM evento_decisao ORDER BY id").fetchall()
+
+    def candidatos_duplicidade_ocr(self) -> list[dict]:
+        """Diagnóstico não destrutivo de possíveis duplicatas OCR (ex.: divergência de 1 dígito no processo
+        ou processo ausente em uma das linhas) compartilhando mesma resenha, data e matrícula normalizada válida.
+        Nunca apaga nem altera decisões: apenas identifica candidatos fundamentados para conferência documental."""
+        linhas = self.con.execute(
+            "SELECT d.id, d.ato_id, d.processo, d.matricula, d.resultado, d.origem, "
+            "a.numero AS resenha, a.data_publicacao AS data, a.eixo, a.modalidade, a.grupo, a.grupo_expressao "
+            "FROM decisao d JOIN ato a ON a.id = d.ato_id "
+            "WHERE a.gerencia = 'GEDIV' AND a.natureza = 'ORIGINAL' AND d.vigente = 1 AND d.validacao <> 'REJEITADO'"
+        ).fetchall()
+        grupos: dict[tuple, list[dict]] = {}
+        for r in linhas:
+            mat = normalizar_matricula(r["matricula"])
+            if not mat:
+                continue
+            chave = (_normalizar_chave(r["resenha"]), r["data"] or "", r["eixo"] or "", r["modalidade"] or "", mat)
+            grupos.setdefault(chave, []).append(dict(r))
+
+        def _dist_proc(p1: str | None, p2: str | None) -> tuple[bool, str]:
+            n1, n2 = normalizar_processo(p1), normalizar_processo(p2)
+            if not n1 or not n2:
+                return True, "processo_ausente_em_uma_linha"
+            if n1 == n2:
+                return True, "processo_identico"
+            if len(n1) == len(n2) and sum(a != b for a, b in zip(n1, n2)) == 1:
+                return True, "divergencia_ocr_1_digito"
+            if n1.startswith(n2) or n2.startswith(n1):
+                return True, "sufixo_ocr_no_processo"
+            return False, ""
+
+        candidatos = []
+        for chave, itens in sorted(grupos.items()):
+            if len(itens) < 2:
+                continue
+            for i in range(len(itens)):
+                for j in range(i + 1, len(itens)):
+                    ok, motivo = _dist_proc(itens[i]["processo"], itens[j]["processo"])
+                    if ok:
+                        candidatos.append({
+                            "resenha": itens[i]["resenha"],
+                            "data": itens[i]["data"],
+                            "eixo": itens[i]["eixo"],
+                            "modalidade": itens[i]["modalidade"],
+                            "grupo": itens[i]["grupo"],
+                            "grupo_expressao": itens[i]["grupo_expressao"],
+                            "matricula_normalizada": chave[4],
+                            "decisao_a": itens[i]["id"],
+                            "processo_a": itens[i]["processo"],
+                            "origem_a": itens[i]["origem"],
+                            "decisao_b": itens[j]["id"],
+                            "processo_b": itens[j]["processo"],
+                            "origem_b": itens[j]["origem"],
+                            "motivo": motivo,
+                        })
+        return candidatos
 
     # --- execuções -------------------------------------------------------
     def iniciar_execucao(self, comando: str) -> int:

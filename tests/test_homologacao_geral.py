@@ -306,8 +306,13 @@ class TesteCadeiaVersoesERevisao(Cadeia):
         with self.assertRaises(servico.Recusada):                                        # o evento não pode apontar para si mesmo
             servico.revisar_evento(banco, evento["id"], servico.VINCULAR, REV, JUST, evento["ato_id"], True)
         servico.revisar_evento(banco, evento["id"], servico.VINCULAR, REV, JUST, original, True)
-        i = self.painel(banco)["indicadores"]
-        self.assertEqual((i["sem_efeito"], i["decisoes"], i["indeferidos"]), (1, 2, 2))    # a decisão original não some nem duplica
+        p = self.painel(banco)
+        i = p["indicadores"]
+        # Etapa 4B Regra 4: 1 dos 2 indeferimentos da Resenha 804 foi tornado sem efeito pela Portaria 12;
+        # o indeferimento desconstituído deixa de contar como vigente, enquanto o outro permanece intacto (sem apagar do banco).
+        self.assertEqual((i["sem_efeito"], i["decisoes"], i["indeferidos"]), (1, 1, 1))
+        self.assertEqual(p["series"]["eventos_detalhados"]["decisoes_sem_efeito"], 1)
+        self.assertEqual(banco.con.execute("SELECT COUNT(*) FROM decisao").fetchone()[0], 2)
 
     def test_09_10_11_validar_corrigir_e_rejeitar_pela_api_com_trilha_de_auditoria(self):
         self.executar(self.edicao_padrao())
@@ -466,13 +471,17 @@ class TesteIndicadoresHomologacao(LB.Base):
         i = indicadores.painel(self.banco, {}, GER)["indicadores"]
         self.assertEqual((i["decisoes"], i["processos"]), (3, 2))            # o processo ausente não é inventado nem contado
 
-    def test_10_grupo_nao_homologado_fica_sem_grupo_no_painel_e_na_exportacao(self):
-        self.carregar("a", T.VERTICAL_SEM_GEDIV)                             # "Grupo TEC. ADM."
+    def test_10_grupo_compatibilidade_e_grupo_nao_homologado_preservam_total_no_painel(self):
+        # TEC. ADM compatível com cargo administrativo normaliza para AST preservando expressão original;
+        # STF sem enquadramento fiscal permanece sem grupo, mas conta no total geral sem perda.
+        self.carregar("a", T.VERTICAL_SEM_GEDIV)                             # "Grupo TEC. ADM." + TECNICO ADMINISTRATIVO -> AST
+        self.carregar("b", T.VERTICAL_SEM_GEDIV.replace("903/2026", "909/2026").replace("Grupo TEC. ADM.", "Grupo STF"), "2026-10-10")
         self.conferir_tudo()
         p = indicadores.painel(self.banco, {}, GER)
-        self.assertEqual([l["grupo"] for l in p["linhas"]], [None])
-        self.assertEqual(indicadores.painel(self.banco, {"grupo": "AST"}, GER)["indicadores"]["decisoes"], 0)
-        self.assertEqual(p["indicadores"]["decisoes"], 1)                    # conta no total; só não é atribuída a um grupo
+        self.assertEqual(sorted(l["grupo"] or "SEM_GRUPO" for l in p["linhas"]), ["AST", "SEM_GRUPO"])
+        self.assertEqual(indicadores.painel(self.banco, {"grupo": "AST"}, GER)["indicadores"]["decisoes"], 1)
+        self.assertEqual(indicadores.painel(self.banco, {"grupo": "SFT"}, GER)["indicadores"]["decisoes"], 0)
+        self.assertEqual(p["indicadores"]["decisoes"], 2)                    # total geral intacto
 
     def test_11_conflito_apos_releitura_fica_visivel_ate_a_gerencia_decidir(self):
         sha = self.carregar("a", T.HORIZONTAL_GAJ)

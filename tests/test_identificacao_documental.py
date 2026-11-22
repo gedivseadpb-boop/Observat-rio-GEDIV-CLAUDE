@@ -6,6 +6,7 @@ import unittest
 import zipfile
 import xml.etree.ElementTree as ET
 
+from observatorio.nucleo import banco as B
 from observatorio.painel import documental as D, exportacao, indicadores
 from tests import test_painel as TP, textos_doe as T
 
@@ -96,7 +97,7 @@ class Integracao(TP.Base):
             self.assertEqual(linha["pdf_sha256"], "a" * 64)
         for t, rows in antes.items():
             self.assertEqual([tuple(r) for r in self.banco.con.execute("SELECT * FROM " + t)], rows)
-        self.assertEqual(self.banco.con.execute("PRAGMA user_version").fetchone()[0], 8)
+        self.assertEqual(self.banco.con.execute("PRAGMA user_version").fetchone()[0], B.VERSAO_ESQUEMA)
 
     def test_colunas_historicas_e_tipos_preservados_antes_das_novas(self):
         self.preparar()

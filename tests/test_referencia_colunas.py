@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 
 from observatorio.gerencias.gediv import classificador as K, processo
 from observatorio.leitura import pagina as P
+from observatorio.nucleo import banco as B
 from observatorio.painel import exportacao, indicadores
 from tests import test_painel as TP
 
@@ -143,7 +144,7 @@ class PersistenciaEExportacao(TP.Base):
         self.assertIsNone(e['ato_original_id'])
         self.assertIsNone(e['ato_sugerido_id'])
         self.assertIsNone(e['revisor'])
-        self.assertEqual(self.banco.con.execute('PRAGMA user_version').fetchone()[0], 8)
+        self.assertEqual(self.banco.con.execute('PRAGMA user_version').fetchone()[0], B.VERSAO_ESQUEMA)
 
     def test_publico_exclui_pendentes_e_exportacao_nao_inventa_vinculo(self):
         self.preparar()

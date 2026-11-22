@@ -77,17 +77,19 @@ class TesteFluxoCompleto(unittest.TestCase):
         )
         with urllib.request.urlopen(req_ger, timeout=5) as r:
             dados = json.loads(r.read())
-        self.assertEqual(dados["indicadores"], {"processos": 45, "resenhas": 10, "decisoes": 45, "deferidos": 38, "indeferidos": 7,
+        # Etapa 4B: 1 indeferimento da Resenha 803 foi tornado sem efeito (45 -> 44 ativas, 7 -> 6 indeferidos);
+        # Resenha 805 (TEC. ADM compatível) normaliza para AST (total AST = 9).
+        self.assertEqual(dados["indicadores"], {"processos": 44, "resenhas": 10, "decisoes": 44, "deferidos": 38, "indeferidos": 6,
                                                 "refeitos": 1, "sem_efeito": 1})
-        self.assertEqual((dados["apoio"]["decisoes_pendentes"], len(dados["linhas"])), (11, 45))
-        self.assertEqual({g["grupo"] for g in dados["series"]["por_grupo"]}, {"MAG", "SSA", "GAJ", "FAP", "AST", "NAO_INFORMADO"})
+        self.assertEqual((dados["apoio"]["decisoes_pendentes"], len(dados["linhas"])), (11, 44))
+        self.assertEqual({g["grupo"] for g in dados["series"]["por_grupo"]}, {"MAG", "SSA", "GAJ", "FAP", "AST"})
         with urllib.request.urlopen(f"http://127.0.0.1:{servidor.server_address[1]}/api/painel", timeout=5) as r:
             dados_pub = json.loads(r.read())
-        self.assertEqual(dados_pub["indicadores"]["decisoes"], 45)
+        self.assertEqual(dados_pub["indicadores"]["decisoes"], 40)
         self.assertIsNone(dados_pub["indicadores"]["refeitos"])
         self.assertIsNone(dados_pub["indicadores"]["sem_efeito"])
         self.assertEqual((dados_pub["linhas"], dados_pub["resenhas"], dados_pub["apoio"]["decisoes_pendentes"]), ([], [], None))
-        self.assertEqual({g["grupo"] for g in dados_pub["series"]["por_grupo"]}, {"SSA", "GAJ", "NAO_INFORMADO"})
+        self.assertEqual({g["grupo"] for g in dados_pub["series"]["por_grupo"]}, {"SSA", "GAJ", "AST"})
         pedido = urllib.request.Request(f"http://127.0.0.1:{servidor.server_address[1]}/api/pdf/" +
                                         self.banco().con.execute("SELECT sha256 FROM arquivo").fetchone()[0],
                                         headers={"Authorization": "Bearer credencial-de-teste-0123456789"})

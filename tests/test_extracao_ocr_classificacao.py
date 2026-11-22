@@ -611,16 +611,28 @@ class TesteGruposEAssuntosAmbiguos(unittest.TestCase):
         codigo, expressao, pendencia = C.avaliar_grupo("GRUPO OCUPACIONAL DE APOIO JUDICIARIO GAJ-1700")
         self.assertEqual((codigo, pendencia), ("GAJ", None))
 
-    def test_tec_adm_e_stf_nunca_sao_convertidos(self):
-        for expressao, proibido in (("TEC. ADM.", "AST"), ("STF", "SFT"), ("TEC ADM", "AST")):
+    def test_tec_adm_e_stf_regras_de_normalizacao_e_recusa_de_ambiguos(self):
+        # Etapa 4B: TEC. ADM compatível com cargo administrativo normaliza para AST preservando grupo_expressao;
+        # STF sem enquadramento fiscal comprovado ou combinações incompatíveis permanecem sem grupo.
+        for expressao in ("TEC. ADM.", "TEC ADM"):
             with self.subTest(expressao=expressao):
                 ato = um(VERTICAL.format(n=941, grupo=expressao) + "SAD-PSE-2026/90042 900042-2 PESSOA FICTICIA TECNICO ADMINISTRATIVO A B\nPUBLIQUE-SE").atos[0]
-                self.assertIsNone(ato.grupo)
-                self.assertNotEqual(ato.grupo, proibido)
-                self.assertTrue(any("sem grupo homologado" in p for p in ato.pendencias))
-        # mesmo ao lado da sigla homologada, a expressão não homologada impede a atribuição
-        self.assertEqual(C.avaliar_grupo("GRUPO TEC. ADM E AST")[0], None)
-        self.assertEqual(C.avaliar_grupo("SERVIDORES STF E SFT")[0], None)
+                self.assertEqual(ato.grupo, "AST")
+                self.assertEqual(ato.grupo_expressao, expressao.rstrip("."))
+        # STF sem enquadramento fiscal (cargo administrativo) NÃO pode virar SFT
+        ato_stf_incomp = um(VERTICAL.format(n=941, grupo="STF") + "SAD-PSE-2026/90042 900042-2 PESSOA FICTICIA TECNICO ADMINISTRATIVO A B\nPUBLIQUE-SE").atos[0]
+        self.assertIsNone(ato_stf_incomp.grupo)
+        self.assertEqual(ato_stf_incomp.grupo_expressao, "STF")
+        self.assertTrue(any("STF" in p for p in ato_stf_incomp.pendencias))
+        # TEC. ADM com cargo incompatível (PROFESSOR) também permanece pendente
+        ato_tec_incomp = um(VERTICAL.format(n=941, grupo="TEC. ADM.") + "SAD-PSE-2026/90042 900042-2 PESSOA FICTICIA PROFESSOR DE EDUCACAO BAS A B\nPUBLIQUE-SE").atos[0]
+        self.assertIsNone(ato_tec_incomp.grupo)
+        # TEC. ADM ao lado de AST refere-se ao mesmo grupo canônico AST; com outro grupo (MAG) fica pendente;
+        # STF ao lado de SFT confirma enquadramento fiscal SFT; STF isolado fica pendente.
+        self.assertEqual(C.avaliar_grupo("GRUPO TEC. ADM E AST")[0], "AST")
+        self.assertEqual(C.avaliar_grupo("GRUPO TEC. ADM E MAG")[0], None)
+        self.assertEqual(C.avaliar_grupo("SERVIDORES STF E SFT")[0], "SFT")
+        self.assertEqual(C.avaliar_grupo("DO GRUPO STF")[0], None)
 
     def tempo(self, assunto):
         return um(CAB.format(n=942) + f"O Diretor DEFERIU os processos de {assunto}:\n"

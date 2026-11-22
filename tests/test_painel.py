@@ -156,12 +156,13 @@ class TesteIndicadores(Base):
         for e in eventos.values():
             servico.revisar_evento(self.banco, e["id"], servico.VINCULAR, REVISOR, JUST, None, True)
         i = self.painel()["indicadores"]
-        self.assertEqual((i["refeitos"], i["sem_efeito"], i["decisoes"], i["processos"]), (1, 1, 8, 7))   # republicação não cria decisão
-        # O ato original é de 09/10; o evento é de 15/10: entra em Refeitos de 15/10, não nos originais desse dia.
+        # Etapa 4B: republicação não cria decisão; portaria sem efeito desconstitui a decisão citada (90007 da 904/2026).
+        self.assertEqual((i["refeitos"], i["sem_efeito"], i["decisoes"], i["processos"], i["indeferidos"]), (1, 1, 7, 6, 0))
+        # O ato original é de 09/10; o evento é de 15/10: entra em Refeitos/Sem Efeito de 15/10, não nos originais desse dia.
         dia15 = self.painel(inicio="2026-10-15", fim="2026-10-15")["indicadores"]
         self.assertEqual((dia15["refeitos"], dia15["sem_efeito"], dia15["decisoes"]), (1, 1, 1))
         dia09 = self.painel(inicio="2026-10-09", fim="2026-10-09")["indicadores"]
-        self.assertEqual((dia09["refeitos"], dia09["sem_efeito"], dia09["decisoes"]), (0, 0, 7))
+        self.assertEqual((dia09["refeitos"], dia09["sem_efeito"], dia09["decisoes"]), (0, 0, 6))
 
     def test_evento_sem_ato_original_identificavel_permanece_pendente(self):
         carregar(self.banco, "c", "2026-10-15", T.PORTARIA_SEM_EFEITO)       # a resenha 904 não está na base
@@ -198,7 +199,7 @@ class TesteIndicadores(Base):
         self.assertEqual([(x["chave"], x["total"]) for x in s["por_assunto"]], [("VERTICAL", 1), ("HORIZONTAL", 4), ("TEMPO_SERVICO", 3)])
         self.assertEqual([x["codigo"] for x in s["por_subcategoria"]], [f"TS-0{i}" for i in range(1, 8)])
         self.assertEqual({x["codigo"]: x["situacao"] for x in s["por_subcategoria"] if not x["total"]}["TS-07"], "cobertura pendente")
-        self.assertEqual({x["grupo"]: x["total"] for x in s["por_grupo"]}, {"MAG": 1, "GAJ": 3, "NAO_INFORMADO": 1})
+        self.assertEqual({x["grupo"]: x["total"] for x in s["por_grupo"]}, {"MAG": 1, "GAJ": 3, "AST": 1})
         self.assertEqual(sum(x["total"] for x in s["por_data"]), 8)
 
     def test_fonte_oficial_so_quando_conhecida(self):

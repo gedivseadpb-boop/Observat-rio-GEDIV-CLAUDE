@@ -27,7 +27,7 @@ class TesteCatalogo(unittest.TestCase):
         self.assertTrue(all(g.estado in (C.CONFIRMADA, C.PROVISORIA) for g in C.GRUPOS))
 
     def test_expressoes_dos_grupos(self):
-        casos = {"GRUPO OCUPACIONAL DE APOIO JUDICIARIO GAJ-1700:": "GAJ", "DO GRUPO FAP-1300": "FAP", "DO GRUPO TEC. ADM.": None,
+        casos = {"GRUPO OCUPACIONAL DE APOIO JUDICIARIO GAJ-1700:": "GAJ", "DO GRUPO FAP-1300": "FAP", "DO GRUPO TEC. ADM.": "AST",
                  "DO GRUPO TECNICO ADMINISTRATIVO - AST -:": "AST", "DOS PROFISSIONAIS DO GRUPO SAUDE ABAIXO": "SSA",
                  "DOS PROFISSIONAIS DO GRUPO MAG. ABAIXO": "MAG", "DOS PROFISSINAIS DA FAZENDA": "SFT", "DO GRUPO ANS-900": "ANS",
                  "DO GRUPO ESPECIAL": "ESP", "DO GRUPO DPS-1600": "DPS", "DO GRUPO OSPB": "OSPB", "DO GRUPO GPC": "GPC",
@@ -85,9 +85,8 @@ class TesteClassificador(unittest.TestCase):
         r = um(T.VERTICAL_SEM_GEDIV)
         self.assertEqual(r.decisoes[0].detalhe, {"classe_anterior": "A", "classe_posterior": "F",
                                                      "observacoes": ["salto de 5 posições (A → F); mantido como publicado"]})
-        # "TEC. ADM" não tem grupo homologado: sem grupo, expressão guardada e pendência (decisão da GEDIV).
-        self.assertEqual((r.atos[0].modalidade, r.atos[0].grupo, r.atos[0].grupo_expressao), (C.VERTICAL, None, "TEC. ADM"))
-        self.assertTrue(any("TEC. ADM" in p and "AST" in p for p in r.atos[0].pendencias))
+        # Etapa 4B: "TEC. ADM" compatível com cargo administrativo normaliza para AST preservando a expressão original.
+        self.assertEqual((r.atos[0].modalidade, r.atos[0].grupo, r.atos[0].grupo_expressao), (C.VERTICAL, "AST", "TEC. ADM"))
 
     def test_resenha_so_com_dereh_fica_com_vinculo_nao_expresso_e_sinalizada(self):
         ato = um(T.VERTICAL_SEM_GEDIV).atos[0]
@@ -217,12 +216,16 @@ class TesteFormatosVistosEmTextoReal(unittest.TestCase):
         r = um(T.PORTARIA_SEM_EFEITO.replace("PROGRESSÃO FUNCIONAL", "PROGRESSÃO FUN\x02CIONAL").replace("competência", "com\x02petência"))
         self.assertEqual((len(r.eventos), r.eventos[0].tipo), (1, C.SEM_EFEITO))
 
-    def test_variante_stf_auditor_fiscal_tributario_guarda_a_expressao_literal(self):
+    def test_variante_stf_auditor_fiscal_tributario_normaliza_com_enquadramento_e_preserva_literal(self):
         ato = self.vertical("SAD-PSE-2026/90023 900023-4 PESSOA FICTICIA AUDITOR FISCAL TRIBUTARIO EST D E",
                             "STF - AUDITOR FISCAL TRIBUTARIO").atos[0]
-        # A equivalência STF/SFT não está comprovada: sem grupo, com a expressão literal e pendência.
-        self.assertEqual((ato.grupo, ato.grupo_expressao), (None, "STF"))
-        self.assertTrue(any("STF" in p and "SFT" in p for p in ato.pendencias))
+        # Com cargo e enquadramento fiscal verificados, normaliza para SFT preservando "STF".
+        self.assertEqual((ato.grupo, ato.grupo_expressao), ("SFT", "STF"))
+        # Sem enquadramento fiscal verificado, STF permanece pendente (não presume SFT).
+        ato_amb = self.vertical("SAD-PSE-2026/90025 900025-4 PESSOA FICTICIA TECNICO ADMINISTRATIVO D E",
+                                "STF").atos[0]
+        self.assertEqual((ato_amb.grupo, ato_amb.grupo_expressao), (None, "STF"))
+        self.assertTrue(any("STF" in p for p in ato_amb.pendencias))
 
     def test_dias_com_separador_de_milhar_e_linha_seguida_de_nota_de_publicacao(self):
         texto = T.ANOTACAO.replace("PESSOA FICTICIA UM 0 0 0 451", "PESSOA FICTICIA UM 0 0 2.450 0\nPublicado no D.O.E. Edição do dia : 01/10/2026")

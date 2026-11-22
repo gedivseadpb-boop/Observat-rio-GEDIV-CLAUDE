@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import json
 
-from ...nucleo.banco import Banco
+from ...nucleo.banco import Banco, normalizar_processo
 from . import catalogo as C
-from .classificador import classificar
+from .classificador import _tema, classificar
 
 GERENCIA = "GEDIV"
 INICIO_DA_BASE = "2026-01-01"     # primeira data coberta pela coleta histórica
@@ -50,39 +50,127 @@ def classificar_pendentes(banco: Banco, refazer: bool = False) -> dict:
     return resumo
 
 
+def _eixo_do_evento(evento, ato_mod) -> str | None:
+    """Identifica o eixo temático esperado de um evento modificador para evitar colisões entre séries
+    (ex.: Resenha 353/2026 de Abono de Permanência vs. Resenha 353/2026 de Progressão GAJ)."""
+    if ato_mod is not None and ato_mod["eixo"]:
+        return ato_mod["eixo"]
+    texto_norm = C.normalizar(evento["texto"] or "")
+    if not texto_norm:
+        return None
+    tema = _tema(texto_norm)
+    if tema["eixo"]:
+        return tema["eixo"]
+    if "ABONO DE PERMANENCIA" in texto_norm or "EMENDA CONSTITUCIONAL FEDERAL 103/2019" in texto_norm or "EC 103/2019" in texto_norm:
+        return "OUTROS_ABONO"
+    return None
+
+
+def _ato_compativel_com_evento(banco: Banco, evento, ato_cand, ato_mod, eixo_ev: str | None,
+                               procs_ev: set[str], datas_citadas: set[str]) -> tuple[bool, int]:
+    """Verifica compatibilidade entre um ato ORIGINAL candidato e o evento modificador.
+    Devolve (compativel, qtd_processos_em_comum). Nunca sugere vínculo apenas por coincidência de número."""
+    if eixo_ev is not None and ato_cand["eixo"] != eixo_ev:
+        return False, 0
+    if datas_citadas and ato_cand["data_publicacao"] and ato_cand["data_publicacao"] not in datas_citadas:
+        return False, 0
+    comum = 0
+    if procs_ev:
+        procs_ato = {
+            p for r in banco.con.execute(
+                "SELECT processo FROM decisao WHERE ato_id = ? AND vigente = 1 AND processo IS NOT NULL",
+                (ato_cand["id"],),
+            )
+            if (p := normalizar_processo(r[0]))
+        }
+        if procs_ato:
+            comum = len(procs_ev & procs_ato)
+            if comum == 0:
+                return False, 0
+        else:
+            return False, 0
+    return True, comum
+
+
 def sugerir_vinculos(banco: Banco) -> int:
-    """Propõe o ato original de cada evento de alteração quando a correspondência é única.
+    """Propõe o ato original de cada evento de alteração quando a correspondência é única e compatível
+    em eixo, data citada e processos (nunca apenas por número isolado de resenha).
 
     É apenas uma SUGESTÃO para o revisor: o evento não conta em REFEITOS nem em TORNADOS SEM EFEITO
-    enquanto o vínculo não for validado por uma pessoa. Sem correspondência inequívoca (nenhum ato,
-    ou mais de um, com o número citado), o evento permanece PENDENTE_VINCULACAO.
+    enquanto o vínculo não for validado por uma pessoa. Sem correspondência inequívoca e compatível,
+    o evento permanece PENDENTE_VINCULACAO.
     """
     sugeridos = 0
     eventos = banco.con.execute("SELECT * FROM evento WHERE estado = 'PENDENTE_VINCULACAO' AND gerencia = ?", (GERENCIA,)).fetchall()
     for evento in eventos:
-        candidatos = set()
-        for numero in json.loads(evento["resenhas_citadas"] or "[]"):
-            for ato in banco.con.execute(
-                    "SELECT id FROM ato WHERE gerencia = ? AND tipo = 'RESENHA' AND natureza = 'ORIGINAL' AND numero = ? "
-                    "AND id <> COALESCE(?, '') AND (data_publicacao IS NULL OR ? IS NULL OR data_publicacao <= ?)",
-                    (GERENCIA, numero, evento["ato_id"], evento["data_publicacao"], evento["data_publicacao"])):
-                candidatos.add(ato["id"])
+        res_citadas = json.loads(evento["resenhas_citadas"] or "[]")
+        procs_ev = {p for raw in json.loads(evento["processos_citados"] or "[]") if (p := normalizar_processo(raw))}
         citadas = json.loads(evento["publicacoes_citadas"] or "[]")
-        if not candidatos and citadas and all(d < INICIO_DA_BASE for d in citadas) and not evento["fundamento"]:
-            # O ato original foi publicado antes do período coberto: o vínculo não é possível nesta base.
-            # Fica registrado o motivo; o evento continua pendente e fora dos indicadores.
-            with banco.con:
-                banco.con.execute("UPDATE evento SET fundamento = ? WHERE id = ?",
-                                  ("ato original publicado no DOE de " + ", ".join(f"{d[8:]}/{d[5:7]}/{d[:4]}" for d in citadas)
-                                   + f", antes do início da base ({INICIO_DA_BASE[8:]}/{INICIO_DA_BASE[5:7]}/{INICIO_DA_BASE[:4]}); "
-                                   "vínculo automático impossível", evento["id"]))
+        datas_citadas = set(citadas)
+        ato_mod = (
+            banco.con.execute("SELECT * FROM ato WHERE id = ?", (evento["ato_id"],)).fetchone()
+            if evento["ato_id"] else None
+        )
+        eixo_ev = _eixo_do_evento(evento, ato_mod)
+
+        if citadas and all(d < INICIO_DA_BASE for d in citadas):
+            if not evento["fundamento"]:
+                with banco.con:
+                    banco.con.execute(
+                        "UPDATE evento SET fundamento = ? WHERE id = ?",
+                        ("ato original publicado no DOE de " + ", ".join(f"{d[8:]}/{d[5:7]}/{d[:4]}" for d in citadas)
+                         + f", antes do início da base ({INICIO_DA_BASE[8:]}/{INICIO_DA_BASE[5:7]}/{INICIO_DA_BASE[:4]}); "
+                         "vínculo automático impossível", evento["id"]),
+                    )
             continue
+
+        candidatos: dict[str, tuple[str, int, int]] = {}
+
+        def _registrar_cand(ato_row, comum_n: int) -> None:
+            chave_log = ato_row["chave_logica"] or ato_row["id"]
+            d_vig = int(banco.con.execute("SELECT COUNT(*) FROM decisao WHERE ato_id = ? AND vigente = 1", (ato_row["id"],)).fetchone()[0])
+            atual = candidatos.get(chave_log)
+            if atual is None or (d_vig > 0, comum_n, d_vig) > (atual[2] > 0, atual[1], atual[2]):
+                candidatos[chave_log] = (ato_row["id"], comum_n, d_vig)
+
+        # 1. Busca por resenha citada + compatibilidade de eixo/processos/data
+        for numero in res_citadas:
+            for ato in banco.con.execute(
+                "SELECT * FROM ato WHERE gerencia = ? AND tipo = 'RESENHA' AND natureza = 'ORIGINAL' AND numero = ? "
+                "AND id <> COALESCE(?, '') AND (data_publicacao IS NULL OR ? IS NULL OR data_publicacao <= ?)",
+                (GERENCIA, numero, evento["ato_id"], evento["data_publicacao"], evento["data_publicacao"]),
+            ):
+                ok, comum = _ato_compativel_com_evento(banco, evento, ato, ato_mod, eixo_ev, procs_ev, datas_citadas)
+                if ok:
+                    _registrar_cand(ato, comum)
+
+        # 2. Se não citou número de resenha, mas citou processo(s) explícito(s), busca atos originais compatíveis pelos processos
+        if not candidatos and not res_citadas and procs_ev:
+            for ato in banco.con.execute(
+                "SELECT DISTINCT a.* FROM ato a JOIN decisao d ON d.ato_id = a.id "
+                "WHERE a.gerencia = ? AND a.natureza = 'ORIGINAL' AND d.vigente = 1 AND d.processo IS NOT NULL "
+                "AND a.id <> COALESCE(?, '') AND (a.data_publicacao IS NULL OR ? IS NULL OR a.data_publicacao <= ?)",
+                (GERENCIA, evento["ato_id"], evento["data_publicacao"], evento["data_publicacao"]),
+            ):
+                ok, comum = _ato_compativel_com_evento(banco, evento, ato, ato_mod, eixo_ev, procs_ev, datas_citadas)
+                if ok and comum > 0:
+                    _registrar_cand(ato, comum)
+
         if len(candidatos) == 1:
+            ato_id_sug, comum, _ = next(iter(candidatos.values()))
+            detalhes_match = []
+            if res_citadas:
+                detalhes_match.append("número de resenha citado")
+            if comum > 0:
+                detalhes_match.append(f"{comum} processo(s) em comum")
+            if eixo_ev:
+                detalhes_match.append(f"eixo compatível ({eixo_ev})")
+            fundamento = "; ".join(detalhes_match) or "ato original único compatível na base"
             with banco.con:
                 banco.con.execute(
                     "UPDATE evento SET ato_sugerido_id = ?, estado = 'SUGERIDO', fundamento = ? WHERE id = ?",
-                    (candidatos.pop(), "número de resenha citado no ato modificador; ato original único com esse número na base",
-                     evento["id"]))
+                    (ato_id_sug, fundamento, evento["id"]),
+                )
             sugeridos += 1
     return sugeridos
 

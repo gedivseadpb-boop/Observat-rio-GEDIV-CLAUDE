@@ -9,6 +9,7 @@ from unittest import mock
 
 from observatorio.gerencias.gediv import paddle_complementar as P, processo
 from observatorio.gerencias.gediv.paddle_worker import montar
+from observatorio.nucleo import banco as B
 from observatorio.painel import indicadores
 from observatorio.revisao import servico
 from tests import test_painel as TP, textos_doe as T
@@ -160,7 +161,7 @@ class Persistencia(TP.Base):
         self.assertEqual(self.banco.con.execute('SELECT COUNT(*) FROM auditoria').fetchone()[0],count)
         for campo in ['id','processo','matricula','servidor','cargo','resultado','origem','validacao']:
             self.assertEqual(d[campo],self.d[campo])
-        self.assertEqual(self.banco.con.execute('PRAGMA user_version').fetchone()[0],8)
+        self.assertEqual(self.banco.con.execute('PRAGMA user_version').fetchone()[0],B.VERSAO_ESQUEMA)
 
     def test_correcao_humana_nula_preservada_conflito_auditavel_idempotente(self):
         servico.revisar_decisoes(self.banco,[self.d['id']],servico.REABRIR,TP.REVISOR,TP.JUST,

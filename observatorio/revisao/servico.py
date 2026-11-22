@@ -14,7 +14,7 @@ import json
 import re
 
 from ..gerencias.gediv import catalogo as C
-from ..nucleo.banco import Banco, agora, chave_decisao, normalizar_texto
+from ..nucleo.banco import Banco, agora, chave_decisao, normalizar_processo, normalizar_texto
 
 CONFERIR, REJEITAR, REABRIR, VINCULAR = "CONFERIR", "REJEITAR", "REABRIR", "VINCULAR"
 ACEITAR, MANTER = "ACEITAR", "MANTER"
@@ -250,12 +250,23 @@ def revisar_ato(banco: Banco, ato_id: str, decisao: str, autor: str, justificati
 
 
 def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justificativa: str, ato_original_id: str | None = None,
-                   confirma_fonte: bool = False) -> dict:
+                   confirma_fonte: bool = False, *, decisoes_ids: list[str] | None = None,
+                   resultado_novo: str | None = None, campos_corrigidos: dict | None = None) -> dict:
     autor, justificativa = _exigir(autor, justificativa)
     evento = banco.con.execute("SELECT * FROM evento WHERE id = ?", (evento_id,)).fetchone()
     if evento is None:
         raise Recusada("evento não encontrado")
-    anterior = {"estado": evento["estado"], "ato_original_id": evento["ato_original_id"]}
+    vinculos_anteriores = [
+        {"decisao_id": r["decisao_id"], "efeito": r["efeito"], "resultado_novo": r["resultado_novo"]}
+        for r in banco.eventos_decisoes(evento_id)
+    ]
+    anterior = {"estado": evento["estado"], "ato_original_id": evento["ato_original_id"], "decisoes": vinculos_anteriores}
+    decisoes_alvo: list[str] = []
+    campos_limpos = _limpar(campos_corrigidos) if campos_corrigidos else {}
+    res_novo_limpo = (resultado_novo or "").strip().upper() or None
+    if res_novo_limpo is None and "resultado" in campos_limpos:
+        res_novo_limpo = campos_limpos["resultado"]
+
     if decisao == VINCULAR:
         if not confirma_fonte:
             raise Recusada("para vincular é preciso declarar que os dois documentos oficiais foram consultados")
@@ -268,15 +279,221 @@ def revisar_evento(banco: Banco, evento_id: str, decisao: str, autor: str, justi
             raise Recusada("o vínculo só pode apontar para um ato original da mesma gerência")
         if ato["data_publicacao"] and evento["data_publicacao"] and ato["data_publicacao"] > evento["data_publicacao"]:
             raise Recusada("o ato original não pode ser posterior ao evento que o altera")
-        posterior = {"estado": "VALIDADO", "ato_original_id": alvo}
+        if res_novo_limpo is not None and res_novo_limpo not in C.RESULTADOS:
+            raise Recusada("resultado_novo inválido para retificação")
+        if campos_limpos:
+            invalidos = set(campos_limpos) - set(CAMPOS_CORRIGIVEIS) - set(CAMPOS_DETALHE)
+            if invalidos:
+                raise Recusada("campo não corrigível em retificação: " + ", ".join(sorted(invalidos)))
+            _validar_detalhe(campos_limpos)
+
+        # Decisões individuais do ato original (incluindo representações da mesma chave lógica)
+        atos_mesmo_logico = (
+            [r[0] for r in banco.con.execute("SELECT id FROM ato WHERE chave_logica = ?", (ato["chave_logica"],))]
+            if ato["chave_logica"] else [alvo]
+        )
+        marcas_atos = ",".join("?" * len(atos_mesmo_logico))
+        decs_ato = banco.con.execute(
+            f"SELECT id, processo FROM decisao WHERE ato_id IN ({marcas_atos}) AND vigente = 1",
+            atos_mesmo_logico,
+        ).fetchall()
+        ids_validos_ato = {d["id"] for d in decs_ato}
+
+        if decisoes_ids is not None:
+            decisoes_alvo = list(dict.fromkeys(str(i) for i in decisoes_ids if i))
+            if not decisoes_alvo:
+                raise Recusada("informe ao menos uma decisão atingida pelo evento")
+            estranhas = [i for i in decisoes_alvo if i not in ids_validos_ato]
+            if estranhas:
+                raise Recusada("decisão informada não pertence ao ato original informado")
+        else:
+            # Sem lista explícita: resolve por processos citados no evento, sem presumir todo o ato.
+            procs_cit = {
+                p for raw in json.loads(evento["processos_citados"] or "[]")
+                if (p := normalizar_processo(raw))
+            }
+            if procs_cit:
+                decisoes_alvo = [
+                    d["id"] for d in decs_ato
+                    if normalizar_processo(d["processo"]) in procs_cit
+                ]
+        if (res_novo_limpo is not None or campos_limpos) and not decisoes_alvo:
+            raise Recusada("retificação com dado corrigido exige identificar a(s) decisão(ões) individual(is) atingida(s)")
+        posterior = {
+            "estado": "VALIDADO",
+            "ato_original_id": alvo,
+            "decisoes": decisoes_alvo,
+            "resultado_novo": res_novo_limpo,
+            "campos_corrigidos": campos_limpos or None,
+        }
     elif decisao == REJEITAR:
-        posterior = {"estado": "REJEITADO", "ato_original_id": None}
+        posterior = {"estado": "REJEITADO", "ato_original_id": None, "decisoes": []}
     elif decisao == REABRIR:
-        posterior = {"estado": "SUGERIDO" if evento["ato_sugerido_id"] else "PENDENTE_VINCULACAO", "ato_original_id": None}
+        posterior = {"estado": "SUGERIDO" if evento["ato_sugerido_id"] else "PENDENTE_VINCULACAO", "ato_original_id": None, "decisoes": []}
     else:
         raise Recusada("decisão inválida")
+
+    momento = agora()
     with banco.con:
         banco.con.execute("UPDATE evento SET estado = ?, ato_original_id = ?, revisor = ?, revisado_em = ?, fundamento = ? WHERE id = ?",
-                          (posterior["estado"], posterior["ato_original_id"], autor, agora(), justificativa, evento_id))
+                          (posterior["estado"], posterior["ato_original_id"], autor, momento, justificativa, evento_id))
+        if banco.tem_tabela("evento_decisao"):
+            banco.con.execute("DELETE FROM evento_decisao WHERE evento_id = ?", (evento_id,))
+            if decisao == VINCULAR and decisoes_alvo:
+                campos_json = json.dumps(campos_limpos, ensure_ascii=False) if campos_limpos else None
+                for did in decisoes_alvo:
+                    banco.con.execute(
+                        "INSERT INTO evento_decisao (evento_id, decisao_id, efeito, resultado_novo, campos_corrigidos, criado_em, autor, justificativa) "
+                        "VALUES (?,?,?,?,?,?,?,?)",
+                        (evento_id, did, evento["tipo"], res_novo_limpo, campos_json, momento, autor, justificativa),
+                    )
         banco.auditar(autor, decisao, "evento", evento_id, anterior, posterior, justificativa)
-    return {"alterados": 1, "estado": posterior["estado"]}
+    return {"alterados": 1, "estado": posterior["estado"], "decisoes_vinculadas": len(decisoes_alvo)}
+
+
+def avaliar_triagem_governanca(banco: Banco) -> dict:
+    """Triagem SOMENTE LEITURA para governança dos números (Etapa 4B — Seção 8).
+    NUNCA converte registros pendentes em conferidos nem expõe dados pessoais.
+    Separa registros elegíveis a futura aprovação institucional por regras objetivas
+    das dúvidas documentais específicas que exigem análise pontual com contexto."""
+    total_conferidas = int(banco.con.execute(
+        "SELECT COUNT(*) FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "WHERE a.gerencia = 'GEDIV' AND a.natureza = 'ORIGINAL' AND d.vigente = 1 AND d.validacao = 'CONFERIDO'"
+    ).fetchone()[0])
+    pendentes = banco.con.execute(
+        "SELECT d.id, d.ato_id, d.processo, d.resultado, a.numero, a.data_publicacao, a.vinculo, a.eixo, "
+        "a.modalidade, a.grupo, a.grupo_expressao, a.subcategoria, a.pendencias "
+        "FROM decisao d JOIN ato a ON a.id = d.ato_id "
+        "WHERE a.gerencia = 'GEDIV' AND a.natureza = 'ORIGINAL' AND d.vigente = 1 AND d.validacao = 'PENDENTE' "
+        "ORDER BY a.data_publicacao, a.numero, d.id"
+    ).fetchall()
+
+    conflitos_abertos_dec = {
+        r[0] for r in banco.con.execute(
+            "SELECT alvo_id FROM conflito WHERE alvo_tipo = 'decisao' AND estado = 'ABERTO'"
+        )
+    } if banco.tem_tabela("conflito") else set()
+    conflitos_abertos_ato = {
+        r[0] for r in banco.con.execute(
+            "SELECT alvo_id FROM conflito WHERE alvo_tipo = 'ato' AND estado = 'ABERTO'"
+        )
+    } if banco.tem_tabela("conflito") else set()
+
+    dup_ocr = banco.candidatos_duplicidade_ocr()
+    ids_dup_ocr = {did for g in dup_ocr for did in (g.get("decisao_a"), g.get("decisao_b")) if did}
+
+    elegiveis_ids: list[str] = []
+    duvidas: dict[str, list[dict]] = {
+        "resultado_nao_informado": [],
+        "grupo_pendente": [],
+        "modalidade_pendente": [],
+        "subcategoria_tempo_pendente": [],
+        "vinculo_nao_expresso": [],
+        "sem_processo": [],
+        "conflito_aberto": [],
+        "candidato_duplicidade_ocr": [],
+        "pendencia_textual_ato": [],
+    }
+
+    for r in pendentes:
+        pend_ato = json.loads(r["pendencias"] or "[]")
+        motivos: list[str] = []
+        if r["resultado"] == "NAO_INFORMADO":
+            motivos.append("resultado_nao_informado")
+        if r["eixo"] == C.PROGRESSAO and not r["grupo"]:
+            motivos.append("grupo_pendente")
+        if r["eixo"] == C.PROGRESSAO and not r["modalidade"]:
+            motivos.append("modalidade_pendente")
+        if r["eixo"] == C.TEMPO and not r["subcategoria"]:
+            motivos.append("subcategoria_tempo_pendente")
+        if r["vinculo"] != "EXPRESSO":
+            motivos.append("vinculo_nao_expresso")
+        if not (r["processo"] or "").strip():
+            motivos.append("sem_processo")
+        if r["id"] in conflitos_abertos_dec or r["ato_id"] in conflitos_abertos_ato:
+            motivos.append("conflito_aberto")
+        if r["id"] in ids_dup_ocr:
+            motivos.append("candidato_duplicidade_ocr")
+        if pend_ato and not motivos:
+            motivos.append("pendencia_textual_ato")
+
+        if not motivos:
+            elegiveis_ids.append(r["id"])
+        else:
+            item_sem_pii = {
+                "decisao_id": r["id"],
+                "ato_id": r["ato_id"],
+                "resenha": r["numero"],
+                "data_publicacao": r["data_publicacao"],
+                "eixo": r["eixo"],
+                "grupo_expressao": r["grupo_expressao"],
+                "resultado": r["resultado"],
+            }
+            for m in motivos:
+                duvidas[m].append(item_sem_pii)
+
+    eventos_pend = [
+        {
+            "evento_id": e["id"],
+            "tipo": e["tipo"],
+            "estado": e["estado"],
+            "data_publicacao": e["data_publicacao"],
+            "resenhas_citadas": json.loads(e["resenhas_citadas"] or "[]"),
+            "ato_sugerido_id": e["ato_sugerido_id"],
+        }
+        for e in banco.con.execute(
+            "SELECT id, tipo, estado, data_publicacao, resenhas_citadas, ato_sugerido_id "
+            "FROM evento WHERE gerencia = 'GEDIV' AND estado IN ('PENDENTE_VINCULACAO', 'SUGERIDO') "
+            "ORDER BY data_publicacao, id"
+        )
+    ]
+
+    duvidas_resumo = [
+        {
+            "categoria": cat,
+            "decisoes": len(itens),
+            "atos_distintos": len({i["ato_id"] for i in itens}),
+            "exemplos_sem_pii": itens[:10],
+        }
+        for cat, itens in duvidas.items()
+        if itens
+    ]
+    total_pend = len(pendentes)
+    if total_conferidas == 0 and total_pend > 0:
+        estado_homologacao = "NAO_HOMOLOGADO"
+    elif total_pend > 0 or eventos_pend:
+        estado_homologacao = "CONFERIDO_PARCIAL"
+    else:
+        estado_homologacao = "HOMOLOGADO" if total_conferidas > 0 else "SEM_REGISTROS"
+
+    return {
+        "estado_homologacao": estado_homologacao,
+        "conversao_automatica_executada": False,
+        "decisoes_conferidas": total_conferidas,
+        "decisoes_pendentes": total_pend,
+        "elegiveis_regras_objetivas": {
+            "quantidade": len(elegiveis_ids),
+            "criterios": [
+                "vinculo_expresso",
+                "resultado_definido_deferido_ou_indeferido",
+                "processo_presente",
+                "enquadramento_completo_grupo_modalidade_ou_subcategoria",
+                "sem_conflito_aberto",
+                "sem_candidato_duplicidade_ocr",
+                "sem_pendencia_textual_no_ato",
+            ],
+        },
+        "duvidas_documentais_especificas": {
+            "decisoes_com_duvida": total_pend - len(elegiveis_ids),
+            "categorias": duvidas_resumo,
+        },
+        "eventos_pendentes": {
+            "quantidade": len(eventos_pend),
+            "itens_sem_pii": eventos_pend,
+        },
+        "candidatos_duplicidade_ocr": len(dup_ocr),
+        "nota_governanca": (
+            "Triagem estritamente informativa (somente leitura). Nenhum registro pendente foi convertido "
+            "automaticamente em conferido; a homologação oficial requer aprovação institucional auditável."
+        ),
+    }
