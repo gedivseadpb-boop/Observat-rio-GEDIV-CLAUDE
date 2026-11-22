@@ -666,6 +666,31 @@ function sync(){
  if(badDates)warn.innerHTML='<span>Data inicial maior que a final.</span><button type="button" id="swapDates">Inverter</button>';
 }
 function kpis(m){
+ if(isPublicAgg()){
+  const bi=data.backend.indicadores||{},bs=data.backend.series||{},pa=bs.por_assunto||[];
+  const byK=k=>pa.find(x=>x.chave===k)||{};
+  let pRes=bi.resenhas,pProc=bi.processos,pDec=bi.decisoes,pDef=bi.deferidos,pInd=bi.indeferidos,pRef=bi.refeitos,pSe=bi.sem_efeito;
+  if(S.view==='vertical'||S.view==='horizontal'||S.view==='tempo'){
+   const item=byK(S.view==='vertical'?'VERTICAL':S.view==='horizontal'?'HORIZONTAL':'TEMPO_SERVICO');
+   pRes=null;pProc=null;pDec=item.total??null;pDef=item.deferido??null;pInd=item.indeferido??null;pRef=null;pSe=null;
+  }else if(S.view==='outras'){
+   pRes=null;pProc=null;pDec=null;pDef=null;pInd=null;pRef=null;pSe=null;
+  }else if(S.view==='hoje'){
+   pRes=null;pProc=null;pDec=null;pDef=null;pInd=null;pRef=null;pSe=null;
+  }
+  const pubSub=v=>v==null?'Protegido (< 5) ou restrito':'agregado público (≥ 5)';
+  const cards=[
+   ['resenhas','Resenhas',pRes,pubSub(pRes),'■',''],
+   ['processes','Processos',pProc,pubSub(pProc),'■',''],
+   ['decisions','Decisões',pDec,pubSub(pDec),'■',''],
+   ['deferidos','Deferidos',pDef,pDef!=null&&pDec?`${pct(pDef,pDec)} do total · público`:pubSub(pDef),'✓','green'],
+   ['indeferidos','Indeferidos',pInd,pInd!=null&&pDec?`${pct(pInd,pDec)} do total · público`:pubSub(pInd),'×','red'],
+   ['refeitos','Refeitos',pRef,pubSub(pRef),'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>','amber'],
+   ['semEfeito','Sem efeito',pSe,pubSub(pSe),'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>','red']
+  ];
+  $('#kpis').innerHTML=cards.map(([id,label,value,sub,icon,color])=>`<button class="kpi ${color}" data-card="${id}" ${value==null?'disabled':'aria-disabled="true" style="cursor:default"'} title="Modo público: indicadores agregados protegidos"><span class="label">${esc(label)}</span><span class="marker" aria-hidden="true">${icon}</span><b class="val">${value==null?'—':value}</b><span class="sub">${esc(sub)}</span></button>`).join('');
+  return;
+ }
  const preliminary=S.validation==='pendente',total=m.decisions||0;
  const procSub=m.processes?`${m.processesDeferidos||0} D · ${m.processesIndeferidos||0} I${m.processesMistos?` · ${m.processesMistos} mistos`:''}${m.processesNaoInformado?` · ${m.processesNaoInformado} NI`:''}`:'processos identificados';
  const decSub=`${m.servers||0} serv. (${m.benefitedServers||0} benef.)${m.naoInformado?` · ${m.naoInformado} NI`:''} · ${preliminary?'não homologado':'conferidas'}`;
@@ -687,10 +712,13 @@ const MONTH_SHORT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','
 const TL_SERIES=[
  {k:'vertical',name:'Vertical',color:'#1265ef'},
  {k:'horizontal',name:'Horizontal',color:'#13b88a'},
- {k:'tempo',name:'Tempo de Serviço + Abono',color:'#ff973c'},
+ {k:'tempo',name:'Tempo de Serviço',color:'#ff973c'},
  {k:'outros',name:'Outros benefícios',color:'#7c5ce6'}
 ];
 let tlChartMode='monthly', tlOffSeries=new Set(), lastTlRows=[];
+function isPublicAgg(){
+ return !data.backend?.autenticado&&!(data.rows||[]).length&&!!(data.backend?.indicadores&&data.backend?.series);
+}
 function renderDelicateTimeline(rows){
  lastTlRows=rows||[];
  const tl=$('#timeline');if(!tl)return;
@@ -716,32 +744,51 @@ function renderDelicateTimeline(rows){
  }
  let wrap=card.querySelector('#delicateTlWrap');
  if(!wrap){wrap=document.createElement('div');wrap.id='delicateTlWrap';tl.parentElement.insertBefore(wrap,tl);}
- if(tlChartMode==='daily'||!lastTlRows.length){
+ const pubAgg=isPublicAgg();
+ const pubMonths=pubAgg?(data.backend?.series?.por_data||[]).filter(m=>/^\d{4}-\d{2}/.test(String(m.data||''))&&Number(m.total||0)>0):[];
+ if(!pubAgg&&(tlChartMode==='daily'||!lastTlRows.length)){
+  wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
+  return;
+ }
+ if(pubAgg&&!pubMonths.length){
   wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
   return;
  }
  tl.style.display='none';if(legOrig)legOrig.style.display='none';wrap.hidden=false;
- const byMonth={};
- lastTlRows.forEach(r=>{
-  const d=String(r.date||'');if(d.length<7)return;
-  const ym=d.slice(0,7);
-  if(!byMonth[ym])byMonth[ym]={ym,vertical:0,horizontal:0,tempo:0,outros:0};
-  if(r.axis==='tempo')byMonth[ym].tempo++;
-  else if(r.axis==='outros')byMonth[ym].outros++;
-  else if(r.axis==='progressao'&&r.modality==='Horizontal')byMonth[ym].horizontal++;
-  else if(r.axis==='progressao'&&r.modality==='Vertical')byMonth[ym].vertical++;
-  else byMonth[ym].outros++;
- });
- const months=Object.values(byMonth).sort((a,b)=>a.ym.localeCompare(b.ym));
+ let months=[];
+ if(pubAgg){
+  months=pubMonths.map(m=>({
+   ym:String(m.data).slice(0,7),
+   vertical:S.view==='horizontal'||S.view==='tempo'||S.view==='outras'?0:(m.vertical??0),
+   horizontal:S.view==='vertical'||S.view==='tempo'||S.view==='outras'?0:(m.horizontal??0),
+   tempo:S.view==='vertical'||S.view==='horizontal'||S.view==='outras'?0:(m.tempo??0),
+   outros:0,
+   pubTotal:Number(m.total||0),
+   pubSuppressed:m.vertical==null&&m.horizontal==null&&m.tempo==null&&Number(m.total||0)>0
+  })).sort((a,b)=>a.ym.localeCompare(b.ym));
+ }else{
+  const byMonth={};
+  lastTlRows.forEach(r=>{
+   const d=String(r.date||'');if(d.length<7)return;
+   const ym=d.slice(0,7);
+   if(!byMonth[ym])byMonth[ym]={ym,vertical:0,horizontal:0,tempo:0,outros:0};
+   if(r.axis==='tempo')byMonth[ym].tempo++;
+   else if(r.axis==='outros')byMonth[ym].outros++;
+   else if(r.axis==='progressao'&&r.modality==='Horizontal')byMonth[ym].horizontal++;
+   else if(r.axis==='progressao'&&r.modality==='Vertical')byMonth[ym].vertical++;
+   else byMonth[ym].outros++;
+  });
+  months=Object.values(byMonth).sort((a,b)=>a.ym.localeCompare(b.ym));
+ }
  const active=TL_SERIES.filter(s=>!tlOffSeries.has(s.k));
  const subEl=$('#delicateTlSub');
- if(subEl)subEl.textContent=tlChartMode==='lines'?'Tendência mensal por modalidade · clique na legenda para isolar séries':'Composição mensal por modalidade · sem rolagem horizontal';
+ if(subEl)subEl.textContent=pubAgg?'Agregação mensal pública (limiar ≥ 5) · dados individuais protegidos':(tlChartMode==='lines'?'Tendência mensal por modalidade · clique na legenda para isolar séries':'Composição mensal por modalidade · sem rolagem horizontal');
  const W=620,H=168,padL=38,padR=14,padT=14,padB=24,plotW=W-padL-padR,plotH=H-padT-padB;
  const step=plotW/Math.max(1,months.length),barW=Math.min(34,Math.max(14,step*0.58));
  let svg=`<line x1="${padL}" y1="${padT}" x2="${W-padR}" y2="${padT}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH/2}" x2="${W-padR}" y2="${padT+plotH/2}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="#d5e3f1"/>`;
- if(tlChartMode==='lines'){
+ if(tlChartMode==='lines'&&!pubAgg){
   const maxV=Math.max(1,...months.flatMap(m=>active.map(s=>m[s.k])));
   svg+=`<text x="${padL-6}" y="${padT+4}" font-size="9.5" fill="#405d79" text-anchor="end">${maxV}</text>
         <text x="${padL-6}" y="${padT+plotH/2+4}" font-size="9.5" fill="#405d79" text-anchor="end">${Math.round(maxV/2)}</text>
@@ -757,21 +804,31 @@ function renderDelicateTimeline(rows){
    });
   });
  }else{
-  const maxT=Math.max(1,...months.map(m=>active.reduce((a,s)=>a+m[s.k],0)));
+  const barVal=m=>m.pubSuppressed?(S.view==='geral'||S.view==='historico'?m.pubTotal:0):active.reduce((a,s)=>a+m[s.k],0);
+  const maxT=Math.max(1,...months.map(barVal));
   svg+=`<text x="${padL-6}" y="${padT+4}" font-size="9.5" fill="#405d79" text-anchor="end">${maxT}</text>
         <text x="${padL-6}" y="${padT+plotH/2+4}" font-size="9.5" fill="#405d79" text-anchor="end">${Math.round(maxT/2)}</text>
         <text x="${padL-6}" y="${padT+plotH+3}" font-size="9.5" fill="#405d79" text-anchor="end">0</text>`;
   months.forEach((m,i)=>{
    let y=padT+plotH;const x=padL+step*i+(step-barW)/2;
    const lbl=MONTH_SHORT[Number(m.ym.slice(5,7))-1]+'/'+m.ym.slice(2,4);
-   const tot=m.vertical+m.horizontal+m.tempo+m.outros;
-   const tip=`${lbl} · Total: ${tot} (Vertical: ${m.vertical} · Horizontal: ${m.horizontal} · Tempo+Abono: ${m.tempo} · Outros: ${m.outros})`;
-   let rects='';
-   active.forEach(s=>{
-    if(!m[s.k])return;
-    const bh=Math.max(3,plotH*m[s.k]/maxT);y-=bh;
-    rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
-   });
+   let rects='',tip='';
+   if(m.pubSuppressed){
+    const v=barVal(m);
+    tip=`${lbl} · Total protegido: ${m.pubTotal} (detalhe por modalidade suprimido < 5)`;
+    if(v>0){
+     const bh=Math.max(3,plotH*v/maxT);y-=bh;
+     rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="#94a3b8"/>`;
+    }
+   }else{
+    const tot=m.vertical+m.horizontal+m.tempo+m.outros;
+    tip=`${lbl} · Total: ${tot} (Vertical: ${m.vertical} · Horizontal: ${m.horizontal} · Tempo: ${m.tempo} · Outros: ${m.outros})`;
+    active.forEach(s=>{
+     if(!m[s.k])return;
+     const bh=Math.max(3,plotH*m[s.k]/maxT);y-=bh;
+     rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
+    });
+   }
    svg+=`<g tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}">${rects}<rect x="${x.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${plotH}" fill="transparent"/></g>`;
   });
  }
@@ -779,10 +836,17 @@ function renderDelicateTimeline(rows){
   const cx=(padL+step*i+step/2).toFixed(1),lbl=MONTH_SHORT[Number(m.ym.slice(5,7))-1];
   svg+=`<text x="${cx}" y="${H-6}" font-size="9.5" fill="#405d79" text-anchor="middle">${lbl}</text>`;
  });
- const totals={vertical:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical').length,horizontal:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Horizontal').length,tempo:lastTlRows.filter(r=>r.axis==='tempo').length,outros:lastTlRows.filter(r=>r.axis==='outros'||(r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal')).length};
+ const totals=pubAgg
+  ?{
+    vertical:((data.backend.series.por_assunto||[]).find(a=>a.chave==='VERTICAL')?.total)??0,
+    horizontal:((data.backend.series.por_assunto||[]).find(a=>a.chave==='HORIZONTAL')?.total)??0,
+    tempo:((data.backend.series.por_assunto||[]).find(a=>a.chave==='TEMPO_SERVICO')?.total)??0,
+    outros:0
+   }
+  :{vertical:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical').length,horizontal:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Horizontal').length,tempo:lastTlRows.filter(r=>r.axis==='tempo').length,outros:lastTlRows.filter(r=>r.axis==='outros'||(r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal')).length};
  wrap.innerHTML=`<svg class="delicate-tl-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução mensal das publicações">${svg}</svg>
   <div class="delicate-tl-leg">${TL_SERIES.map(s=>`<button type="button" class="delicate-lg-btn ${tlOffSeries.has(s.k)?'is-off':''}" data-tl-ser="${s.k}" aria-pressed="${!tlOffSeries.has(s.k)}"><i class="delicate-lg-dot" style="background:${s.color}"></i>${s.name} (${totals[s.k]})</button>`).join('')}</div>
-  <div class="delicate-tl-tip" id="delicateTlTip" role="status">Passe o mouse ou foque em um mês para ver a composição · clique na legenda para isolar séries.</div>
+  <div class="delicate-tl-tip" id="delicateTlTip" role="status">${pubAgg?'Passe o mouse ou foque em um mês para ver o agregado público (limiar ≥ 5).':'Passe o mouse ou foque em um mês para ver a composição · clique na legenda para isolar séries.'}</div>
   <div class="delicate-tl-note">Lacunas ou ausência de barra refletem falta de coleta no intervalo ou filtro aplicado — nunca equivalem a zero publicações confirmadas.</div>`;
  wrap.querySelectorAll('[data-tl-ser]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.tlSer;
@@ -826,6 +890,33 @@ function donutPath(index, value, total, offset){
  return `<path d="${d}" fill="${index.color}" data-kind="${esc(index.kind)}" data-key="${esc(index.key)}" role="button" tabindex="0" aria-label="${lbl}" class="donut-slice"></path>`;
 }
 function axisChart(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},bi=data.backend.indicadores||{};
+  let list=[],title='Publicações por assunto',subtitle='Agregados públicos protegidos (limiar ≥ 5)';
+  if(S.view==='tempo'||S.axis==='tempo'){
+   title='Distribuição por serviço';subtitle='Serviços em Tempo de Serviço (limiar ≥ 5)';
+   const colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#94a3b8'];
+   list=(bs.por_subcategoria||[]).map((x,i)=>({key:x.codigo,label:x.nome,color:colors[i%colors.length],kind:'category',value:Number(x.total||0)})).filter(x=>x.value>0);
+  }else if(S.view==='vertical'||S.view==='horizontal'){
+   title='Distribuição por grupo';subtitle='Participação dos grupos no agregado público (limiar ≥ 5)';
+   const colors=['#2480f3','#16a788','#f49b45','#9b73d6','#dd6877','#3f9faa','#9a9d54','#7773bc','#e2b451','#b76e83'];
+   const fld=S.view==='vertical'?'vertical':'horizontal';
+   list=(bs.por_grupo||[]).map((g,i)=>({key:g.grupo,label:labelGroup(g.grupo),color:colors[i%colors.length],kind:'group',value:Number(g[fld]||0)})).filter(x=>x.value>0);
+  }else if(S.view==='outras'||S.view==='hoje'){
+   title=S.view==='outras'?'Outras publicações':'Recorte diário protegido';subtitle='Consulte após login gerencial para detalhamento nominal';
+   list=[];
+  }else{
+   const pa=bs.por_assunto||[],valOf=k=>Number((pa.find(x=>x.chave===k)||{}).total||0);
+   list=[['Vertical','vertical','#1265ef','VERTICAL'],['Horizontal','horizontal','#13b88a','HORIZONTAL'],['Tempo de Serviço','tempo','#ff973c','TEMPO_SERVICO']].map(([label,key,color,ck])=>({label,key,color,kind:'axis',value:valOf(ck)}));
+  }
+  $('#axisChartTitle').textContent=title;$('#axisChartSubtitle').textContent=subtitle;
+  const sumList=list.reduce((a,x)=>a+x.value,0);
+  const centerVal=(S.view==='geral'||S.view==='historico')&&bi.decisoes!=null?bi.decisoes:sumList;
+  let offset=0;
+  const circles=sumList?list.filter(x=>x.value).map(x=>{let r=donutPath(x,x.value,sumList,offset);offset+=x.value;return r;}).join(''):'<circle cx="70" cy="70" r="52" fill="none" stroke="#e7eef5" stroke-width="26"></circle>';
+  $('#axisChart').innerHTML=`<div class="interactive-donut"><svg viewBox="0 0 140 140" role="group" aria-label="${esc(title)}">${circles}</svg><div class="donut-label"><b>${centerVal?centerVal:'—'}</b><span>${centerVal===1?'decisão':'decisões'}</span></div></div><div class="axis-legend">${list.map(x=>`<button data-kind="${esc(x.kind)}" data-key="${esc(x.key)}" aria-label="${esc(x.label)}, ${x.value} decisões"><i style="background:${x.color}"></i><span>${esc(x.label)} <b>${x.value}</b>${sumList?' · '+Math.round(100*x.value/sumList)+'%':''}</span></button>`).join('')||'<small>Detalhamento disponível após login gerencial.</small>'}</div>`;
+  return;
+ }
  let list=[], title='Publicações por assunto',subtitle='Clique na fatia ou na legenda para detalhar';
  if(S.group||S.category.length||S.axis==='outros'||S.view==='outras'){
   title=(S.axis==='outros'||S.view==='outras')?'Resultados de Outras publicações':'Resultados da seleção';subtitle='Clique em deferidos, indeferidos ou não informados';
@@ -888,6 +979,18 @@ function openGroupLevelDialog(groupId){
  }));
 }
 function serviceBars(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},subs=bs.por_subcategoria||[],isPct=metricMode.service==='pct';
+  const totalTempo=subs.reduce((a,x)=>a+Number(x.total||0),0);
+  const max=Math.max(1,...subs.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalTempo):max;
+  $('#serviceBars').innerHTML=subs.map(x=>{
+   const n=x.total,d=x.deferido,i=x.indeferido,hasN=n!=null&&n>0,hasDI=hasN&&d!=null&&i!=null;
+   const txt=n==null?'suprimido (< 5)':n===0?'sem registros nesta visão':hasDI?(isPct?`${pct(n,totalTempo)} (${Math.round(100*d/n)}% def.)`:`${d} def. · ${i} ind.`):`${n} (D/I < 5)`;
+   const bars=hasDI?`<span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>`:(hasN?`<span class="part" style="width:${n*100/den}%;background:#1265ef"></span>`:'');
+   return `<div class="service-row"><button class="service-name" data-cat="${esc(x.codigo)}" disabled>${esc(x.nome)}</button><button class="result-track" data-cat="${esc(x.codigo)}" disabled aria-label="${esc(x.nome)}: ${esc(txt)}">${bars}</button><span class="service-value ${hasN?'':'pending'}">${txt}</span></div>`;
+  }).join('');
+  return;
+ }
  let tempo=rows.filter(r=>r.axis==='tempo'),totalTempo=tempo.length,tsCats=data.categories.filter(([id])=>id!=='ABONO_PERMANENCIA');
  const semSubItems=tempo.filter(r=>!r.category);
  const catsVis=semSubItems.length||S.category.includes('SEM_SUBCATEGORIA')?tsCats.concat([['SEM_SUBCATEGORIA','Subcategoria pendente de conferência']]):tsCats;
@@ -895,6 +998,20 @@ function serviceBars(rows){
  $('#serviceBars').innerHTML=catsVis.map(([id,label])=>{let items=id==='SEM_SUBCATEGORIA'?semSubItems:tempo.filter(r=>r.category===id),n=items.length,d=items.filter(r=>r.merit==='deferido').length,i=items.filter(r=>r.merit==='indeferido').length,ni=n-d-i,txt=n?(isPct?`${pct(n,totalTempo)} (${Math.round(100*d/n)}% def.)`:`${d} def. · ${i} ind.${ni?` · ${ni} NI`:''}`):'sem registros nesta visão';return `<div class="service-row ${S.category.includes(id)?'selected-row':''}"><button class="service-name" data-cat="${id}" title="Selecionar ${esc(label)}">${esc(label)}</button><button class="result-track" data-cat="${id}" aria-label="${esc(label)}: ${d} deferidos, ${i} indeferidos e ${ni} não informados (${pct(n,totalTempo)})" title="${n} de ${totalTempo} (${pct(n,totalTempo)}) · ${d} def. · ${i} ind.${ni?` · ${ni} NI`:''}"><span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>${ni?`<span class="part" style="width:${ni*100/den}%;background:#e0ad40"></span>`:''}</button><span class="service-value ${n?'':'pending'}">${txt}</span></div>`;}).join('');
 }
 function groupChart(rows){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},grps=bs.por_grupo||[],isPct=metricMode.group==='pct';
+  const fld=S.view==='vertical'?'vertical':S.view==='horizontal'?'horizontal':'total';
+  const entries=grps.map(g=>({id:g.grupo,name:labelGroup(g.grupo),n:g[fld],d:fld==='total'?g.deferido:null,i:fld==='total'?g.indeferido:null})).filter(x=>x.n!=null&&x.n>0);
+  const totalProg=entries.reduce((a,x)=>a+x.n,0),max=Math.max(1,...entries.map(x=>x.n)),den=isPct?Math.max(1,totalProg):max;
+  const btn=$('#toggleZeroGroups');if(btn)btn.hidden=true;
+  $('#groupChart').innerHTML=entries.length?entries.map(x=>{
+   const hasDI=x.d!=null&&x.i!=null;
+   const txt=hasDI?(isPct?`${pct(x.n,totalProg)} (${Math.round(100*x.d/x.n)}% D)`:`${x.d} D · ${x.i} I`):(isPct?`${pct(x.n,totalProg)}`:`${x.n} (≥ 5)`);
+   const bars=hasDI?`<span class="part good" style="width:${x.d*100/den}%"></span><span class="part bad" style="width:${x.i*100/den}%"></span>`:`<span class="part" style="width:${x.n*100/den}%;background:#1265ef"></span>`;
+   return `<button class="group-row" data-group="${esc(x.id)}" disabled aria-label="${esc(x.name)}: ${esc(txt)}"><span>${esc(x.name)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
+  }).join(''):'<div class="empty-small">Nenhum grupo acima do limiar público (≥ 5) neste recorte.</div>';
+  return;
+ }
  let progress=rows.filter(r=>r.axis==='progressao'),totalProg=progress.length,isPct=metricMode.group==='pct',entries=Object.entries(groupNames).map(([id,name])=>{let items=progress.filter(r=>(id==='NAO_INFORMADO'?!r.group:r.group===id)),d=items.filter(r=>r.merit==='deferido').length,i=items.filter(r=>r.merit==='indeferido').length;return {id,name,items,d,i,ni:items.length-d-i,n:items.length};});
  let max=Math.max(1,...entries.map(x=>x.n)),den=isPct?Math.max(1,totalProg):max,zeroCount=entries.filter(x=>!x.n).length,shown=showZeroGroups?entries:entries.filter(x=>x.n>0||S.group===x.id);
  const btn=$('#toggleZeroGroups');
@@ -902,6 +1019,21 @@ function groupChart(rows){
  $('#groupChart').innerHTML=shown.length?shown.map(x=>{const txt=x.n?(isPct?`${pct(x.n,totalProg)} (${Math.round(100*x.d/x.n)}% D)`:`${x.d} D · ${x.i} I${x.ni?` · ${x.ni} NI`:''}`):'—';return `<button class="group-row ${S.group===x.id?'selected-row':''}" data-group="${esc(x.id)}" aria-label="${esc(x.name)}: ${x.d} deferidos, ${x.i} indeferidos e ${x.ni} não informados (${pct(x.n,totalProg)})" title="${x.n} de ${totalProg} (${pct(x.n,totalProg)}) · ${x.d} D · ${x.i} I${x.ni?` · ${x.ni} NI`:''}"><span>${esc(x.name)}</span><span class="result-track"><span class="part good" style="width:${x.d*100/den}%"></span><span class="part bad" style="width:${x.i*100/den}%"></span>${x.ni?`<span class="part" style="width:${x.ni*100/den}%;background:#e0ad40"></span>`:''}</span><b>${txt}</b></button>`;}).join(''):'<div class="empty-small">Nenhum grupo com registros neste recorte.</div>';
 }
 function levelChart(){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},lvs=bs.por_nivel_vertical||[],res=bs.resumo_nivel_vertical||{},isPct=metricMode.level==='pct';
+  const totalV=Number(res.total_vertical||0),max=Math.max(1,...lvs.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalV):max;
+  $('#levelCardTitle').textContent='Progressões Verticais (A–F)';
+  $('#levelCardSub').textContent='Distribuição pública por nível de destino (limiar ≥ 5)';
+  $('#levelChart').innerHTML=lvs.map(lv=>{
+   const n=lv.total,d=lv.deferido,i=lv.indeferido,hasN=n!=null&&n>0,hasDI=hasN&&d!=null&&i!=null;
+   const lbl=lv.nivel==='NAO_IDENTIFICADO'?'Não identificado':`Nível ${lv.nivel}`;
+   const txt=n==null?'suprimido (< 5)':n===0?'—':hasDI?(isPct?`${pct(n,totalV)} (${Math.round(100*d/n)}% D)`:`${d} D · ${i} I`):`${n} (≥ 5)`;
+   const bars=hasDI?`<span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>`:(hasN?`<span class="part" style="width:${n*100/den}%;background:#1265ef"></span>`:'');
+   return `<button class="group-row" disabled aria-label="${esc(lbl)}: ${esc(txt)}"><span>${esc(lbl)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
+  }).join('');
+  $('#levelReconcileNote').textContent=`${res.classificados??'—'} classif. + ${res.nao_identificados??'—'} NI · ${res.total_vertical??'—'} Verticais · ${res.total_horizontal??'—'} Horiz. (agregado público)`;
+  return;
+ }
  const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;
  const sum=summarizeGroupLevels(baseRows,S.group),totalV=sum.vertical.total,isPct=metricMode.level==='pct';
  const recRows=(inducedByLevel&&!inducedByLevel.modality&&S.modality==='Vertical')?window.GEDIV_MODEL.dashboardModel(data,{...S,modality:'',level:'',card:'',groupNames}).original:baseRows;
@@ -917,6 +1049,21 @@ function levelChart(){
  $('#levelReconcileNote').innerHTML=`${sum.vertical.classified} classif. + ${sum.vertical.unidentified} NI = ${totalV} Verticais · ${horizTotal} Horiz. <button type="button" class="pdf-link" style="border:0;background:none;padding:0;margin-left:4px" id="openAeMatrix">Ver transições ↗</button>`;
 }
 function resultsChart(rows){
+ if(isPublicAgg()){
+  const pa=data.backend.series?.por_assunto||[],isPct=metricMode.results==='pct';
+  const rowsPub=[['Horizontal','HORIZONTAL'],['Vertical','VERTICAL'],['Tempo de Serviço','TEMPO_SERVICO']].map(([label,ck])=>{
+   const it=pa.find(x=>x.chave===ck)||{};
+   return {label,ck,total:it.total??0,d:it.deferido,i:it.indeferido};
+  });
+  const max=Math.max(1,...rowsPub.map(x=>x.total||0));
+  $('#resultsChart').innerHTML=rowsPub.map(x=>{
+   const hasN=x.total!=null&&x.total>0,hasDI=hasN&&x.d!=null&&x.i!=null,den=isPct?Math.max(1,x.total):max;
+   const txt=!hasN?'sem dados':hasDI?(isPct?`${pct(x.d,x.total)} D · ${pct(x.i,x.total)} I`:`${x.d} D · ${x.i} I`):`${x.total} (D/I < 5)`;
+   const bars=hasDI?`<button class="part good" disabled style="width:${x.d*100/den}%"></button><button class="part bad" disabled style="width:${x.i*100/den}%"></button>`:(hasN?`<button class="part" disabled style="width:${x.total*100/den}%;background:#1265ef"></button>`:'');
+   return `<div class="result-line"><span>${x.label}</span><div class="result-track">${bars}</div><b>${txt}</b></div>`;
+  }).join('')+'<div class="result-key"><span><i class="good"></i>Deferidos</span><span><i class="bad"></i>Indeferidos</span><span><i style="background:#1265ef"></i>Total protegido (D/I &lt; 5)</span></div>';
+  return;
+ }
  let all=[['Horizontal','horizontal'],['Vertical','vertical'],['Tempo de Serviço','tempo']];
  if(rows.some(r=>r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal'))all.push(['Modalidade pendente','sem_modalidade']);
  if(rows.some(r=>r.axis==='outros')||S.view==='outras'||S.axis==='outros')all.push(['Outros benefícios','outros']);
@@ -937,7 +1084,7 @@ function activeFilters(){
  for(const id of S.category)chips.push(['cat:'+id,catName(id)]);
  if(S.merit)chips.push(['merit',S.merit==='deferido'?'Deferido':S.merit==='indeferido'?'Indeferido':'Outro']);
  if(S.query)chips.push(['query','Busca: '+S.query]);
- if(S.card==='processes')chips.push(['card','Com processo identificado']);
+ if(S.card==='processes')chips.push(['card','Com processo identificado']);else if(S.card==='refeitos')chips.push(['card','Atos refeitos / retificados']);else if(S.card==='semEfeito')chips.push(['card','Atos tornados sem efeito']);
  $('#activeFilters').innerHTML=chips.length?'<span>Filtros ativos</span>'+chips.map(([key,label])=>`<button data-remove="${esc(key)}" aria-label="Remover filtro ${esc(label)}">${esc(label)} <b>×</b></button>`).join('')+'<button class="clear-inline" data-remove="all">Limpar todos</button>':'<span>Nenhum filtro ativo</span>';
  $('#backView').disabled=H.index<=0;
  $('#collapsedRailLabel').textContent=chips.length?`FILTROS (${chips.length})`:'FILTROS';
@@ -948,6 +1095,16 @@ function resenhaTitleFmt(r){
  return /^Resenha\b/i.test(raw)?raw:'Resenha '+raw;
 }
 function records(rows){
+ if(!data.backend?.autenticado&&!(data.rows||[]).length&&data.backend?.indicadores&&data.backend?.series){
+  $('#listHeading').textContent='CONSULTA PÚBLICA';
+  const pubDec=data.backend.indicadores.decisoes;
+  $('#resultCount').textContent=`Modo público · indicadores agregados protegidos${pubDec!=null?` (${pubDec} decisões, limiar ≥ 5)`:''}`;
+  $('#records').innerHTML='<div class="empty-small">Consulta pública ativa: os indicadores e gráficos exibem totais agregados protegidos (limiar mínimo de 5).<br>Use <b>Acesso gerencial</b> no topo para explorar resenhas, processos e conferir registros individuais.</div>';
+  $('#pagination').textContent='Modo público';
+  $('#prev').disabled=true;$('#next').disabled=true;
+  details(null);
+  return;
+ }
  let g=groups(rows),pages=Math.max(1,Math.ceil(g.length/5));
  S.page=Math.max(0,Math.min(S.page,pages-1));
  let shown=g.slice(S.page*5,S.page*5+5);
@@ -1588,7 +1745,7 @@ function bind(){
    }
    await refreshData();
    if(!data.backend?.autenticado){window.GEDIV_AUTH.clear();throw new Error('Credencial não autorizada pelo servidor.');}
-   S.validation='pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
+   S.validation=data.rows.some(r=>r.validation==='conferido')?'conferido':'pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
    $('#loginPass').value='';$('#loginTokenInput').value='';
    $('#loginDialog').close();
    toast(data.backend?.ehAdmin?'Sessão administrativa autenticada.':'Sessão gerencial autenticada.');
@@ -1789,6 +1946,7 @@ function bind(){
   S.page=0;commitHistory();render();
  });
  $('#kpis').addEventListener('click',e=>{
+  if(isPublicAgg())return;
   let b=e.target.closest('[data-card]');if(!b||b.disabled)return;
   const id=b.dataset.card;
   if(id==='deferidos'||id==='indeferidos'){const target=id==='deferidos'?'deferido':'indeferido';S.merit=S.merit===target?'':target;S.card='';resultPrev=null;}
@@ -1796,6 +1954,7 @@ function bind(){
    if(S.card==='processes'){S.card='';if(cardPrevMode){S.mode=cardPrevMode;cardPrevMode=null;}}
    else{cardPrevMode=S.mode;S.card='processes';S.mode='processo';}
   }
+  else if(id==='refeitos'||id==='semEfeito'){S.card=S.card===id?'':id;cardPrevMode=null;S.merit='';resultPrev=null;}
   else if(id==='resenhas'){S.card='';cardPrevMode=null;S.mode='resenha';toast('Lista agrupada por resenha.');}
   else{S.card='';cardPrevMode=null;S.merit='';resultPrev=null;}
   S.page=0;S.selected='';commitHistory();render();
