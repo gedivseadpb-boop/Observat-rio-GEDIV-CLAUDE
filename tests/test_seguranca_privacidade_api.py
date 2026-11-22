@@ -753,6 +753,49 @@ class TestSegurancaPrivacidadeAPI(unittest.TestCase):
         self.assertTrue(homolog_sh.is_file())
         self.assertEqual(homolog_sh.read_bytes().count(b"\r\n"), 0)
 
+    def test_09_x_forwarded_proto_rejeitado_de_cliente_nao_confiavel(self) -> None:
+        """Etapa 3B: X-Forwarded-Proto só é considerado quando vindo de proxy confiável
+        (loopback ou GEDIV_PROXIES_CONFIAVEIS); GEDIV_COOKIE_SECURE=1 força Secure sempre."""
+        from observatorio.web.servidor import criar_manipulador
+
+        cls = criar_manipulador(self.pasta, None, ())
+        h = object.__new__(cls)
+        h.headers = {"X-Forwarded-Proto": "https"}
+
+        antigo_sec = os.environ.pop("GEDIV_COOKIE_SECURE", None)
+        antigo_prx = os.environ.pop("GEDIV_PROXIES_CONFIAVEIS", None)
+        try:
+            # Cliente externo não confiável forjando X-Forwarded-Proto: https -> ignorado
+            h.client_address = ("198.51.100.10", 54321)
+            self.assertFalse(h._proxy_confiavel())
+            self.assertNotIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # Proxy local confiável (127.0.0.1) -> aceito
+            h.client_address = ("127.0.0.1", 54321)
+            self.assertTrue(h._proxy_confiavel())
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # Proxy explicitamente autorizado via GEDIV_PROXIES_CONFIAVEIS -> aceito
+            os.environ["GEDIV_PROXIES_CONFIAVEIS"] = "10.0.0.5"
+            h.client_address = ("10.0.0.5", 54321)
+            self.assertTrue(h._proxy_confiavel())
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+
+            # GEDIV_COOKIE_SECURE=1 força Secure independente de cabeçalho do cliente
+            os.environ["GEDIV_COOKIE_SECURE"] = "1"
+            h.headers = {}
+            h.client_address = ("198.51.100.10", 54321)
+            self.assertIn("Secure", h._cabecalho_cookie_sessao("abc", 60))
+        finally:
+            if antigo_sec is None:
+                os.environ.pop("GEDIV_COOKIE_SECURE", None)
+            else:
+                os.environ["GEDIV_COOKIE_SECURE"] = antigo_sec
+            if antigo_prx is None:
+                os.environ.pop("GEDIV_PROXIES_CONFIAVEIS", None)
+            else:
+                os.environ["GEDIV_PROXIES_CONFIAVEIS"] = antigo_prx
+
 
 if __name__ == "__main__":
     unittest.main()

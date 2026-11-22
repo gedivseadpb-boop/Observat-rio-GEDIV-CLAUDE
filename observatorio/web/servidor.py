@@ -196,11 +196,24 @@ def criar_manipulador(pasta_dados: Path, token_gerencia: str | None = None, orig
                 return
             self._verificar_origem_post(exigir_cabecalho=True)
 
+        def _proxy_confiavel(self) -> bool:
+            """Aceita cabeçalhos de encaminhamento (X-Forwarded-Proto) apenas de proxy local
+            (loopback) ou IPs explicitamente declarados em GEDIV_PROXIES_CONFIAVEIS."""
+            peer = (self.client_address[0] if getattr(self, "client_address", None) else "").strip()
+            extras = {
+                ip.strip()
+                for ip in os.environ.get("GEDIV_PROXIES_CONFIAVEIS", "").split(",")
+                if ip.strip()
+            }
+            return peer in ({"127.0.0.1", "::1"} | extras)
+
         def _cabecalho_cookie_sessao(self, valor: str, max_age: int) -> str:
-            secure = (
+            proto_proxy = (
                 (self.headers.get("X-Forwarded-Proto") or "").strip().lower() == "https"
-                or os.environ.get("GEDIV_COOKIE_SECURE") == "1"
+                if self._proxy_confiavel()
+                else False
             )
+            secure = os.environ.get("GEDIV_COOKIE_SECURE") == "1" or proto_proxy
             partes = [
                 f"{COOKIE_SESSAO}={valor}",
                 "HttpOnly",
