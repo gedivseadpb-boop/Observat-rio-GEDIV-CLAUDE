@@ -1,6 +1,6 @@
 # Guia de Implantação Autônoma e Operação Segura — Observatório GEDIV
 
-Este guia descreve os procedimentos de implantação, agendamento automático de segunda a sexta-feira, controle de acesso em três perfis, backup e restauração do Observatório GEDIV em servidor Linux persistente, mantendo o repositório canônico `gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE` como **única referência oficial de código**.
+Este guia descreve os procedimentos de implantação, agendamento automático diário (inclusive fins de semana e feriados), controle de acesso em três perfis, backup e restauração do Observatório GEDIV em servidor Linux persistente, mantendo o repositório canônico `gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE` como **única referência oficial de código**.
 
 > **Nota de Documentação Histórica / Opcional:** Para a **demonstração pública gratuita**, a decisão atual do projeto prioriza o **GitHub Pages** estático com dados 100% sintéticos em repositório separado ([docs/30-previa-publica-github-pages.md](../docs/30-previa-publica-github-pages.md)), sem servidores institucionais ou infraestrutura externa obrigatória. Este guia Linux/`systemd` permanece preservado apenas como referência histórica/opcional para eventual uso futuro do backend completo.
 >
@@ -75,14 +75,15 @@ sudo -u gediv /opt/observatorio-gediv/.venv/bin/python -m observatorio.web.usuar
 
 ---
 
-## 4. Coleta Automática Restrita a Dias Úteis (Segunda a Sexta-feira)
+## 4. Coleta Automática Diária (Todos os Dias, Inclusive Fins de Semana e Feriados)
 
 O agendamento automático é controlado por `deploy_autonomo/gediv-diario.timer`, `deploy_autonomo/gediv-diario.service`, `deploy_autonomo/rodar_diario.sh` e pelo módulo `observatorio.operacao.agendamento`:
 
-- **Horários programados:** segunda a sexta-feira (`Mon..Fri`), às **09:00** e **14:00** no fuso horário `America/Sao_Paulo`.
-- **Bloqueio em sábados e domingos:** imposto tanto na expressão `OnCalendar=Mon..Fri` do `systemd` quanto na guarda interna de `rodar_diario.sh` e `agendamento.avaliar_execucao()` (impedindo execução mesmo se a VM reiniciar no fim de semana com `Persistent=true`).
-- **Feriados administrativos configuráveis:** lidos de `/etc/gediv/feriados_oficiais.txt` (modelo em `deploy_autonomo/feriados_oficiais.example.txt`), distinguindo `FERIADO_ADMINISTRATIVO` de `FIM_DE_SEMANA` sem presumir feriados não homologados.
-- **Prevenção de concorrência e retomada:** `rodar_diario.sh` utiliza trava exclusiva `flock -n 9` em `.gediv-coleta.lock`. Na segunda-feira, a janela automática recua **4 dias** (recuperando quinta e sexta-feira); de terça a sexta-feira, recua **3 dias**.
+- **Horários programados:** todos os dias (`OnCalendar=*-*-*`), às **09:00** e **14:00** no fuso horário `America/Sao_Paulo`.
+- **Sem bloqueio de calendário:** sábados, domingos e feriados executam a coleta normalmente, pois o DOE pode ter edição regular, suplementar ou extraordinária em qualquer dia.
+- **Feriados são apenas informativos:** datas listadas em `/etc/gediv/feriados_oficiais.txt` (modelo em `deploy_autonomo/feriados_oficiais.example.txt`, formato `DD/MM/YYYY`) aparecem apenas como aviso informativo no log e no campo `feriado` de `agendamento.avaliar_execucao()`. A ausência de edição só é registrada no manifesto de cobertura após consulta à fonte oficial, nunca presumida por calendário.
+- **Datas ao operador:** mensagens de agendamento e do `rodar_diario.sh` exibem datas em `DD/MM/YYYY`; os parâmetros da CLI continuam em `AAAA-MM-DD`.
+- **Prevenção de concorrência e retomada:** `rodar_diario.sh` utiliza trava exclusiva `flock -n 9` em `.gediv-coleta.lock`. A janela automática recua **3 dias** para cobrir falhas de execuções anteriores.
 - **Recuperação retroativa manual (fora do cron):**
   ```bash
   sudo -u gediv /opt/observatorio-gediv/deploy_autonomo/recuperar_edicoes_manual.sh 2026-11-10 2026-11-18
@@ -95,7 +96,7 @@ sudo cp /opt/observatorio-gediv/deploy_autonomo/feriados_oficiais.example.txt /e
 sudo cp /opt/observatorio-gediv/deploy_autonomo/gediv-diario.service /etc/systemd/system/
 sudo cp /opt/observatorio-gediv/deploy_autonomo/gediv-diario.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-# Teste manual prévio obrigatório em dia útil:
+# Teste manual prévio obrigatório:
 sudo -u gediv PUBLICAR_PAGES=0 /opt/observatorio-gediv/deploy_autonomo/rodar_diario.sh
 # Ativação quando autorizado:
 sudo systemctl enable --now gediv-diario.timer

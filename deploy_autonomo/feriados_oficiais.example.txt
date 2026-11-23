@@ -1,6 +1,9 @@
-# Modelo configurável de feriados oficiais / pontos facultativos sem publicação do DOE-PB.
+# Modelo de feriados oficiais / pontos facultativos (marcação INFORMATIVA).
+# Feriados NÃO suspendem a coleta do DOE-PB: podem existir edições regulares, suplementares
+# ou extraordinárias. A data apenas aparece como aviso no log; a ausência de edição só é
+# registrada no manifesto de cobertura após consulta à fonte oficial.
 # Copie para /etc/gediv/feriados_oficiais.txt somente com datas validadas em decreto estadual oficial.
-# Formato: YYYY-MM-DD  Descrição do feriado
+# Formato: DD/MM/YYYY  Descrição do feriado   (YYYY-MM-DD também é aceito)
 #
 # Exemplo (descomente apenas datas confirmadas oficialmente):
-# 2026-12-25  Natal
+# 25/12/2026  Natal

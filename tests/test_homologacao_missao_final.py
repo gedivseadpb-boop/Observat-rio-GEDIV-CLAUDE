@@ -1,10 +1,9 @@
 """Testes de homologação da Missão Final (Seções 5, 6, 7, 8, 10 e 11).
 
 Comprova de forma reproduzível:
-- Agendamento estrito de segunda a sexta (09:00 e 14:00 America/Sao_Paulo);
-- Bloqueio em sábados e domingos (timer + guarda no script + módulo Python);
-- Distinção entre fim de semana e feriado administrativo configurável;
-- Recuperação de lacunas na segunda-feira (recuo de 4 dias) e modo manual excepcional;
+- Agendamento diário, inclusive sábados e domingos (09:00 e 14:00 America/Sao_Paulo);
+- Feriado configurado é apenas informativo e nunca suspende a coleta do DOE;
+- Recuperação de lacunas (recuo de 3 dias) e modo manual excepcional;
 - Desacoplamento de repositórios obsoletos (`gediv-painel-redesign-preview`) em `rodar_diario.sh`;
 - Proteção contra exclusão automática do banco reconciliado em `scripts/reconciliar_acervo_gediv.py`;
 - Preservação de revisões humanas (`CONFERIDO`) após reimportação/releitura;
@@ -82,55 +81,47 @@ def _bootstrap_sintetico() -> dict:
 
 
 class TestHomologacaoMissaoFinal(unittest.TestCase):
-    def test_01_agendamento_dias_uteis_e_bloqueio_fim_de_semana(self) -> None:
+    def test_01_agendamento_diario_inclusive_fim_de_semana(self) -> None:
         tz = timezone(timedelta(hours=-3))
-        # 2026-11-23 é segunda-feira; 2026-11-27 é sexta-feira
-        for dia in range(23, 28):
+        # 2026-11-23 (segunda-feira) a 2026-11-29 (domingo): todos os dias executam
+        for dia in range(23, 30):
             dt = datetime(2026, 11, dia, 9, 0, tzinfo=tz)
             dec = agendamento.avaliar_execucao(dt)
-            self.assertTrue(dec.executar, f"Dia útil {dt.date()} deveria executar")
-            self.assertEqual(dec.categoria, "DIA_UTIL")
-            if dia == 23:  # Segunda-feira: recuo de 4 dias para recuperar quinta/sexta
-                self.assertEqual(dec.inicio_janela, dt.date() - timedelta(days=4))
-            else:
-                self.assertEqual(dec.inicio_janela, dt.date() - timedelta(days=3))
-
-        # 2026-11-28 (sábado) e 2026-11-29 (domingo): bloqueio estrito
-        for dia in (28, 29):
-            dt = datetime(2026, 11, dia, 9, 0, tzinfo=tz)
-            dec = agendamento.avaliar_execucao(dt)
-            self.assertFalse(dec.executar, f"Fim de semana {dt.date()} não pode executar automaticamente")
-            self.assertEqual(dec.categoria, "FIM_DE_SEMANA")
+            self.assertTrue(dec.executar, f"{dt.date()} deveria executar a coleta diária")
+            self.assertEqual(dec.categoria, "DIARIA")
+            self.assertEqual(dec.inicio_janela, dt.date() - timedelta(days=3))
 
             # Modo manual excepcional (separado do agendamento) é permitido quando acionado pelo operador
             dec_manual = agendamento.avaliar_execucao(dt, modo_manual=True)
             self.assertTrue(dec_manual.executar)
             self.assertEqual(dec_manual.categoria, "MANUAL_EXCEPCIONAL")
 
-    def test_02_distincao_feriado_administrativo_configuravel(self) -> None:
+    def test_02_feriado_configurado_nao_suspende_coleta(self) -> None:
         tz = timezone(timedelta(hours=-3))
         dt_sexta = datetime(2026, 12, 25, 9, 0, tzinfo=tz)  # Sexta-feira
         # Sem arquivo de feriados validado, não presume feriado
         dec_sem_arq = agendamento.avaliar_execucao(dt_sexta, feriados_arq=None)
         self.assertTrue(dec_sem_arq.executar)
+        self.assertIsNone(dec_sem_arq.feriado)
 
         with tempfile.TemporaryDirectory() as tmp:
             arq = pathlib.Path(tmp) / "feriados_oficiais.txt"
             arq.write_text("# Feriados validados\n2026-12-25  Natal (Decreto Estadual)\n", encoding="utf-8")
             dec_com_arq = agendamento.avaliar_execucao(dt_sexta, feriados_arq=arq)
-            self.assertFalse(dec_com_arq.executar)
-            self.assertEqual(dec_com_arq.categoria, "FERIADO_ADMINISTRATIVO")
+            self.assertTrue(dec_com_arq.executar)
+            self.assertEqual(dec_com_arq.categoria, "DIARIA")
+            self.assertEqual(dec_com_arq.feriado, "Natal (Decreto Estadual)")
             self.assertIn("Natal", dec_com_arq.motivo)
 
     def test_03_timer_service_e_script_desacoplados_de_repo_obsoleto(self) -> None:
         timer_txt = (DEPLOY_DIR / "gediv-diario.timer").read_text(encoding="utf-8")
-        self.assertIn("OnCalendar=Mon..Fri *-*-* 09:00:00 America/Sao_Paulo", timer_txt)
-        self.assertIn("OnCalendar=Mon..Fri *-*-* 14:00:00 America/Sao_Paulo", timer_txt)
-        self.assertNotIn("OnCalendar=*-*-*", timer_txt)
+        self.assertIn("OnCalendar=*-*-* 09:00:00 America/Sao_Paulo", timer_txt)
+        self.assertIn("OnCalendar=*-*-* 14:00:00 America/Sao_Paulo", timer_txt)
+        self.assertNotIn("Mon..Fri", timer_txt)
 
         sh_txt = (DEPLOY_DIR / "rodar_diario.sh").read_text(encoding="utf-8")
         self.assertIn("flock -n 9", sh_txt)
-        self.assertIn('DIA_SEMANA" -ge 6', sh_txt)
+        self.assertNotIn('DIA_SEMANA" -ge 6', sh_txt)
         self.assertIn("FERIADOS_ARQ", sh_txt)
         self.assertIn("America/Sao_Paulo", sh_txt)
         # Nenhuma linha executável pode apontar para o repositório obsoleto nem reconstruir o painel-publico antigo
