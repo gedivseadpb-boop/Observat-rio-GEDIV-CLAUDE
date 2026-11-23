@@ -36,15 +36,41 @@ Para total transparência institucional, o projeto distingue estritamente três 
 
 Requisito: Python 3.11 ou superior (`python -m pip install -r requirements.txt` para leitura de PDFs e `python -m pip install -r requirements-dev.txt` para ambiente de testes). O OCR requer `tesseract-ocr` com o pacote de idioma português (`por`). A API HTTP e o painel web utilizam exclusivamente a biblioteca padrão do Python.
 
-### 2.1. Demonstração com dados fictícios (ambiente isolado)
+### 2.1. Demonstração e homologação local com dados sintéticos (ambiente isolado)
+
+Existem dois conjuntos sintéticos isolados, com finalidades distintas:
+
+1. **Base de demonstração com PDFs sintéticos (`demonstracao`):** exercita também o pipeline de geração/leitura de PDFs:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m observatorio.operacao demonstracao --dados dados-demo
+python -m observatorio.operacao publicar-snapshot-publico --dados dados-demo
 python -m observatorio.web --dados dados-demo
 ```
 
-Acesse `http://127.0.0.1:8000/painel`. Sem autenticação, o painel opera no perfil **Público** (exibindo apenas indicadores agregados de decisões conferidas, sem nomes, matrículas, processos ou PDFs).
+2. **Base sintética canônica de homologação (alinhada ao GitHub Pages — 6 edições, 42 Progressões Verticais nas 5 situações A–F):** gerada pela fonte única `observatorio/operacao/previa_sintetica.py`:
+
+```bash
+python scripts/preparar_previa_github_pages.py --banco-local dados-previa-sintetica
+python -m observatorio.operacao publicar-snapshot-publico --dados dados-previa-sintetica
+python -m observatorio.web --dados dados-previa-sintetica
+```
+
+Acesse `http://127.0.0.1:8000/painel/`. Sem autenticação, o painel opera no perfil **Público** consumindo o `snapshot_publico.json` congelado (exibindo apenas indicadores agregados protegidos ≥ 5 de decisões conferidas, sem nomes, matrículas, processos ou PDFs).
+
+### 2.1.1. Publicação e validação do snapshot público (`publicar-snapshot-publico`)
+
+```bash
+python -m observatorio.operacao publicar-snapshot-publico --dados PASTA [--saida ARQUIVO.json]
+```
+
+- **Finalidade:** gera, valida integralmente e grava de forma atômica (`.tmp` + `fsync` + `os.replace`) o arquivo `snapshot_publico.json` consumido pela consulta pública da aplicação com backend (`/api/painel` e `/api/data`).
+- **Argumentos:** `--dados PASTA` (padrão `dados`, diretório contendo `observatorio.sqlite3`) e `--saida ARQUIVO.json` (opcional; quando omitido, grava em `<PASTA>/snapshot_publico.json`).
+- **Condições de uso e falha fechada:** exige que `<PASTA>/observatorio.sqlite3` já exista. Se o banco não existir, retorna JSON `{"resultado": "BANCO_AUSENTE", "codigo_de_saida": 4}` com código de saída `4` (`NAO_EXECUTADO`), **sem criar banco SQLite vazio**. Se o snapshot violar qualquer regra de validação, retorna `SNAPSHOT_INVALIDO` com código `1` sem sobrescrever o arquivo anterior.
+- **Proteção de dados pessoais:** aplica k-anonymity (`>= 5` decisões e `>= 5` matrículas distintas), faixas de largura 5, granularidade mensal, supressão complementar e secundária (inclusive em `por_situacao_nivel_vertical` e `resumo_nivel_vertical`), zerando `rows`, `events`, `resenhas` e `transicoes`. O resumo exibido em `stdout` contém apenas agregados protegidos (sem PII).
+
+Veja a comparação detalhada entre a **prévia pública estática (GitHub Pages)** e a **aplicação com backend Python/SQLite** em [docs/30-previa-publica-github-pages.md](docs/30-previa-publica-github-pages.md).
 
 ### 2.2. Reconstrução reproduzível do frontend (sem dependências externas)
 
@@ -94,10 +120,14 @@ python -m observatorio.revisao fila | ato ID ... | decisao ID ... | evento ID ..
 # Suíte completa Python (sem acesso à internet e sem tocar em bancos oficiais)
 python -m unittest discover -s tests -t . -v
 
-# Testes JavaScript do pacote estático de referência (quando Node.js 20+ estiver instalado)
+# Testes JavaScript do pacote estático e acessibilidade estrutural (quando Node.js 20+ estiver instalado)
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
 node --test tests/test_revisao_2910.cjs
+
+# Testes de acessibilidade e responsividade em navegador real (Playwright: Tab, Shift+Tab, Enter, Espaço, Escape, 1440/768/390px)
+npm run test:a11y
+node tests/test_acessibilidade_navegador.cjs --url http://127.0.0.1:8000/painel/
 ```
 
 ---

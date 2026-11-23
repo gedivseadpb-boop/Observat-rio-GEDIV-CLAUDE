@@ -3,8 +3,9 @@
   "private": true,
   "description": "Verificação da interface pública estática GEDIV; nenhuma dependência no navegador",
   "scripts": {
-    "test": "node --test tests/test_exportacao_publica.cjs tests/test_consulta_publica.cjs tests/test_interface_publica.cjs tests/test_pdf_publico.cjs tests/test_painel_v2.cjs tests/test_admin_painel.cjs",
+    "test": "node --test tests/test_exportacao_publica.cjs tests/test_consulta_publica.cjs tests/test_interface_publica.cjs tests/test_pdf_publico.cjs tests/test_painel_v2.cjs tests/test_admin_painel.cjs tests/test_acessibilidade_unificado.cjs",
     "test:browser": "node tests/test_homologacao_navegador.cjs",
+    "test:a11y": "node tests/test_acessibilidade_navegador.cjs",
     "test:visual": "node tests/test_design_clareza.cjs",
     "test:contraste": "node tests/test_contraste_renderizado.cjs",
     "test:tarefas": "node tests/test_tarefas_clareza.cjs"
