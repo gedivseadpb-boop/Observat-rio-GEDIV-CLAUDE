@@ -14,6 +14,8 @@
         fora do repositório); relatório só com contagens e percentuais
     python -m observatorio.operacao demonstracao --dados dados-demo
         cria uma base de DEMONSTRAÇÃO com documentos SINTÉTICOS (pessoas e processos fictícios)
+    python -m observatorio.operacao publicar-snapshot-publico --dados PASTA [--saida ARQUIVO.json]
+        gera, valida (limiar >= 5, sem PII) e grava atomicamente snapshot_publico.json para consulta pública
 
 Aquisição dos PDFs oficiais (Etapa 05):
     python -m observatorio.operacao sonda --fonte auniao [--saida sonda.json]
@@ -51,7 +53,7 @@ from . import fluxo, saida
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="observatorio.operacao", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["executar", "demonstracao", "validar-real", "ouro", "corpus",
+    ap.add_argument("comando", choices=["executar", "demonstracao", "publicar-snapshot-publico", "validar-real", "ouro", "corpus",
                                         "sonda", "coletar-dia", "coletar-intervalo", "cobertura", "reabrir", "liberar-fonte"])
     ap.add_argument("origem", nargs="?")
     ap.add_argument("--dados", default="dados")
@@ -162,6 +164,43 @@ def main(argv=None) -> int:
     if a.comando == "demonstracao":
         from . import demonstracao
         print(json.dumps(demonstracao.criar(a.dados), ensure_ascii=False, indent=2))
+        return saida.SUCESSO
+    if a.comando == "publicar-snapshot-publico":
+        from pathlib import Path
+        from ..nucleo.banco import Banco
+        from ..painel import indicadores
+
+        pasta_dados = Path(a.dados)
+        caminho_banco = pasta_dados / "observatorio.sqlite3"
+        if not caminho_banco.is_file():
+            print(json.dumps({
+                "resultado": "BANCO_AUSENTE",
+                "codigo_de_saida": saida.NAO_EXECUTADO,
+                "dados": str(pasta_dados),
+            }, ensure_ascii=False, indent=2))
+            return saida.NAO_EXECUTADO
+        destino = Path(a.saida) if a.saida else pasta_dados / indicadores.ARQUIVO_SNAPSHOT_PUBLICO
+        banco = Banco(caminho_banco)
+        try:
+            snap = indicadores.publicar_snapshot_publico(banco, destino)
+        except ValueError as erro:
+            print(json.dumps({
+                "resultado": "SNAPSHOT_INVALIDO",
+                "erro": str(erro),
+                "codigo_de_saida": saida.FALHA,
+            }, ensure_ascii=False, indent=2))
+            return saida.FALHA
+        finally:
+            banco.fechar()
+        painel_pub = snap.get("painel") or {}
+        print(json.dumps({
+            "resultado": "OK",
+            "arquivo": str(destino),
+            "gerado_em": snap.get("gerado_em"),
+            "indicadores": painel_pub.get("indicadores"),
+            "resumo_nivel_vertical": (painel_pub.get("series") or {}).get("resumo_nivel_vertical"),
+            "codigo_de_saida": saida.SUCESSO,
+        }, ensure_ascii=False, indent=2))
         return saida.SUCESSO
     resumo = fluxo.executar(a.dados, a.origem, a.data, a.url, a.refazer_pendentes)
     print(json.dumps(resumo, ensure_ascii=False, indent=2))

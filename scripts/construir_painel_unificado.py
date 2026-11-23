@@ -150,7 +150,15 @@ document.getElementById('sendBatch').onclick=async()=>{
         1,
     )
 
-    # 2b. Suporte a Tempo de Serviço (TS-01 a TS-07 + Subcategoria pendente) e Abono de Permanência em Outras Publicações (sem TS-08, 0 cores novas)
+    # 2b. Favicon inline neutro (evita 404 de /favicon.ico no console do navegador local e publicado)
+    if '<link rel="icon"' not in html:
+        html = html.replace(
+            '<meta name="color-scheme" content="light">',
+            '<meta name="color-scheme" content="light"><link rel="icon" href="data:,">',
+            1,
+        )
+
+    # 2c. Suporte a Tempo de Serviço (TS-01 a TS-07 + Subcategoria pendente) e Abono de Permanência em Outras Publicações (sem TS-08, 0 cores novas)
     html = html.replace(
         "<p>Os sete serviços permanecem visíveis · clique para filtrar</p>",
         "<p>Os sete serviços (TS-01 a TS-07) permanecem visíveis · Abono de Permanência em Outras Publicações</p>",
@@ -1462,11 +1470,14 @@ function exportCsv(){
   const fmtP=v=>v==null?'Suprimido (< 5)':String(v);
   const tbAss=(bs.por_assunto||[]).map(x=>`<tr><td><b>${esc(x.rotulo||x.chave)}</b></td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.deferido))}</td><td>${esc(fmtP(x.indeferido))}</td></tr>`).join('');
   const tbGrp=(bs.por_grupo||[]).map(x=>`<tr><td>${esc(labelGroup(x.grupo))}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.vertical))}</td><td>${esc(fmtP(x.horizontal))}</td></tr>`).join('');
+  const tbSit=(bs.por_situacao_nivel_vertical||[]).map(x=>`<tr><td><b>${esc(x.rotulo||x.codigo)}</b></td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.deferido))}</td><td>${esc(fmtP(x.indeferido))}</td></tr>`).join('');
   const tbSub=(bs.por_subcategoria||[]).map(x=>`<tr><td>${esc(x.codigo)} · ${esc(x.nome)}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.deferido))}</td><td>${esc(fmtP(x.indeferido))}</td></tr>`).join('');
   const tbMes=(bs.por_data||[]).map(x=>`<tr><td class="nowrap">${esc(x.data)}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.vertical))}</td><td>${esc(fmtP(x.horizontal))}</td><td>${esc(fmtP(x.tempo))}</td></tr>`).join('');
   const body=`<div class="reconcile-note" style="margin-top:0;margin-bottom:12px"><b>Consulta pública (agregados protegidos ≥ 5):</b> total de <b>${esc(fmtP(bi.decisoes))}</b> decisões conferidas em <b>${esc(fmtP(bi.resenhas))}</b> resenhas e <b>${esc(fmtP(bi.processos))}</b> processos. Registros nominais estão disponíveis apenas após login gerencial.</div>
   <h3 style="margin:10px 0 6px;font-size:13px">Distribuição por assunto</h3>
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Assunto</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbAss||'<tr><td colspan="4">Sem agregados públicos.</td></tr>'}</tbody></table></div>
+  <h3 style="margin:14px 0 6px;font-size:13px">Progressão Vertical A–F e situações sem nível (≥ 5)</h3>
+  <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Situação / Nível</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbSit||'<tr><td colspan="4">Sem agregados verticais.</td></tr>'}</tbody></table></div>
   <h3 style="margin:14px 0 6px;font-size:13px">Progressão por grupo (≥ 5)</h3>
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Grupo</th><th>Total</th><th>Vertical</th><th>Horizontal</th></tr></thead><tbody>${tbGrp||'<tr><td colspan="4">Nenhum grupo acima do limiar público.</td></tr>'}</tbody></table></div>
   <h3 style="margin:14px 0 6px;font-size:13px">Tempo de Serviço (TS-01 a TS-07)</h3>
