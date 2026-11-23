@@ -2,7 +2,9 @@
 
 Este guia descreve os procedimentos de implantação, agendamento automático de segunda a sexta-feira, controle de acesso em três perfis, backup e restauração do Observatório GEDIV em servidor Linux persistente, mantendo o repositório canônico `gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE` como **única referência oficial de código**.
 
-> **Status:** Procedimentos e scripts implementados e validados por testes automatizados locais; **ainda não ativados em servidor de produção**. Nenhum script deste pacote publica dados automaticamente em repositórios antigos (`gediv-painel-redesign-preview` e `gediv-conferencia-privada` estão desacoplados e desativados).
+> **Nota de Documentação Histórica / Opcional:** Para a **demonstração pública gratuita**, a decisão atual do projeto prioriza o **GitHub Pages** estático com dados 100% sintéticos em repositório separado ([docs/30-previa-publica-github-pages.md](../docs/30-previa-publica-github-pages.md)), sem servidores institucionais ou infraestrutura externa obrigatória. Este guia Linux/`systemd` permanece preservado apenas como referência histórica/opcional para eventual uso futuro do backend completo.
+>
+> **Status:** Procedimentos e scripts implementados e validados por testes automatizados locais; **não ativados em servidor de produção** e **não obrigatórios** para a demonstração pública no GitHub Pages. Nenhum script deste pacote publica dados automaticamente em repositórios antigos (`gediv-painel-redesign-preview` e `gediv-conferencia-privada` estão desacoplados e desativados).
 
 ---
 
