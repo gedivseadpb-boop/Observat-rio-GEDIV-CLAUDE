@@ -1,11 +1,10 @@
 [Unit]
-Description=Agendamento diário do Observatório GEDIV (todos os dias, 12:00 e 15:00 America/Sao_Paulo)
+Description=Agendamento diário do Observatório GEDIV (todos os dias, 12:00 America/Sao_Paulo)
 
 [Timer]
 # Execução TODOS OS DIAS, inclusive sábados, domingos e feriados: o DOE pode ter
 # edição regular, suplementar ou extraordinária em qualquer dia.
 OnCalendar=*-*-* 12:00:00 America/Sao_Paulo
-OnCalendar=*-*-* 15:00:00 America/Sao_Paulo
 # Não cria disparo extra ao reiniciar; a próxima coleta recua três dias.
 Persistent=false
 RandomizedDelaySec=120

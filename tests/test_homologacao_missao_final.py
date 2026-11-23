@@ -1,7 +1,7 @@
 """Testes de homologação da Missão Final (Seções 5, 6, 7, 8, 10 e 11).
 
 Comprova de forma reproduzível:
-- Agendamento diário, inclusive sábados e domingos (12:00 e 15:00 America/Sao_Paulo);
+- Agendamento diário, inclusive sábados e domingos (12:00 America/Sao_Paulo);
 - Feriado configurado é apenas informativo e nunca suspende a coleta do DOE;
 - Recuperação de lacunas (recuo de 3 dias) e modo manual excepcional;
 - Desacoplamento de repositórios obsoletos (`gediv-painel-redesign-preview`) em `rodar_diario.sh`;
@@ -117,7 +117,6 @@ class TestHomologacaoMissaoFinal(unittest.TestCase):
         timer_txt = (DEPLOY_DIR / "gediv-diario.timer").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"^OnCalendar=(.+)$", timer_txt, re.MULTILINE), [
             "*-*-* 12:00:00 America/Sao_Paulo",
-            "*-*-* 15:00:00 America/Sao_Paulo",
         ])
         self.assertNotIn("Mon..Fri", timer_txt)
 
