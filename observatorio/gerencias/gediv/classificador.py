@@ -489,7 +489,8 @@ def _decisoes(ato: Ato, corpo: list[Linha], chave_arquivo: str) -> list[Decisao]
         if titulo:
             atual = titulos[i] = titulo
         bloco[i] = atual
-    misto = PAT_MERITO.search(" ".join(l.norm for l in corpo[:marcos[0][0]] if marcos)) and ato.resultado == "NAO_INFORMADO"
+    preambulo_tabela = " ".join(l.norm for l in corpo[:marcos[0][0]]) if marcos else ""
+    misto = PAT_MERITO.search(preambulo_tabela) and ato.resultado == "NAO_INFORMADO"
     decisoes, repeticoes = [], {}
     for n, (i, achado) in enumerate(marcos):
         linha = corpo[i]
