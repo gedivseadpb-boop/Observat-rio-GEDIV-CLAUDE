@@ -542,12 +542,13 @@ def adaptar_html_estatico(html_orig: str) -> str:
     """
     html = html_orig
 
-    # 1. Favicon inline neutro (evita 404 de /favicon.ico no console do navegador)
-    html = html.replace(
-        '<meta name="color-scheme" content="light">',
-        '<meta name="color-scheme" content="light"><link rel="icon" href="data:,">',
-        1,
-    )
+    # 1. Favicon inline neutro (evita 404 de /favicon.ico no console do navegador, sem duplicar se já presente)
+    if '<link rel="icon"' not in html:
+        html = html.replace(
+            '<meta name="color-scheme" content="light">',
+            '<meta name="color-scheme" content="light"><link rel="icon" href="data:,">',
+            1,
+        )
 
     # 2. Carregamento estático direto de ./dados-sinteticos-publicos.json (zero chamadas /api/*)
     old_ready = """window.GEDIV_READY=(async()=>{
