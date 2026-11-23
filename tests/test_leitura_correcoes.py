@@ -60,17 +60,18 @@ class TesteAssuntoComTextoReconstituido(unittest.TestCase):
         self.assertFalse(any("reconstituído" in p for p in r.atos[0].pendencias))
 
     def test_forma_compacta_nao_inventa_assunto(self):
-        for assunto in ("AUXÍLIO FUNERAL", "FLEXIBILIZAÇÃO DE HORÁRIO", "CESSÃO DE SERVIDOR", "ABONO DE PERMANÊNCIA"):
+        for assunto in ("AUXÍLIO FUNERAL", "FLEXIBILIZAÇÃO DE HORÁRIO", "CESSÃO DE SERVIDOR", "ABONO NATALINO", "CERTIDÃO DE TEMPO"):
             with self.subTest(assunto=assunto):
                 r = um(CABECALHO.format(n=955) + f"O Diretor DEFERIU os processos de {assunto}:\n"
                        "SAD-PSE-2026/90065 9000065 PESSOA FICTICIA SEE\nPUBLIQUE-SE")
                 self.assertEqual(r.atos, [])
                 self.assertEqual(r.decisoes, [])
 
-    def test_compactacao_preserva_os_padroes_das_sete_subcategorias(self):
+    def test_compactacao_preserva_os_padroes_dos_grupos_de_tempo_servico(self):
         casos = {"ANOTACAODETEMPODESERVICO": "TS-01", "DESAVERBACAODETEMPO": "TS-02",
                  "LICENCAPARATRATARDEINTERESSESPARTICULARES": "TS-03", "DESISTENCIADALICENCAPARATRATARDEINTERESSESPARTICULARES": "TS-04",   # 05.3.4: TS-04 exige a licença de interesses particulares
-                 "LICENCAESPECIAL": "TS-05", "CONVERSAODELICENCAESPECIALEMTEMPODESERVICO": "TS-06", "CONVERSAODEFERIAS": "TS-07"}
+                 "LICENCAESPECIAL": "TS-05", "CONVERSAODELICENCAESPECIALEMTEMPODESERVICO": "TS-06", "CONVERSAODEFERIAS": "TS-07",
+                 "ABONODEPERMANENCIA": "ABONO_PERMANENCIA"}
         for texto, esperado in casos.items():
             with self.subTest(texto=texto):
                 self.assertEqual(C.identificar_subcategoria(texto, compacto=True), esperado)

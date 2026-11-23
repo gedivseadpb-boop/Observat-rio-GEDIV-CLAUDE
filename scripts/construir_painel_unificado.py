@@ -158,10 +158,10 @@ document.getElementById('sendBatch').onclick=async()=>{
             1,
         )
 
-    # 2c. Suporte a Tempo de Serviço (TS-01 a TS-07 + Subcategoria pendente) e Abono de Permanência em Outras Publicações (sem TS-08, 0 cores novas)
+    # 2c. Suporte a Tempo de Serviço (TS-01 a TS-07 e Abono de Permanência + Subcategoria pendente, sem TS-08, 0 cores novas)
     html = html.replace(
         "<p>Os sete serviços permanecem visíveis · clique para filtrar</p>",
-        "<p>Os sete serviços (TS-01 a TS-07) permanecem visíveis · Abono de Permanência em Outras Publicações</p>",
+        "<p>Os oito grupos de Tempo de Serviço (TS-01 a TS-07 e Abono de Permanência) · clique para filtrar</p>",
         1,
     )
 
@@ -324,6 +324,24 @@ body{background:#f3f7fb!important}
 .part.lv-napl{background:#7c5ce6}
 .level-sec-row td{background:#f4f8fd;color:#27527c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px}
 .level-exp-sub{display:block;font-size:10.5px;color:#405d79;font-weight:400;margin-top:2px;line-height:1.35}
+.mc-card{margin-top:12px}
+.mc-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0 12px}
+.mc-stat{background:#f4f8fd;border:1px solid #dce8f1;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.mc-stat small{font-size:10.5px;color:#405d79;font-weight:600}
+.mc-stat b{font-size:18px;color:#102b4d;line-height:1.2}
+.mc-stat span{font-size:11px;color:#405d79}
+.mc-delta{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:700;width:fit-content}
+.mc-delta.is-up{background:#d9efe7;color:#175a4e}
+.mc-delta.is-down{background:#ffefef;color:#b93840}
+.mc-delta.is-flat{background:#eef5fc;color:#175ca8}
+.mc-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:12px;align-items:start}
+.mc-subhd{margin:0 0 6px;font-size:11.5px;font-weight:700;color:#27527c}
+.mc-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.mc-tbl th{background:#f4f8fd;color:#27527c;font-weight:700;text-align:left;padding:6px 8px;border-bottom:1px solid #dce8f1;white-space:nowrap}
+.mc-tbl td{padding:6px 8px;border-bottom:1px solid #eef5fc;color:#102b4d}
+.mc-tbl tr.is-abono td{background:#f9fcff;font-weight:600}
+.mc-note{margin-top:10px;padding:8px 10px;border-radius:6px;background:#fff8eb;border:1px solid #f4dfb6;color:#8c4a07;font-size:10.5px;line-height:1.4}
+@media(max-width:920px){.mc-grid,.mc-cols{grid-template-columns:1fr}}
 @media(max-width:920px){.topbar{flex-wrap:wrap;gap:10px}.header-title{flex:1 1 220px;overflow:hidden}.header-title h1,.header-title p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 @media(max-width:760px){.tabs{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;padding-bottom:6px;scrollbar-width:thin}.tabs::-webkit-scrollbar{height:4px}.tabs::-webkit-scrollbar-thumb{background:#b8d5fa;border-radius:4px}.tabs button{scroll-snap-align:start;flex-shrink:0!important}.kpi[data-card="decisions"]{grid-column:1 / -1}.banner{align-items:flex-start!important;flex-wrap:wrap!important;gap:6px 10px!important}.banner div:nth-child(2){flex:1 1 220px;min-width:0}.banner #coverageOpen{display:inline-flex!important;align-self:flex-start;margin-left:30px!important;margin-top:0!important;padding:2px 0!important}.downloads{width:100%}.downloads .delicate-scope-inline{flex:1 1 180px}.downloads .download-main{flex:1 1 180px}}
 @media(max-width:700px){.review-grid,.doc-meta-box{grid-template-columns:1fr}.sel-grid{grid-template-columns:minmax(96px,112px) minmax(0,1fr)}}
@@ -341,7 +359,7 @@ body{background:#f3f7fb!important}
 
     dialogs_auth_review = """
 <dialog id="loginDialog" aria-labelledby="loginDialogTitle"><div class="dialog-head"><div><span class="eyebrow">ACESSO RESTRITO · GEDIV / SEAD-PB</span><h2 id="loginDialogTitle">Autenticação da gerência</h2></div><button type="button" id="closeLoginTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="loginForm" class="dialog-body review-form" method="dialog"><p style="margin:0;font-size:11px;color:#405d79">O acesso aos nomes, matrículas, processos, anotações preliminares, PDFs do acervo e ações de revisão documental é exclusivo para contas autorizadas da gerência (sessão via cookie <code>HttpOnly</code>).</p><div class="review-grid"><label>Usuário da conta<input type="text" id="loginUser" autocomplete="username" placeholder="Ex.: revisor.gediv"></label><label>Senha<input type="password" id="loginPass" autocomplete="current-password" placeholder="Senha da conta"></label></div><details><summary style="cursor:pointer;font-weight:600;color:#175ca8;font-size:11px">Usar credencial técnica legada (somente memória · sem privilégio admin)</summary><label style="margin-top:8px">Token técnico de sessão / gerência<input type="password" id="loginTokenInput" autocomplete="off" placeholder="Cole o token técnico da gerência"></label></details><p id="loginStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeLoginBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitLoginBtn">Entrar e carregar dados</button></div></form></dialog>
-<dialog id="reviewDialog" aria-labelledby="reviewDialogTitle"><div class="dialog-head"><div><span class="eyebrow">REVISÃO DOCUMENTAL AUDITADA</span><h2 id="reviewDialogTitle">Conferir ou revisar registro</h2></div><button type="button" id="closeReviewTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="reviewForm" class="dialog-body review-form" method="dialog"><input type="hidden" id="revTargetType" value="decisao"><input type="hidden" id="revTargetId" value=""><div id="revContextBox" class="reconcile-note" style="margin:0"></div><div class="review-grid"><label>Decisão de revisão<select id="revDecision"><option value="CONFERIR">CONFERIR (homologar após leitura do PDF)</option><option value="REJEITAR">REJEITAR (excluir dos indicadores)</option><option value="REABRIR">REABRIR (retornar para fila pendente)</option></select></label><label>Responsável pela revisão<input type="text" id="revAuthor" placeholder="Nome do revisor (automático em conta nominal)"></label></div><div id="revEventBox" hidden><label>ID do ato original a vincular (20 caracteres hexadecimais)<input type="text" id="revOriginalActId" placeholder="Obrigatório para VINCULAR evento modificador"></label></div><div id="revActClassBox" hidden><div class="review-grid" style="margin-top:4px"><label>Eixo temático<select id="revActEixo"><option value="PROGRESSAO">PROGRESSAO · Progressão Funcional</option><option value="TEMPO_SERVICO">TEMPO_SERVICO · Tempo de Serviço</option></select></label><label>Modalidade (Progressão)<select id="revActModalidade"><option value="">Não aplicável / Manter</option><option value="VERTICAL">VERTICAL</option><option value="HORIZONTAL">HORIZONTAL</option></select></label><label>Grupo PCCR (Progressão)<input type="text" id="revActGrupo" placeholder="Ex.: MAG, GAJ, ANS, SSA, AST..."></label><label>Assunto (Tempo de Serviço)<select id="revActSubcat"><option value="">Não aplicável / Manter</option><option value="TS-01">TS-01 · Anotação</option><option value="TS-02">TS-02 · Desaverbação</option><option value="TS-03">TS-03 · Licença Interesse Particular</option><option value="TS-04">TS-04 · Desistência de Licença</option><option value="TS-05">TS-05 · Licença Especial</option><option value="TS-06">TS-06 · Conversão Licença Especial</option><option value="TS-07">TS-07 · Conversão de Férias</option></select></label></div></div><details id="revCorrectionsDetails"><summary style="cursor:pointer;font-weight:700;color:#175ca8;font-size:11px">Corrigir campos extraídos (preserva valor original na trilha de auditoria)</summary><div class="review-grid" style="margin-top:8px"><label>Processo<input type="text" id="revCorrProcess"></label><label>Matrícula<input type="text" id="revCorrRegistration"></label><label>Servidor<input type="text" id="revCorrServer"></label><label>Cargo<input type="text" id="revCorrCargo"></label><label>Lotação / Órgão<input type="text" id="revCorrLotacao"></label><label>Resultado<select id="revCorrResult"><option value="">Manter atual</option><option value="DEFERIDO">DEFERIDO</option><option value="INDEFERIDO">INDEFERIDO</option><option value="NAO_INFORMADO">NAO_INFORMADO</option></select></label><label>Classe origem (A–F)<input type="text" id="revCorrClassFrom" maxlength="1" placeholder="A..F"></label><label>Classe destino (A–F)<input type="text" id="revCorrClassTo" maxlength="1" placeholder="A..F"></label></div></details><label class="check-row"><input type="checkbox" id="revConfirmSource"><span>Declaro que consultei o PDF oficial do Diário Oficial na página indicada (<code>confirma_fonte</code>).</span></label><label class="check-row" id="revConfirmLinkRow"><input type="checkbox" id="revConfirmLink"><span>Confirmo o vínculo institucional deste ato com a GEDIV/SEAD-PB, mesmo quando a sigla não consta expressamente no cabeçalho (<code>confirma_vinculo</code>).</span></label><label>Justificativa técnica (obrigatória · mínimo 5 caracteres)<textarea id="revJustification" placeholder="Descreva a verificação realizada no PDF oficial do DOE..."></textarea></label><p id="revStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeReviewBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitReviewBtn">Registrar decisão auditada</button></div></form></dialog>
+<dialog id="reviewDialog" aria-labelledby="reviewDialogTitle"><div class="dialog-head"><div><span class="eyebrow">REVISÃO DOCUMENTAL AUDITADA</span><h2 id="reviewDialogTitle">Conferir ou revisar registro</h2></div><button type="button" id="closeReviewTop" class="icon-btn" aria-label="Fechar janela">×</button></div><form id="reviewForm" class="dialog-body review-form" method="dialog"><input type="hidden" id="revTargetType" value="decisao"><input type="hidden" id="revTargetId" value=""><div id="revContextBox" class="reconcile-note" style="margin:0"></div><div class="review-grid"><label>Decisão de revisão<select id="revDecision"><option value="CONFERIR">CONFERIR (homologar após leitura do PDF)</option><option value="REJEITAR">REJEITAR (excluir dos indicadores)</option><option value="REABRIR">REABRIR (retornar para fila pendente)</option></select></label><label>Responsável pela revisão<input type="text" id="revAuthor" placeholder="Nome do revisor (automático em conta nominal)"></label></div><div id="revEventBox" hidden><label>ID do ato original a vincular (20 caracteres hexadecimais)<input type="text" id="revOriginalActId" placeholder="Obrigatório para VINCULAR evento modificador"></label></div><div id="revActClassBox" hidden><div class="review-grid" style="margin-top:4px"><label>Eixo temático<select id="revActEixo"><option value="PROGRESSAO">PROGRESSAO · Progressão Funcional</option><option value="TEMPO_SERVICO">TEMPO_SERVICO · Tempo de Serviço</option></select></label><label>Modalidade (Progressão)<select id="revActModalidade"><option value="">Não aplicável / Manter</option><option value="VERTICAL">VERTICAL</option><option value="HORIZONTAL">HORIZONTAL</option></select></label><label>Grupo PCCR (Progressão)<input type="text" id="revActGrupo" placeholder="Ex.: MAG, GAJ, ANS, SSA, AST..."></label><label>Assunto (Tempo de Serviço)<select id="revActSubcat"><option value="">Não aplicável / Manter</option><option value="TS-01">TS-01 · Anotação</option><option value="TS-02">TS-02 · Desaverbação</option><option value="TS-03">TS-03 · Licença Interesse Particular</option><option value="TS-04">TS-04 · Desistência de Licença</option><option value="TS-05">TS-05 · Licença Especial</option><option value="TS-06">TS-06 · Conversão Licença Especial</option><option value="TS-07">TS-07 · Conversão de Férias</option><option value="ABONO_PERMANENCIA">ABONO_PERMANENCIA · Abono de Permanência</option></select></label></div></div><details id="revCorrectionsDetails"><summary style="cursor:pointer;font-weight:700;color:#175ca8;font-size:11px">Corrigir campos extraídos (preserva valor original na trilha de auditoria)</summary><div class="review-grid" style="margin-top:8px"><label>Processo<input type="text" id="revCorrProcess"></label><label>Matrícula<input type="text" id="revCorrRegistration"></label><label>Servidor<input type="text" id="revCorrServer"></label><label>Cargo<input type="text" id="revCorrCargo"></label><label>Lotação / Órgão<input type="text" id="revCorrLotacao"></label><label>Resultado<select id="revCorrResult"><option value="">Manter atual</option><option value="DEFERIDO">DEFERIDO</option><option value="INDEFERIDO">INDEFERIDO</option><option value="NAO_INFORMADO">NAO_INFORMADO</option></select></label><label>Classe origem (A–F)<input type="text" id="revCorrClassFrom" maxlength="1" placeholder="A..F"></label><label>Classe destino (A–F)<input type="text" id="revCorrClassTo" maxlength="1" placeholder="A..F"></label></div></details><label class="check-row"><input type="checkbox" id="revConfirmSource"><span>Declaro que consultei o PDF oficial do Diário Oficial na página indicada (<code>confirma_fonte</code>).</span></label><label class="check-row" id="revConfirmLinkRow"><input type="checkbox" id="revConfirmLink"><span>Confirmo o vínculo institucional deste ato com a GEDIV/SEAD-PB, mesmo quando a sigla não consta expressamente no cabeçalho (<code>confirma_vinculo</code>).</span></label><label>Justificativa técnica (obrigatória · mínimo 5 caracteres)<textarea id="revJustification" placeholder="Descreva a verificação realizada no PDF oficial do DOE..."></textarea></label><p id="revStatus" class="review-status" role="status"></p><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="closeReviewBtn" class="btn-secondary">Cancelar</button><button type="submit" id="submitReviewBtn">Registrar decisão auditada</button></div></form></dialog>
 <dialog id="conflictsDialog" class="dialog-wide" aria-labelledby="conflictsDialogTitle"><div class="dialog-head"><div><span class="eyebrow">RECONCILIAÇÃO E INTEGRIDADE · D2</span><h2 id="conflictsDialogTitle">Conflitos de leitura e vínculos órfãos</h2></div><button type="button" id="closeConflictsTop" class="icon-btn" aria-label="Fechar janela">×</button></div><div class="dialog-body review-form"><div id="conflictsSummaryBox" class="reconcile-note" style="margin:0">Carregando diagnóstico de conflitos…</div><div class="review-grid"><label>Justificativa para resolução de conflito (mín. 5 caracteres)<input type="text" id="conflictJustificationInput" placeholder="Ex.: Conferido no PDF oficial da edição"></label><label class="check-row" style="align-self:end"><input type="checkbox" id="conflictConfirmSourceInput"><span>Confirmo leitura do PDF oficial (<code>confirma_fonte</code>)</span></label></div><p id="conflictsStatus" class="review-status" role="status"></p><div id="conflictsTableWrap" class="table-scroll"></div><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="refreshConflictsBtn" class="btn-secondary">↻ Atualizar lista</button><button type="button" id="closeConflictsBtn">Fechar</button></div></div></dialog>
 <dialog id="auditDialog" class="dialog-wide" aria-labelledby="auditDialogTitle"><div class="dialog-head"><div><span class="eyebrow">GOVERNANÇA E RASTREABILIDADE · D3</span><h2 id="auditDialogTitle">Trilha de auditoria e histórico</h2></div><button type="button" id="closeAuditTop" class="icon-btn" aria-label="Fechar janela">×</button></div><div class="dialog-body review-form"><div id="auditScopeNote" class="reconcile-note" style="margin:0">Consultando trilha de auditoria…</div><div id="auditAdminActions" hidden><button type="button" id="publishPublicSnapshotBtn" class="btn-secondary">Publicar snapshot público controlado</button><span id="publishSnapshotStatus" style="margin-left:8px;font-size:11px;color:#175a4e;font-weight:600"></span></div><div id="auditTableWrap" class="table-scroll"></div><div class="dialog-footer" style="padding:12px 0 0"><button type="button" id="refreshAuditBtn" class="btn-secondary">↻ Atualizar trilha</button><button type="button" id="closeAuditBtn">Fechar</button></div></div></dialog>
 <dialog id="docModal" class="doc-modal" aria-labelledby="docModalTitle"><div class="doc-modal-shell"><div class="doc-modal-top"><span id="docModalId" class="doc-modal-id">Registro documental</span><button type="button" id="closeDocModal" class="doc-close-btn" aria-label="Fechar janela documental">×</button></div><div id="docModalBody" class="doc-modal-body"></div><div id="docModalFoot" class="doc-modal-foot"></div></div></dialog>
@@ -1043,7 +1061,7 @@ function timeline(rows){
  $('#serviceFilters').innerHTML=data.categories.map(([id,label])=>{const count=tempoRows.filter(r=>r.category===id).length,active=S.category.includes(id);return `<button data-cat="${id}" class="${active?'active':''} ${count?'':'is-zero'}" aria-pressed="${active}" title="${esc(label)} (${count})"><span class="svc-main"><i></i><span>${esc(label)}</span></span><span class="svc-count">${count}</span></button>`;}).join('');"""
     new_sync_cats = """ const mNoCat=window.GEDIV_MODEL.dashboardModel(data,{...S,category:[],card:'',groupNames}).original;
  const tempoRows=mNoCat.filter(r=>r.axis==='tempo');
- const tsCats=data.categories.filter(([id])=>id!=='ABONO_PERMANENCIA');
+ const tsCats=data.categories.slice();
  const semSubCnt=tempoRows.filter(r=>!r.category).length;
  const allSvcCats=semSubCnt||S.category.includes('SEM_SUBCATEGORIA')?tsCats.concat([['SEM_SUBCATEGORIA','Subcategoria pendente de conferência']]):tsCats;
  $('#serviceFilters').innerHTML=allSvcCats.map(([id,label])=>{const count=id==='SEM_SUBCATEGORIA'?semSubCnt:tempoRows.filter(r=>r.category===id).length,active=S.category.includes(id);return `<button data-cat="${id}" class="${active?'active':''} ${count?'':'is-zero'}" aria-pressed="${active}" title="${esc(label)} (${count})"><span class="svc-main"><i></i><span>${esc(label)}</span></span><span class="svc-count">${count}</span></button>`;}).join('');"""
@@ -1118,8 +1136,8 @@ function timeline(rows){
   const bs=data.backend.series||{},bi=data.backend.indicadores||{};
   let list=[],title='Publicações por assunto',subtitle='Agregados públicos protegidos (limiar ≥ 5)';
   if(S.view==='tempo'||S.axis==='tempo'){
-   title='Distribuição por serviço';subtitle='Serviços em Tempo de Serviço (limiar ≥ 5)';
-   const colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#94a3b8'];
+   title='Distribuição por serviço';subtitle='Grupos de Tempo de Serviço, incluindo Abono de Permanência (limiar ≥ 5)';
+   const colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#368cc2','#94a3b8'];
    list=(bs.por_subcategoria||[]).map((x,i)=>({key:x.codigo,label:x.nome,color:colors[i%colors.length],kind:'category',value:Number(x.total||0)})).filter(x=>x.value>0);
   }else if(S.view==='vertical'||S.view==='horizontal'){
    title='Distribuição por grupo';subtitle='Participação dos grupos no agregado público (limiar ≥ 5)';
@@ -1148,9 +1166,9 @@ function timeline(rows){
   const niVal=rows.filter(r=>r.merit!=='deferido'&&r.merit!=='indeferido').length;
   if(niVal>0)list.push({label:'Não informado',key:'outro',color:'#e0ad40',kind:'merit',value:niVal});
  }else if(S.axis==='tempo'||S.view==='tempo'){
-  title='Distribuição por serviço';subtitle='Participação dos serviços em Tempo de Serviço';
-  let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#94a3b8'];
-  const tsCats=data.categories.filter(([k])=>k!=='ABONO_PERMANENCIA');
+  title='Distribuição por serviço';subtitle='Participação dos grupos de Tempo de Serviço (incluindo Abono de Permanência)';
+  let colors=['#f49b45','#d36a44','#e0ad40','#d2866d','#bf6858','#e8be79','#a879bb','#368cc2','#94a3b8'];
+  const tsCats=data.categories.slice();
   list=tsCats.map(([key,label],i)=>({key,label,color:colors[i%colors.length],kind:'category',value:rows.filter(r=>r.category===key).length}));
   const semSub=rows.filter(r=>r.axis==='tempo'&&!r.category).length;
   if(semSub>0)list.push({key:'SEM_SUBCATEGORIA',label:'Subcategoria pendente',color:'#94a3b8',kind:'category',value:semSub});
@@ -1190,7 +1208,7 @@ function timeline(rows){
   }).join('');
   return;
  }
- let tempo=rows.filter(r=>r.axis==='tempo'),totalTempo=tempo.length,tsCats=data.categories.filter(([id])=>id!=='ABONO_PERMANENCIA');
+ let tempo=rows.filter(r=>r.axis==='tempo'),totalTempo=tempo.length,tsCats=data.categories.slice();
  const semSubItems=tempo.filter(r=>!r.category);
  const catsVis=semSubItems.length||S.category.includes('SEM_SUBCATEGORIA')?tsCats.concat([['SEM_SUBCATEGORIA','Subcategoria pendente de conferência']]):tsCats;
  let max=Math.max(1,...catsVis.map(([id])=>(id==='SEM_SUBCATEGORIA'?semSubItems:tempo.filter(r=>r.category===id)).length)),isPct=metricMode.service==='pct',den=isPct?Math.max(1,totalTempo):max;
@@ -1295,6 +1313,105 @@ function timeline(rows){
     assert old_card_chip in html
     html = html.replace(old_card_chip, new_card_chip, 1)
 
+    # 5c-ter. Incluir cartão "Resumo comparativo mensal" na aba Histórico (0 cores novas)
+    old_results_section = '   <section class="card"><div class="card-heading"><div><h3>Resultados por área</h3>'
+    new_results_section = (
+        '   <section id="monthlyCompareCard" class="card mc-card" hidden aria-labelledby="mcTitle">'
+        '<div class="card-heading"><div><h3 id="mcTitle">Resumo comparativo mensal</h3>'
+        '<p id="mcSubtitle">Comparação entre os dois últimos meses com dados · eixos e grupos de Tempo de Serviço (incluindo Abono de Permanência)</p></div>'
+        '<span class="chart-tag" id="mcPeriodTag">Histórico</span></div>'
+        '<div id="monthlyCompareBody"></div></section>\n'
+        '   <section class="card"><div class="card-heading"><div><h3>Resultados por área</h3>'
+    )
+    assert old_results_section in html
+    html = html.replace(old_results_section, new_results_section, 1)
+
+    old_render_call = "function render(){renderMeta();sync();let m=model();kpis(m.metrics);timeline(m.rows);axisChart(m.rows);resultsChart(m.rows);serviceBars(m.rows);groupChart(m.rows);levelChart();records(m.rows);updatePendingCard(m);activeFilters();}"
+    new_render_call = """function fmtMonthYm(ym){
+ if(!ym||!/^\\d{4}-\\d{2}$/.test(ym))return ym||'—';
+ const [y,m]=ym.split('-').map(Number);
+ return `${MONTH_SHORT[(m||1)-1]||m}/${y}`;
+}
+function fmtDeltaBadge(vAbs,vPct){
+ if(vAbs==null)return '<span class="mc-delta is-flat">protegido / indisponível</span>';
+ const sign=vAbs>0?'+':'';
+ const cls=vAbs>0?'is-up':vAbs<0?'is-down':'is-flat';
+ const pctPart=vPct!=null?` (${sign}${String(vPct).replace('.',',')}%)`:'';
+ return `<span class="mc-delta ${cls}">${sign}${vAbs}${pctPart}</span>`;
+}
+function buildClientMonthlyCompare(rows){
+ const byM={};
+ for(const r of (rows||[])){
+  const d=String(r.date||'');
+  if(!/^\\d{4}-\\d{2}/.test(d))continue;
+  const ym=d.slice(0,7);
+  if(!byM[ym])byM[ym]=[];
+  byM[ym].push(r);
+ }
+ const meses=Object.keys(byM).sort();
+ if(meses.length<2)return {disponivel:false,motivo:'menos_de_dois_meses'};
+ const mAnt=meses[meses.length-2],mAtu=meses[meses.length-1];
+ const lAnt=byM[mAnt],lAtu=byM[mAtu];
+ const vPct=(a,b)=>a>0?Math.round(1000*(b-a)/a)/10:null;
+ const countAxis=(arr,k)=>arr.filter(r=>k==='TEMPO_SERVICO'?r.axis==='tempo':(r.axis==='progressao'&&r.modality===(k==='VERTICAL'?'Vertical':'Horizontal'))).length;
+ const por_eixo=[['VERTICAL','Progressão Vertical'],['HORIZONTAL','Progressão Horizontal'],['TEMPO_SERVICO','Tempo de Serviço']].map(([chave,rotulo])=>{
+  const anterior=countAxis(lAnt,chave),atual=countAxis(lAtu,chave);
+  return {chave,rotulo,anterior,atual,variacao_absoluta:atual-anterior,variacao_percentual:vPct(anterior,atual)};
+ });
+ const tAll=(rows||[]).filter(r=>r.axis==='tempo'),tAnt=lAnt.filter(r=>r.axis==='tempo'),tAtu=lAtu.filter(r=>r.axis==='tempo');
+ const por_grupo_tempo=(data.categories||[]).map(([codigo,nome])=>{
+  const anterior=tAnt.filter(r=>r.category===codigo).length;
+  const atual=tAtu.filter(r=>r.category===codigo).length;
+  const total_periodo=tAll.filter(r=>r.category===codigo).length;
+  return {codigo,nome,anterior,atual,variacao_absoluta:atual-anterior,variacao_percentual:vPct(anterior,atual),total_periodo,participacao_tempo_pct:tAll.length?Math.round(1000*total_periodo/tAll.length)/10:null};
+ });
+ return {
+  disponivel:true,mes_anterior:mAnt,mes_atual:mAtu,
+  resumo:{anterior:lAnt.length,atual:lAtu.length,variacao_absoluta:lAtu.length-lAnt.length,variacao_percentual:vPct(lAnt.length,lAtu.length)},
+  por_eixo,por_grupo_tempo
+ };
+}
+function monthlyCompareCard(rows){
+ const card=$('#monthlyCompareCard'),body=$('#monthlyCompareBody'),tag=$('#mcPeriodTag');
+ if(!card||!body)return;
+ if(S.view!=='historico'){card.hidden=true;return;}
+ card.hidden=false;
+ const pub=isPublicAgg();
+ const cm=pub?(data.backend?.series?.comparativo_mensal||null):buildClientMonthlyCompare(rows);
+ if(!cm||!cm.disponivel){
+  if(tag)tag.textContent=pub?'Agregado público (≥ 5)':'Período insuficiente';
+  body.innerHTML=`<div class="empty-small">${pub?'Menos de dois meses acima do limiar público (≥ 5) disponíveis para comparação mensal.':'Selecione um recorte com pelo menos dois meses de publicações para comparar a evolução mensal.'}</div>`;
+  return;
+ }
+ const antLbl=fmtMonthYm(cm.mes_anterior),atuLbl=fmtMonthYm(cm.mes_atual);
+ if(tag)tag.textContent=`${antLbl} → ${atuLbl}${pub?' · público (≥ 5)':''}`;
+ const fmtN=v=>v==null?'suprimido (< 5)':String(v);
+ const fmtShare=v=>v==null?'—':(String(v).replace('.',',')+'%');
+ const res=cm.resumo||{};
+ const eixoRows=(cm.por_eixo||[]).map(x=>`<tr><td><b>${esc(x.rotulo)}</b></td><td>${esc(fmtN(x.anterior))}</td><td>${esc(fmtN(x.atual))}</td><td>${fmtDeltaBadge(x.variacao_absoluta,x.variacao_percentual)}</td></tr>`).join('');
+ const grpRows=(cm.por_grupo_tempo||[]).map(g=>`<tr class="${g.codigo==='ABONO_PERMANENCIA'?'is-abono':''}"><td>${esc(g.nome)}</td><td>${esc(fmtN(g.anterior))}</td><td>${esc(fmtN(g.atual))}</td><td>${esc(fmtN(g.total_periodo))}</td><td>${esc(fmtShare(g.participacao_tempo_pct))}</td></tr>`).join('');
+ body.innerHTML=`
+  <div class="mc-grid">
+   <div class="mc-stat"><small>Mês anterior (${esc(antLbl)})</small><b>${esc(fmtN(res.anterior))}</b><span>decisões no recorte</span></div>
+   <div class="mc-stat"><small>Mês mais recente (${esc(atuLbl)})</small><b>${esc(fmtN(res.atual))}</b><span>decisões no recorte</span></div>
+   <div class="mc-stat"><small>Variação mensal</small><div>${fmtDeltaBadge(res.variacao_absoluta,res.variacao_percentual)}</div><span>${pub?'calculada apenas com meses ≥ 5':'comparação direta entre os dois últimos meses'}</span></div>
+  </div>
+  <div class="mc-cols">
+   <div>
+    <h4 class="mc-subhd">Distribuição por eixo</h4>
+    <div class="table-scroll"><table class="mc-tbl"><thead><tr><th>Eixo</th><th>${esc(antLbl)}</th><th>${esc(atuLbl)}</th><th>Variação</th></tr></thead><tbody>${eixoRows}</tbody></table></div>
+   </div>
+   <div>
+    <h4 class="mc-subhd">Tempo de Serviço · participação dos grupos</h4>
+    <div class="table-scroll"><table class="mc-tbl"><thead><tr><th>Grupo</th><th>${esc(antLbl)}</th><th>${esc(atuLbl)}</th><th>Período</th><th>% Eixo</th></tr></thead><tbody>${grpRows}</tbody></table></div>
+   </div>
+  </div>
+  <div class="mc-note"><b>Nota metodológica:</b> a ausência de registros na base não representa ausência de concessões administrativas; os indicadores quantitativos não constituem conclusão jurídica.${pub?' Células com menos de 5 decisões/servidores permanecem suprimidas e sem cálculo de variação.':''}</div>`;
+}
+function render(){renderMeta();sync();let m=model();kpis(m.metrics);timeline(m.rows);monthlyCompareCard(m.rows);axisChart(m.rows);resultsChart(m.rows);serviceBars(m.rows);groupChart(m.rows);levelChart();records(m.rows);updatePendingCard(m);activeFilters();}"""
+    assert old_render_call in html
+    html = html.replace(old_render_call, new_render_call, 1)
+
     # 5c-bis. Atualizar levelChart() para separar claramente níveis A–F efetivados e os 4 motivos sem nível A–F (público e autenticado)
     old_level_full = """function levelChart(){
  const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;
@@ -1374,7 +1491,7 @@ function exportCsv(){exp.download(exp.csv(decisionRows()),'text/csv;charset=utf-
  else if(S.modality==='Horizontal')q.set('modalidade','HORIZONTAL');
  if(S.group&&!S.group.startsWith('PENDENTE:'))q.set('grupo',S.group);
  if(S.level)q.set('nivel',S.level==='NI'?'NAO_IDENTIFICADO':S.level);
- const cats=(S.category||[]).filter(c=>/^TS-0[1-7]$/.test(c));
+ const cats=(S.category||[]).filter(c=>/^(?:TS-0[1-7]|ABONO_PERMANENCIA|SEM_SUBCATEGORIA)$/.test(c));
  if(cats.length)q.set('subcategoria',cats.join(','));
  if(S.merit==='deferido')q.set('resultado','DEFERIDO');
  else if(S.merit==='indeferido')q.set('resultado','INDEFERIDO');
@@ -1480,7 +1597,7 @@ function exportCsv(){
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Situação / Nível</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbSit||'<tr><td colspan="4">Sem agregados verticais.</td></tr>'}</tbody></table></div>
   <h3 style="margin:14px 0 6px;font-size:13px">Progressão por grupo (≥ 5)</h3>
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Grupo</th><th>Total</th><th>Vertical</th><th>Horizontal</th></tr></thead><tbody>${tbGrp||'<tr><td colspan="4">Nenhum grupo acima do limiar público.</td></tr>'}</tbody></table></div>
-  <h3 style="margin:14px 0 6px;font-size:13px">Tempo de Serviço (TS-01 a TS-07)</h3>
+  <h3 style="margin:14px 0 6px;font-size:13px">Tempo de Serviço (TS-01 a TS-07 e Abono de Permanência)</h3>
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Serviço</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbSub||'<tr><td colspan="4">Sem dados.</td></tr>'}</tbody></table></div>
   <h3 style="margin:14px 0 6px;font-size:13px">Série mensal</h3>
   <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Mês</th><th>Total</th><th>Vertical</th><th>Horizontal</th><th>Tempo</th></tr></thead><tbody>${tbMes||'<tr><td colspan="5">Sem série mensal.</td></tr>'}</tbody></table></div>`;

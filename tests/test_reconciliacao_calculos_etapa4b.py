@@ -692,14 +692,14 @@ class TesteReconciliacaoEtapa4B(unittest.TestCase):
         diag_ger = indicadores.diagnostico_versao_regras(self.banco, perfil=GER)
         self.assertTrue(diag_ger["incompativel"])
         self.assertEqual(diag_ger["versoes_no_banco"], ["gediv-2026.11.19-1"])
-        self.assertEqual(diag_ger["decisoes_afetadas"], 2)
+        self.assertEqual(diag_ger["decisoes_afetadas"], 3)
         self.assertIn("Incompatibilidade de versão de regras", diag_ger["mensagem"])
 
         p_inc = indicadores.painel(self.banco, {"escopo": "pendente"}, GER)
         cob_inc = p_inc["meta"]["cobertura"]
         self.assertTrue(p_inc["meta"]["incompatibilidade_versao_regras"])
         self.assertTrue(cob_inc["incompatibilidade_versao_regras"])
-        self.assertEqual(cob_inc["versao_regras_diagnostico"]["decisoes_afetadas"], 2)
+        self.assertEqual(cob_inc["versao_regras_diagnostico"]["decisoes_afetadas"], 3)
         self.assertIn("Incompatibilidade de versão de regras", cob_inc["parecer"])
         self.assertEqual(p_inc["indicadores"]["decisoes"], 0)
 

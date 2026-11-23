@@ -12,14 +12,15 @@ def um(texto, **extras):
 
 
 class TesteCatalogo(unittest.TestCase):
-    def test_exatamente_dois_eixos_duas_modalidades_e_sete_subcategorias(self):
+    def test_exatamente_dois_eixos_duas_modalidades_e_grupos_tempo_servico(self):
         self.assertEqual(list(C.EIXOS), ["PROGRESSAO", "TEMPO_SERVICO"])
         self.assertEqual(list(C.MODALIDADES), ["HORIZONTAL", "VERTICAL"])
-        self.assertEqual([s.codigo for s in C.SUBCATEGORIAS], [f"TS-0{i}" for i in range(1, 8)])
+        self.assertEqual([s.codigo for s in C.SUBCATEGORIAS], [f"TS-0{i}" for i in range(1, 8)] + ["ABONO_PERMANENCIA"])
         self.assertEqual([s.nome for s in C.SUBCATEGORIAS], [
             "Anotação de Tempo de Serviço/Contribuição", "Desaverbação de Tempo de Serviço",
             "Licença para Tratar de Interesses Particulares", "Desistência de Licença de Interesse Particular",
-            "Licença Especial", "Conversão de Licença Especial em Tempo de Serviço", "Conversão de Férias"])
+            "Licença Especial", "Conversão de Licença Especial em Tempo de Serviço", "Conversão de Férias",
+            "Abono de Permanência"])
 
     def test_os_dezesseis_grupos_do_documento_oficial_na_ordem_do_documento(self):
         self.assertEqual([g.codigo for g in C.GRUPOS], ["MAG", "SSA", "GAJ", "FAP", "AST", "ANS", "ESP", "DPS",
@@ -45,7 +46,9 @@ class TesteCatalogo(unittest.TestCase):
         for texto, esperado in casos.items():
             with self.subTest(texto=texto):
                 self.assertEqual(C.identificar_subcategoria(texto), esperado)
-        self.assertIsNone(C.identificar_subcategoria("ABONO DE PERMANENCIA"))                 # não existe oitava categoria
+        self.assertEqual(C.identificar_subcategoria("ABONO DE PERMANENCIA"), "ABONO_PERMANENCIA")
+        self.assertIsNone(C.identificar_subcategoria("ABONO NATALINO"))
+        self.assertIsNone(C.identificar_subcategoria("CERTIDAO DE TEMPO DE SERVICO"))
 
     def test_condicao_e_normalizacao_da_ligadura(self):
         self.assertEqual(C.identificar_condicao("PROGRESSAO VERTICAL CONDICIONAL"), "CONDICIONAL")
@@ -111,11 +114,18 @@ class TesteClassificador(unittest.TestCase):
         r = um(T.OUTRA_SECRETARIA)
         self.assertEqual((r.atos, r.decisoes, r.eventos, r.outras), ([], [], [], []))
 
-    def test_tema_gediv_fora_dos_dois_eixos_nao_vira_decisao(self):
+    def test_abono_permanencia_classificado_no_eixo_tempo_servico_e_candidato_fica_fora(self):
         r = um(T.ABONO)
-        self.assertEqual((r.atos, r.decisoes), ([], []))
-        self.assertEqual(r.outras[0].tipo, "TEMA_FORA_DOS_EIXOS")
-        self.assertIn("Abono de Permanência", r.outras[0].titulo)
+        self.assertEqual(len(r.atos), 1)
+        self.assertEqual((r.atos[0].eixo, r.atos[0].subcategoria, r.atos[0].modalidade, r.atos[0].grupo),
+                         (C.TEMPO, "ABONO_PERMANENCIA", None, None))
+        self.assertEqual(len(r.decisoes), 1)
+        # Conceito candidato não homologado (ex.: Certidão de Tempo) continua em TEMA_FORA_DOS_EIXOS
+        certidao = T.ABONO.replace("ABONO DE PERMANÊNCIA", "CERTIDÃO DE TEMPO DE CONTRIBUIÇÃO")
+        r_cand = um(certidao)
+        self.assertEqual((r_cand.atos, r_cand.decisoes), ([], []))
+        self.assertEqual(r_cand.outras[0].tipo, "TEMA_FORA_DOS_EIXOS")
+        self.assertIn("Certidão de Tempo", r_cand.outras[0].titulo)
 
     def test_portaria_que_torna_sem_efeito_vira_evento_com_as_referencias(self):
         r = um(T.PORTARIA_SEM_EFEITO)

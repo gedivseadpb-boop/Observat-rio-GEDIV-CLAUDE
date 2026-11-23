@@ -197,7 +197,7 @@ class TesteIndicadores(Base):
         self.conferir_tudo()
         s = self.painel()["series"]
         self.assertEqual([(x["chave"], x["total"]) for x in s["por_assunto"]], [("VERTICAL", 1), ("HORIZONTAL", 4), ("TEMPO_SERVICO", 3)])
-        self.assertEqual([x["codigo"] for x in s["por_subcategoria"]], [f"TS-0{i}" for i in range(1, 8)])
+        self.assertEqual([x["codigo"] for x in s["por_subcategoria"]], [f"TS-0{i}" for i in range(1, 8)] + ["ABONO_PERMANENCIA"])
         self.assertEqual({x["codigo"]: x["situacao"] for x in s["por_subcategoria"] if not x["total"]}["TS-07"], "cobertura pendente")
         self.assertEqual({x["grupo"]: x["total"] for x in s["por_grupo"]}, {"MAG": 1, "GAJ": 3, "AST": 1})
         self.assertEqual(sum(x["total"] for x in s["por_data"]), 8)
@@ -210,7 +210,8 @@ class TesteIndicadores(Base):
         self.assertIsNone(linhas["905/2026"]["url_oficial"])           # importação manual: endereço não é inventado
 
     def test_outras_publicacoes(self):
-        carregar(self.banco, "d", "2026-10-09", T.ABONO + "\n" + T.REPUBLICACAO)
+        certidao = T.ABONO.replace("ABONO DE PERMANÊNCIA", "CERTIDÃO DE TEMPO DE CONTRIBUIÇÃO")
+        carregar(self.banco, "d", "2026-10-09", certidao + "\n" + T.REPUBLICACAO)
         processo.classificar_pendentes(self.banco)
         tipos = sorted(o["tipo"] for o in indicadores.outras_publicacoes(self.banco, GER))
         self.assertEqual(tipos, ["REPUBLICADO_POR_INCORRECAO", "TEMA_FORA_DOS_EIXOS"])
@@ -325,7 +326,7 @@ class TesteAPI(Base):
 
     def test_catalogo_saude_outras_e_rota_inexistente(self):
         catalogo = json.loads(self.pedir("/api/catalogo")[2])
-        self.assertEqual((len(catalogo["eixos"]), len(catalogo["grupos"]), len(catalogo["subcategorias"])), (2, 16, 7))
+        self.assertEqual((len(catalogo["eixos"]), len(catalogo["grupos"]), len(catalogo["subcategorias"])), (2, 16, 8))
         self.assertEqual(json.loads(self.pedir("/api/saude")[2])["cobertura"]["completa"], False)
         self.assertEqual(self.pedir("/api/outras")[0], 401)
         self.assertEqual(self.pedir("/api/outras", "credencial-errada-0123456789")[0], 403)

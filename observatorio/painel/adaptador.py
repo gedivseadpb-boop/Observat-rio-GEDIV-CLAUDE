@@ -587,9 +587,7 @@ def projetar_para_dashboard_2910(painel_resp: dict, outras_resp: list[dict] | No
         "otherPublications": other_pubs_conv,
         "otherPublicationsSummary": outras_summary,
         "events": events_conv,
-        "categories": [[s.codigo, s.nome] for s in C.SUBCATEGORIAS] + [
-            ["ABONO_PERMANENCIA", "Abono de Permanência"],
-        ],
+        "categories": [[s.codigo, s.nome] for s in C.SUBCATEGORIAS],
         "groups": [[g.codigo, f"{g.codigo} · {g.nome}"] for g in C.GRUPOS] + [
             ["PENDENTE:TEC. ADM", EXPRESSOES_PENDENTES_CONFIRMACAO["TEC. ADM"][2]],
             ["PENDENTE:STF", EXPRESSOES_PENDENTES_CONFIRMACAO["STF"][2]],

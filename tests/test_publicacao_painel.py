@@ -91,7 +91,7 @@ class TestePublicacao(unittest.TestCase):
             self.assertNotIn(proibido, texto)
         self.assertNotIn("suprimidas", texto)
         self.assertEqual(len(d["catalogo"]["grupos"]), 16)
-        self.assertEqual(len(d["catalogo"]["subcategorias"]), 7)
+        self.assertEqual(len(d["catalogo"]["subcategorias"]), 8)
 
     def test_deduplica_edicao_nao_soma_bancos(self):
         antigo = self.banco([("MAG", 6)])
