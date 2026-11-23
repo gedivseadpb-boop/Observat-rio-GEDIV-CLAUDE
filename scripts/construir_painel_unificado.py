@@ -1110,6 +1110,31 @@ function exportCsv(){
     assert old_exports in html
     html = html.replace(old_exports, new_exports, 1)
 
+    old_export_png = "function exportPng(){let m=model();exp.png({title:views[S.view][1],filters:filterText(),metrics:m.metrics,records:exportRows(),coverage:data.meta.coverage});toast('Resumo da visão gerado.');}"
+    new_export_png = """function exportPng(){
+ if(isPublicAgg()){
+  const bi=data.backend.indicadores||{};
+  const pubM={processes:bi.processos??null,resenhas:bi.resenhas??null,decisions:bi.decisoes??null,deferidos:bi.deferidos??null,indeferidos:bi.indeferidos??null,refeitos:bi.refeitos??null,semEfeito:bi.sem_efeito??null};
+  exp.png({title:views[S.view][1]+' · Público',filters:'Consulta pública · agregados protegidos (limiar ≥ 5)',metrics:pubM,records:[],coverage:data.meta.coverage});
+  toast('Resumo visual público gerado (dados individuais protegidos).');return;
+ }
+ let m=model();exp.png({title:views[S.view][1],filters:filterText(),metrics:m.metrics,records:exportRows(),coverage:data.meta.coverage});toast('Resumo da visão gerado.');
+}"""
+    assert old_export_png in html
+    html = html.replace(old_export_png, new_export_png, 1)
+
+    old_print_fn = " function buildPrintReport(){let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—'))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';}"
+    new_print_fn = """ function buildPrintReport(){
+  if(isPublicAgg()){
+   const pa=data.backend.series?.por_assunto||[],fmtP=v=>v==null?'Suprimido (< 5)':String(v);
+   $('#printReport').innerHTML='<h3>Resumo público protegido (limiar ≥ 5)</h3><p>'+esc(data.meta.coverage||'')+'</p><table><thead><tr><th>Assunto</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>'+pa.map(x=>'<tr><td>'+esc(x.rotulo||x.chave)+'</td><td>'+esc(fmtP(x.total))+'</td><td>'+esc(fmtP(x.deferido))+'</td><td>'+esc(fmtP(x.indeferido))+'</td></tr>').join('')+'</tbody></table>';
+   return;
+  }
+  let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—'))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';
+ }"""
+    assert old_print_fn in html
+    html = html.replace(old_print_fn, new_print_fn, 1)
+
     # 5d-bis. Resumo tabular público em openFullTableModal() + UX de datas, filtros honestos no público, pieSelect e Voltar determinístico
     old_full_modal_start = """function openFullTableModal(){
  const allRows=model().rows;"""
