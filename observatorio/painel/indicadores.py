@@ -35,7 +35,39 @@ CARTOES = ("processos", "resenhas", "decisoes", "deferidos", "indeferidos", "ref
 ROTULOS = {"processos": "Total de processos", "resenhas": "Total de resenhas", "decisoes": "Total de decisões individuais",
            "deferidos": "Deferidos", "indeferidos": "Indeferidos", "refeitos": "Refeitos", "sem_efeito": "Tornados sem efeito"}
 NIVEIS_VERTICAIS = ("A", "B", "C", "D", "E", "F", "NAO_IDENTIFICADO")
+SITUACOES_SEM_NIVEL_VERTICAL = ("INDEFERIDO", "NAO_DETERMINADO", "INCONSISTENTE", "NAO_APLICA")
+SITUACOES_NIVEL_VERTICAL = ("A", "B", "C", "D", "E", "F", *SITUACOES_SEM_NIVEL_VERTICAL)
+FILTROS_NIVEL_ACEITOS = frozenset((*NIVEIS_VERTICAIS, *SITUACOES_SEM_NIVEL_VERTICAL))
 _CLASSES_VALIDAS = frozenset("ABCDEF")
+META_SITUACAO_NIVEL = {
+    "A": ("Nível A", "Progressão vertical deferida com nível de destino A efetivado."),
+    "B": ("Nível B", "Progressão vertical deferida com nível de destino B efetivado."),
+    "C": ("Nível C", "Progressão vertical deferida com nível de destino C efetivado."),
+    "D": ("Nível D", "Progressão vertical deferida com nível de destino D efetivado."),
+    "E": ("Nível E", "Progressão vertical deferida com nível de destino E efetivado."),
+    "F": ("Nível F", "Progressão vertical deferida com nível de destino F efetivado."),
+    "INDEFERIDO": ("Indeferidas (sem nível)", "Progressão vertical indeferida; não houve concessão nem efetivação de nível."),
+    "NAO_DETERMINADO": ("Deferidas sem nível", "Progressão vertical deferida cujo nível A–F não constava na publicação ou não pôde ser extraído."),
+    "INCONSISTENTE": ("Inconsistência A–F", "Sequência ou classe A–F inconsistente (ex.: regressão D → B, níveis iguais C → C ou letra fora de A–F)."),
+    "NAO_APLICA": ("A–F não se aplica", "Carreira ou publicação vertical estruturada fora da escala A–F (ex.: níveis romanos II → III ou numéricos)."),
+}
+_RE_TOKEN_NAO_AF = re.compile(r"^(?:N[ÍI]VEL\s*)?(?:I{1,3}|IV|V|VI{1,3}|IX|X|\d{1,2})$", re.IGNORECASE)
+_RE_EVOLUCAO_NAO_AF = re.compile(
+    r"(?:N[ÍI]VEL\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\d{1,2})|\b(?:I{1,3}|IV|V|VI{1,3}|IX|X)\s+(?:I{1,3}|IV|V|VI{1,3}|IX|X)\b|PADR[ÃA]O|REFER[ÊE]NCIA)",
+    re.IGNORECASE,
+)
+_RE_TRECHO_NIVEL_NUM = re.compile(
+    r"\b(N[ÍI]VEL\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\d{1,2}))\s+(?:PARA\s+|->\s*|→\s*)?(N[ÍI]VEL\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\d{1,2}))\b",
+    re.IGNORECASE,
+)
+_RE_TRECHO_ROMANO = re.compile(r"(?:^|[\s|\[])(I{1,3}|IV|V|VI{1,3}|IX|X)\s+(I{1,3}|IV|V|VI{1,3}|IX|X)\s*$")
+_RE_TRECHO_PADRAO = re.compile(
+    r"\b((?:PADR[ÃA]O|REFER[ÊE]NCIA)\s+[A-Z0-9-]+)\s+(?:PARA\s+|->\s*|→\s*)?((?:(?:PADR[ÃA]O|REFER[ÊE]NCIA)\s+)?[A-Z0-9-]+)\b",
+    re.IGNORECASE,
+)
+_RE_TRECHO_FORA_AF = re.compile(
+    r"(?:^|[\s|\[])(?:CLASSE\s+)?([A-F])\s+(?:PARA\s+|->\s*|→\s*)?([G-H])\s*$|(?:^|[\s|\[])(?:CLASSE\s+)?([G-H])\s+(?:PARA\s+|->\s*|→\s*)?([A-H])\s*$"
+)
 
 
 def _sem_acento(valor) -> str:
@@ -48,43 +80,189 @@ def _lista(valor) -> list[str]:
     return [v for v in (valor if isinstance(valor, (list, tuple)) else str(valor).split(",")) if v]
 
 
+def _ret_nivel(
+    *,
+    categoria: str | None,
+    nivel: str | None,
+    motivo: str | None,
+    classe_anterior: str | None = None,
+    classe_posterior: str | None = None,
+    transicao: str | None = None,
+    observacao: str | None = None,
+) -> dict:
+    rot, desc = META_SITUACAO_NIVEL.get(categoria or "", (None, None))
+    return {
+        "classe_anterior": classe_anterior,
+        "classe_posterior": classe_posterior,
+        "nivel": nivel,
+        "categoria": categoria,
+        "rotulo": rot,
+        "descricao": desc,
+        "transicao": transicao,
+        "motivo": motivo,
+        "observacao": observacao,
+    }
+
+
 def classificar_nivel_vertical(linha: dict) -> dict:
-    """Extrai e valida (classe_anterior, classe_posterior, nivel, transicao, motivo) para Progressão Vertical.
-    Lê prioritariamente de `detalhe` (gravado pelo classificador ou PaddleOCR) e aplica fallback determinístico
-    sobre `trecho` quando `detalhe` não contiver par válido A..F com avanço (classe_anterior < classe_posterior).
+    """Classifica toda Progressão Vertical em 5 situações mutuamente exclusivas e exaustivas:
+    1. Deferida com nível de destino A–F efetivado (`categoria` in 'A'..'F', `nivel` == `categoria`)
+    2. Indeferida, sem nível efetivado (`categoria='INDEFERIDO'`)
+    3. Deferida cujo nível A–F não pôde ser determinado (`categoria='NAO_DETERMINADO'`)
+    4. Inconsistência na identificação ou sequência A–F (`categoria='INCONSISTENTE'`)
+    5. Estrutura em que a escala A–F comprovadamente não se aplica (`categoria='NAO_APLICA'`)
+
+    Mantém `nivel='NAO_IDENTIFICADO'` nas categorias 2..5 para retrocompatibilidade com consumidores legados.
     """
     if linha.get("eixo") != C.PROGRESSAO or linha.get("modalidade") != C.VERTICAL:
-        return {"classe_anterior": None, "classe_posterior": None, "nivel": None, "transicao": None, "motivo": None}
+        return _ret_nivel(categoria=None, nivel=None, motivo=None)
     if linha.get("resultado") == "INDEFERIDO":
-        return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
-                "motivo": "indeferido_sem_classe"}
+        return _ret_nivel(
+            categoria="INDEFERIDO",
+            nivel="NAO_IDENTIFICADO",
+            motivo="indeferido_sem_classe",
+            observacao="Pedido indeferido; não houve concessão nem efetivação de nível A–F.",
+        )
     det = linha.get("detalhe") if isinstance(linha.get("detalhe"), dict) else {}
     ca = str(det.get("classe_anterior") or "").strip().upper()
     cp = str(det.get("classe_posterior") or "").strip().upper()
     if ca in _CLASSES_VALIDAS and cp in _CLASSES_VALIDAS:
         if ca < cp:
-            return {"classe_anterior": ca, "classe_posterior": cp, "nivel": cp, "transicao": f"{ca} → {cp}", "motivo": "ok"}
-        return {"classe_anterior": ca, "classe_posterior": cp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
-                "motivo": "anomalia_ordem_ou_igual"}
+            return _ret_nivel(
+                categoria=cp,
+                nivel=cp,
+                motivo="ok",
+                classe_anterior=ca,
+                classe_posterior=cp,
+                transicao=f"{ca} → {cp}",
+                observacao=f"Progressão vertical efetivada de {ca} para {cp}.",
+            )
+        return _ret_nivel(
+            categoria="INCONSISTENTE",
+            nivel="NAO_IDENTIFICADO",
+            motivo="anomalia_ordem_ou_igual",
+            classe_anterior=ca,
+            classe_posterior=cp,
+            transicao=f"{ca} → {cp}",
+            observacao=f"Sequência sem avanço ou invertida ({ca} → {cp}); mantida para conferência.",
+        )
+
+    if ca or cp:
+        if (not ca or _RE_TOKEN_NAO_AF.match(ca)) and (not cp or _RE_TOKEN_NAO_AF.match(cp)):
+            tr_nao_af = f"{ca} → {cp}" if (ca and cp) else (ca or cp)
+            return _ret_nivel(
+                categoria="NAO_APLICA",
+                nivel="NAO_IDENTIFICADO",
+                motivo="estrutura_nao_aplica",
+                transicao=tr_nao_af,
+                observacao=f"Publicação estruturada fora da escala A–F ({tr_nao_af}).",
+            )
+        tr_inc = f"{ca or '?'} → {cp or '?'}"
+        return _ret_nivel(
+            categoria="INCONSISTENTE",
+            nivel="NAO_IDENTIFICADO",
+            motivo="classe_fora_faixa_ou_incompleta",
+            classe_anterior=ca or None,
+            classe_posterior=cp or None,
+            transicao=tr_inc,
+            observacao=f"Classe fora da faixa A–F ou par incompleto ({tr_inc}).",
+        )
+
+    estrutura = str(det.get("estrutura_nivel") or "").strip().upper()
+    evolucao_lida = str(det.get("evolucao_lida") or "").strip()
+    niv_ant = str(det.get("nivel_anterior") or "").strip()
+    niv_atu = str(det.get("nivel_atual") or "").strip()
+    if (
+        estrutura in ("NAO_AF", "NIVEL_ROMANO", "NIVEL_NUMERICO", "PADRAO", "REFERENCIA")
+        or niv_ant
+        or niv_atu
+        or (evolucao_lida and _RE_EVOLUCAO_NAO_AF.search(evolucao_lida))
+    ):
+        if niv_ant and niv_atu:
+            tr_na = f"{niv_ant} → {niv_atu}"
+        elif evolucao_lida:
+            toks = evolucao_lida.split()
+            tr_na = f"{toks[0]} → {toks[1]}" if len(toks) == 2 else evolucao_lida
+        else:
+            tr_na = niv_ant or niv_atu or None
+        return _ret_nivel(
+            categoria="NAO_APLICA",
+            nivel="NAO_IDENTIFICADO",
+            motivo="estrutura_nao_aplica",
+            transicao=tr_na,
+            observacao=(
+                f"Estrutura fora da escala A–F ({tr_na})."
+                if tr_na else "Carreira/estrutura não utiliza níveis A–F."
+            ),
+        )
+
     trecho = str(linha.get("trecho") or "")
     idx = trecho.upper().find("LINHA")
     seg = trecho[idx:] if idx >= 0 else trecho
     seg = re.sub(r"Di[aá]rio\s+Ofi\s*cial[\s\S]*$", "", seg, flags=re.IGNORECASE)
     seg = re.sub(r"PUBLIQUE-SE[\s\S]*$", "", seg, flags=re.IGNORECASE)
-    limpo = re.sub(r"\s+", " ", seg.replace("\r", " ").replace("\n", " ")).strip()
-    limpo = re.sub(r"[\s$*%]+$", "", limpo).strip()
-    limpo = re.sub(r"\s+\d{1,2}$", "", limpo).strip()
+    limpo_bruto = re.sub(r"\s+", " ", seg.replace("\r", " ").replace("\n", " ")).strip()
+    limpo_bruto = re.sub(r"[\s$*%]+$", "", limpo_bruto).strip()
+    limpo = re.sub(r"\s+\d{1,2}$", "", limpo_bruto).strip()
     m = (re.search(r"(?:^|[\s|\[])([A-F])\s+([A-F])\s*$", limpo, re.IGNORECASE)
          or re.search(r"(?:^|[\s|\[])([A-F])([A-F])\s*$", limpo, re.IGNORECASE)
          or re.search(r"\bTECNICO\s+['\"]?\s*([A-F])\s+([A-F])(?:\s+[A-Z]+)*\s+ADMINISTRATIVO\s*$", limpo, re.IGNORECASE))
     if m:
         fa, fp = m.group(1).upper(), m.group(2).upper()
         if fa < fp:
-            return {"classe_anterior": fa, "classe_posterior": fp, "nivel": fp, "transicao": f"{fa} → {fp}", "motivo": "ok"}
-        return {"classe_anterior": fa, "classe_posterior": fp, "nivel": "NAO_IDENTIFICADO", "transicao": None,
-                "motivo": "anomalia_ordem_ou_igual"}
-    return {"classe_anterior": None, "classe_posterior": None, "nivel": "NAO_IDENTIFICADO", "transicao": None,
-            "motivo": "ocr_ou_incompleto"}
+            return _ret_nivel(
+                categoria=fp,
+                nivel=fp,
+                motivo="ok",
+                classe_anterior=fa,
+                classe_posterior=fp,
+                transicao=f"{fa} → {fp}",
+                observacao=f"Progressão vertical efetivada de {fa} para {fp}.",
+            )
+        return _ret_nivel(
+            categoria="INCONSISTENTE",
+            nivel="NAO_IDENTIFICADO",
+            motivo="anomalia_ordem_ou_igual",
+            classe_anterior=fa,
+            classe_posterior=fp,
+            transicao=f"{fa} → {fp}",
+            observacao=f"Sequência sem avanço ou invertida ({fa} → {fp}); mantida para conferência.",
+        )
+
+    m_num = _RE_TRECHO_NIVEL_NUM.search(limpo_bruto)
+    m_rom = _RE_TRECHO_ROMANO.search(limpo)
+    m_pad = _RE_TRECHO_PADRAO.search(limpo_bruto)
+    if m_num or m_rom or m_pad:
+        mg = m_num or m_rom or m_pad
+        tr_na = f"{mg.group(1).upper()} → {mg.group(2).upper()}"
+        return _ret_nivel(
+            categoria="NAO_APLICA",
+            nivel="NAO_IDENTIFICADO",
+            motivo="estrutura_nao_aplica",
+            transicao=tr_na,
+            observacao=f"Publicação estruturada fora da escala A–F ({tr_na}).",
+        )
+
+    m_fora = _RE_TRECHO_FORA_AF.search(limpo)
+    if m_fora:
+        fa = (m_fora.group(1) or m_fora.group(3) or "").upper()
+        fp = (m_fora.group(2) or m_fora.group(4) or "").upper()
+        return _ret_nivel(
+            categoria="INCONSISTENTE",
+            nivel="NAO_IDENTIFICADO",
+            motivo="classe_fora_faixa_ou_incompleta",
+            classe_anterior=fa or None,
+            classe_posterior=fp or None,
+            transicao=f"{fa} → {fp}",
+            observacao=f"Classe fora da faixa A–F ({fa} → {fp}); mantida para conferência.",
+        )
+
+    return _ret_nivel(
+        categoria="NAO_DETERMINADO",
+        nivel="NAO_IDENTIFICADO",
+        motivo="ocr_ou_incompleto",
+        observacao="Nível A–F ausente na publicação ou não extraído do texto.",
+    )
 
 
 def _chave_grupo(linha: dict) -> str:
@@ -111,7 +289,7 @@ def normalizar_filtros(bruto: dict, perfil: str) -> dict:
         "modalidade": bruto.get("modalidade") if bruto.get("modalidade") in C.MODALIDADES else None,
         "condicao": bruto.get("condicao") if bruto.get("condicao") in C.CONDICOES else None,
         "grupo": [g for g in _lista(bruto.get("grupo")) if g in grupos_aceitos],
-        "nivel": nivel_bruto if nivel_bruto in NIVEIS_VERTICAIS else None,
+        "nivel": nivel_bruto if nivel_bruto in FILTROS_NIVEL_ACEITOS else None,
         "subcategoria": [s for s in _lista(bruto.get("subcategoria")) if s in C.SUBCATEGORIA_POR_CODIGO or s == "SEM_SUBCATEGORIA"],
         "resultado": bruto.get("resultado") if bruto.get("resultado") in C.RESULTADOS else None,
         "vinculo": bruto.get("vinculo") if bruto.get("vinculo") in ("EXPRESSO", "NAO_EXPRESSO") else None,
@@ -171,7 +349,10 @@ def _passa(linha: dict, f: dict) -> bool:
         if not (linha["eixo"] == C.PROGRESSAO and linha["modalidade"] == C.VERTICAL):
             return False
         info = linha.get("nivel_info") or classificar_nivel_vertical(linha)
-        if info.get("nivel") != f["nivel"]:
+        if f["nivel"] == "NAO_IDENTIFICADO":
+            if info.get("nivel") != "NAO_IDENTIFICADO":
+                return False
+        elif info.get("categoria") != f["nivel"]:
             return False
     if f["subcategoria"]:
         sub_ef = linha["subcategoria"] or "SEM_SUBCATEGORIA"
@@ -551,11 +732,28 @@ def _aplicar_protecao_publica(
             pos_nv += 1
         niveis_lista.append({
             "nivel": nv,
-            "rotulo": "Nível não identificado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
+            "rotulo": "Sem nível A–F efetivado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
             **_contar_publico(itens_nv),
             "transicoes": [],
         })
     _suprimir_secundaria(niveis_lista, pos_nv)
+
+    situacoes_pub, pos_sit = [], 0
+    for sit in SITUACOES_NIVEL_VERTICAL:
+        itens_s = [l for l in verticais if (l.get("nivel_info") or {}).get("categoria") == sit]
+        if itens_s:
+            pos_sit += 1
+        rot, desc = META_SITUACAO_NIVEL[sit]
+        situacoes_pub.append({
+            "codigo": sit,
+            "nivel": sit if sit in _CLASSES_VALIDAS else "NAO_IDENTIFICADO",
+            "rotulo": rot,
+            "descricao": desc,
+            "grupo_situacao": "nivel_af" if sit in _CLASSES_VALIDAS else "sem_nivel_af",
+            **_contar_publico(itens_s),
+            "transicoes": [],
+        })
+    _suprimir_secundaria(situacoes_pub, pos_sit)
 
     tempo_sem_sub = [l for l in tempo if l["subcategoria"] is None]
     por_sub, pos_sub = [], 0
@@ -591,6 +789,17 @@ def _aplicar_protecao_publica(
     if (len(cls_lin) > 0 and cls_p is None) or (len(ni_lin) > 0 and ni_p is None):
         cls_p = ni_p = None
 
+    sem_nivel_pub_itens, pos_sn = [], 0
+    for sit in SITUACOES_SEM_NIVEL_VERTICAL:
+        itens_s = [l for l in verticais if (l.get("nivel_info") or {}).get("categoria") == sit]
+        if itens_s:
+            pos_sn += 1
+        val_s = _proteger_inteiro(len(itens_s), _pessoas_distintas(itens_s)) if ni_p is not None else None
+        sem_nivel_pub_itens.append({"codigo": sit, "total": val_s})
+    if ni_p is not None:
+        _suprimir_secundaria(sem_nivel_pub_itens, pos_sn)
+    sem_nivel_pub_map = {x["codigo"]: x["total"] for x in sem_nivel_pub_itens}
+
     apoio_nulo = {
         "eventos_de_alteracao": None, "eventos_por_tipo": None, "eventos_sem_vinculo": None,
         "eventos_fora_do_acervo": None,
@@ -617,12 +826,17 @@ def _aplicar_protecao_publica(
             "por_grupo": por_grupo,
             "por_grupo_detalhado": por_grupo_det,
             "por_nivel_vertical": niveis_lista,
+            "por_situacao_nivel_vertical": situacoes_pub,
             "resumo_nivel_vertical": {
                 "total_progressao": _proteger_inteiro(len(prog), _pessoas_distintas(prog)),
                 "total_horizontal": _proteger_inteiro(len(horizontais), _pessoas_distintas(horizontais)),
                 "total_vertical": _proteger_inteiro(len(verticais), _pessoas_distintas(verticais)),
                 "classificados": cls_p,
                 "nao_identificados": ni_p,
+                "indeferidos": sem_nivel_pub_map["INDEFERIDO"],
+                "nao_determinados": sem_nivel_pub_map["NAO_DETERMINADO"],
+                "inconsistentes": sem_nivel_pub_map["INCONSISTENTE"],
+                "nao_aplica": sem_nivel_pub_map["NAO_APLICA"],
             },
             "por_subcategoria": por_sub,
             "tempo_sem_subcategoria": tempo_sem_sub_pub,
@@ -748,15 +962,28 @@ def validar_snapshot_publico(snap: dict) -> dict:
         for campo in ("vertical", "horizontal", "tempo", "total"):
             _validar_inteiro_publico(pt.get(campo), f"por_data[{dt_val}].{campo}")
 
-    for nome_serie in ("por_assunto", "por_grupo", "por_grupo_detalhado", "por_nivel_vertical", "por_subcategoria"):
-        for item in series.get(nome_serie) or []:
+    for nome_serie in (
+        "por_assunto",
+        "por_grupo",
+        "por_grupo_detalhado",
+        "por_nivel_vertical",
+        "por_situacao_nivel_vertical",
+        "por_subcategoria",
+    ):
+        itens_serie = series.get(nome_serie) or []
+        for item in itens_serie:
             for campo in ("total", "deferido", "indeferido", "nao_informado", "vertical", "horizontal"):
                 if campo in item:
                     _validar_inteiro_publico(item.get(campo), f"{nome_serie}.{campo}")
             if (item.get("deferido") is None) != (item.get("indeferido") is None):
                 raise ValueError(f"snapshot público inválido: supressão complementar violada em {nome_serie}")
-            if nome_serie == "por_nivel_vertical" and item.get("transicoes") not in (None, []):
-                raise ValueError("snapshot público inválido: transições detalhadas expostas em por_nivel_vertical")
+            if nome_serie in ("por_nivel_vertical", "por_situacao_nivel_vertical") and item.get("transicoes") not in (None, []):
+                raise ValueError(f"snapshot público inválido: transições detalhadas expostas em {nome_serie}")
+        if nome_serie == "por_situacao_nivel_vertical" and itens_serie:
+            suprimidas_sit = sum(1 for x in itens_serie if x.get("total") is None)
+            visiveis_sit = sum(1 for x in itens_serie if (x.get("total") or 0) > 0)
+            if suprimidas_sit == 1 and visiveis_sit > 0:
+                raise ValueError("snapshot público inválido: supressão secundária violada em por_situacao_nivel_vertical")
 
     sub_itens_val = list(series.get("por_subcategoria") or [])
     if "tempo_sem_subcategoria" in series:
@@ -777,8 +1004,23 @@ def validar_snapshot_publico(snap: dict) -> dict:
     for item in series.get("por_condicao") or []:
         _validar_inteiro_publico(item.get("total"), "por_condicao.total")
     res_nv = series.get("resumo_nivel_vertical") or {}
-    for campo in ("total_progressao", "total_horizontal", "total_vertical", "classificados", "nao_identificados"):
+    for campo in (
+        "total_progressao",
+        "total_horizontal",
+        "total_vertical",
+        "classificados",
+        "nao_identificados",
+        "indeferidos",
+        "nao_determinados",
+        "inconsistentes",
+        "nao_aplica",
+    ):
         _validar_inteiro_publico(res_nv.get(campo), f"resumo_nivel_vertical.{campo}")
+    sub_sn_vals = [res_nv.get(c) for c in ("indeferidos", "nao_determinados", "inconsistentes", "nao_aplica") if c in res_nv]
+    if res_nv.get("nao_identificados") is None and any(v is not None for v in sub_sn_vals):
+        raise ValueError("snapshot público inválido: subcontagem de nível exposta com nao_identificados suprimido")
+    if sub_sn_vals and sum(1 for v in sub_sn_vals if v is None) == 1 and sum(1 for v in sub_sn_vals if (v or 0) > 0) > 0:
+        raise ValueError("snapshot público inválido: supressão secundária violada em resumo_nivel_vertical")
 
     if d_pub.get("rows") != [] or d_pub.get("events") != [] or d_pub.get("otherPublications") not in (None, []):
         raise ValueError("snapshot público inválido: data.rows, data.events e data.otherPublications devem estar vazios")
@@ -1117,8 +1359,28 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
                           for k, v in sorted(cont_trans.items(), key=lambda x: (-x[1], x[0]))]
         niveis_lista.append({
             "nivel": nv,
-            "rotulo": "Nível não identificado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
+            "rotulo": "Sem nível A–F efetivado" if nv == "NAO_IDENTIFICADO" else f"Nível {nv}",
             **conta(itens_nv),
+            "transicoes": transicoes_ord,
+        })
+    situacoes_lista = []
+    for sit in SITUACOES_NIVEL_VERTICAL:
+        itens_s = [l for l in verticais if (l.get("nivel_info") or {}).get("categoria") == sit]
+        cont_trans: dict[str, int] = {}
+        for it in itens_s:
+            tr = (it.get("nivel_info") or {}).get("transicao")
+            if tr:
+                cont_trans[tr] = cont_trans.get(tr, 0) + 1
+        transicoes_ord = [{"transicao": k, "total": v}
+                          for k, v in sorted(cont_trans.items(), key=lambda x: (-x[1], x[0]))]
+        rot, desc = META_SITUACAO_NIVEL[sit]
+        situacoes_lista.append({
+            "codigo": sit,
+            "nivel": sit if sit in _CLASSES_VALIDAS else "NAO_IDENTIFICADO",
+            "rotulo": rot,
+            "descricao": desc,
+            "grupo_situacao": "nivel_af" if sit in _CLASSES_VALIDAS else "sem_nivel_af",
+            **conta(itens_s),
             "transicoes": transicoes_ord,
         })
     NOMES_EXPRESSAO_PENDENTE = {
@@ -1176,12 +1438,17 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
             for linhas in [[l for l in prog if _chave_grupo(l) == chave]] if linhas
         ],
         "por_nivel_vertical": niveis_lista,
+        "por_situacao_nivel_vertical": situacoes_lista,
         "resumo_nivel_vertical": {
             "total_progressao": len(prog),
             "total_horizontal": sum(l["modalidade"] == C.HORIZONTAL for l in prog),
             "total_vertical": len(verticais),
             "classificados": sum((l.get("nivel_info") or {}).get("nivel") in _CLASSES_VALIDAS for l in verticais),
             "nao_identificados": sum((l.get("nivel_info") or {}).get("nivel") == "NAO_IDENTIFICADO" for l in verticais),
+            "indeferidos": sum((l.get("nivel_info") or {}).get("categoria") == "INDEFERIDO" for l in verticais),
+            "nao_determinados": sum((l.get("nivel_info") or {}).get("categoria") == "NAO_DETERMINADO" for l in verticais),
+            "inconsistentes": sum((l.get("nivel_info") or {}).get("categoria") == "INCONSISTENTE" for l in verticais),
+            "nao_aplica": sum((l.get("nivel_info") or {}).get("categoria") == "NAO_APLICA" for l in verticais),
         },
         # As sete subcategorias aparecem sempre; zero sem cobertura completa é "cobertura pendente", não "inexistente".
         "por_subcategoria": [

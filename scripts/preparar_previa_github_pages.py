@@ -320,6 +320,19 @@ def gerar_dados_sinteticos_publicos() -> dict:
                     (504, 86, "ANALISTA DE APOIO JUDICIARIO", "PGE", ""),
                     (505, 87, "ANALISTA DE APOIO JUDICIARIO", "PGE", ""),
                 ]),
+                # Exemplos 100% sintéticos das situações sem nível A–F efetivado (separadas por motivo)
+                _resenha_prog("503/2026", "VERTICAL", "ANS", "DEFERIU", [
+                    (506, 112, "ANALISTA DE NIVEL SUPERIOR", "SEAD", ""),
+                    (507, 113, "ANALISTA DE NIVEL SUPERIOR", "SEAD", ""),
+                ], com_classe=False),
+                _resenha_prog("504/2026", "VERTICAL", "MAG", "DEFERIU", [
+                    (508, 114, "PROFESSOR DE EDUCACAO BASICA", "SEE", "D B"),
+                    (509, 115, "PROFESSOR DE EDUCACAO BASICA", "SEE", "C C"),
+                ], com_classe=True),
+                _resenha_prog("505/2026", "VERTICAL", "GPC", "DEFERIU", [
+                    (510, 116, "AGENTE DE INVESTIGACAO", "SEDS", "II III"),
+                    (511, 117, "ESCRIVAO DE POLICIA", "SEDS", "III IV"),
+                ], com_classe=True),
                 _bloco_outra(
                     "INSTRUCAO NORMATIVA Nº 004/2026 - SEAD/GEDIV",
                     "Estabelece orientacoes sinteticas de padronizacao documental para fluxos de progressao e tempo de servico.",
@@ -379,7 +392,7 @@ def gerar_dados_sinteticos_publicos() -> dict:
                 "201/2026", "202/2026", "203/2026", "204/2026",
                 "301/2026", "302/2026", "303/2026", "304/2026", "305/2026", "306/2026", "307/2026",
                 "401/2026", "402/2026", "403/2026", "404/2026", "405/2026",
-                "501/2026", "502/2026", "601/2026", "602/2026", "603/2026",
+                "501/2026", "502/2026", "503/2026", "504/2026", "505/2026", "601/2026", "602/2026", "603/2026",
             }
             ato_por_num = {}
             for a in banco.con.execute("SELECT id, numero, natureza, vinculo FROM ato"):
@@ -737,6 +750,24 @@ def validar_pacote_estatico(pasta: Path) -> None:
     assert html.count("\r\n") == 0, "CRLF detectado em index.html"
     assert "./dados-sinteticos-publicos.json" in html
     assert "openStaticBackendNotice" in html
+
+    # Garantir reconciliação matemática exata das 5 situações de Progressão Vertical A–F
+    res_nv = (dados.get("backend") or {}).get("series", {}).get("resumo_nivel_vertical") or {}
+    assert res_nv.get("total_vertical", 0) > 0, "Sem progressões verticais na demonstração sintética"
+    for campo_sit in ("classificados", "indeferidos", "nao_determinados", "inconsistentes", "nao_aplica"):
+        assert res_nv.get(campo_sit, 0) > 0, f"Situação vertical ausente na prévia sintética: {campo_sit}"
+    soma_5 = (
+        res_nv["classificados"]
+        + res_nv["indeferidos"]
+        + res_nv["nao_determinados"]
+        + res_nv["inconsistentes"]
+        + res_nv["nao_aplica"]
+    )
+    assert soma_5 == res_nv["total_vertical"], f"Partição vertical divergente: {soma_5} != {res_nv['total_vertical']}"
+    assert (
+        res_nv["indeferidos"] + res_nv["nao_determinados"] + res_nv["inconsistentes"] + res_nv["nao_aplica"]
+        == res_nv["nao_identificados"]
+    ), "Soma das 4 categorias sem nível diverge de nao_identificados"
 
 
 def construir_pacote(saida: Path) -> Path:

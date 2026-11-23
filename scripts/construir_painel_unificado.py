@@ -306,6 +306,16 @@ body{background:#f3f7fb!important}
 .date-act-btn:hover:not(:disabled){background:#edf5ff;border-color:#9bc2f7}
 .date-act-btn.is-primary{background:#1265ef;border-color:#1265ef;color:#fff}
 .date-act-btn.is-primary:hover:not(:disabled){background:#0a4d96;border-color:#0a4d96}
+#levelChart .group-row{grid-template-columns:minmax(132px,46%) minmax(38px,1fr) 84px}
+.level-sep{font-size:10px;font-weight:700;color:#405d79;text-transform:uppercase;letter-spacing:.03em;padding:7px 2px 3px;margin-top:4px;border-top:1px solid #dce8f1;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.level-row-lbl{display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.level-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
+.part.lv-indef{background:#e66a72}
+.part.lv-ndet{background:#e0ad40}
+.part.lv-incon{background:#d58027}
+.part.lv-napl{background:#7c5ce6}
+.level-sec-row td{background:#f4f8fd;color:#27527c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px}
+.level-exp-sub{display:block;font-size:10.5px;color:#405d79;font-weight:400;margin-top:2px;line-height:1.35}
 @media(max-width:920px){.topbar{flex-wrap:wrap;gap:10px}.header-title{flex:1 1 220px;overflow:hidden}.header-title h1,.header-title p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 @media(max-width:760px){.tabs{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;padding-bottom:6px;scrollbar-width:thin}.tabs::-webkit-scrollbar{height:4px}.tabs::-webkit-scrollbar-thumb{background:#b8d5fa;border-radius:4px}.tabs button{scroll-snap-align:start;flex-shrink:0!important}.kpi[data-card="decisions"]{grid-column:1 / -1}.banner{align-items:flex-start!important;flex-wrap:wrap!important;gap:6px 10px!important}.banner div:nth-child(2){flex:1 1 220px;min-width:0}.banner #coverageOpen{display:inline-flex!important;align-self:flex-start;margin-left:30px!important;margin-top:0!important;padding:2px 0!important}.downloads{width:100%}.downloads .delicate-scope-inline{flex:1 1 180px}.downloads .download-main{flex:1 1 180px}}
 @media(max-width:700px){.review-grid,.doc-meta-box{grid-template-columns:1fr}.sel-grid{grid-template-columns:minmax(96px,112px) minmax(0,1fr)}}
@@ -431,20 +441,284 @@ const resolveGroupKey=g=>GROUP_ALIASES[g]||g;"""
     assert old_group_names in html
     html = html.replace(old_group_names, new_group_names, 1)
 
-    # Atualizar parseVerticalLevel para respeitar classe_anterior / classe_posterior já vindos do backend quando disponíveis
-    old_parse_lvl = """function parseVerticalLevel(r){
- if(!r||r.axis!=='progressao'||r.modality!=='Vertical')return {from:'',to:'',transition:'',status:'',label:'',reason:''};
- if(r.merit==='indeferido')return {from:'',to:'',transition:'',status:'NI',label:'Nível não identificado',reason:'indeferido_sem_classe'};"""
-    new_parse_lvl = """function parseVerticalLevel(r){
+    # Atualizar classificação de Progressão Vertical (5 situações mutuamente exclusivas) e resumo por grupo/nível
+    old_levels_block = """const LEVEL_ORDER=['A','B','C','D','E','F','NI'];
+const LEVEL_COLORS={A:'#368cc2',B:'#1265ef',C:'#13b88a',D:'#7c5ce6',E:'#ff973c',F:'#d9538f',NI:'#94a3b8'};
+function parseVerticalLevel(r){
  if(!r||r.axis!=='progressao'||r.modality!=='Vertical')return {from:'',to:'',transition:'',status:'',label:'',reason:''};
  if(r.merit==='indeferido')return {from:'',to:'',transition:'',status:'NI',label:'Nível não identificado',reason:'indeferido_sem_classe'};
- const df=(r.detalhe?.classe_anterior||r.levelFrom||'').toUpperCase(),dtTo=(r.detalhe?.classe_posterior||r.levelTo||'').toUpperCase();
- if(/^[A-F]$/.test(df)&&/^[A-F]$/.test(dtTo)){
-  if(df<dtTo)return {from:df,to:dtTo,transition:`${df} → ${dtTo}`,status:dtTo,label:`Nível ${dtTo}`,reason:'ok'};
+ const ev=String(r.evidence||'');
+ const idx=ev.indexOf('LINHA');
+ const seg=(idx>=0?ev.slice(idx):ev).replace(/Di[aá]rio\\s+Ofi\\s*cial[\\s\\S]*$/i,'').replace(/PUBLIQUE-SE[\\s\\S]*$/i,'');
+ const clean=seg.replace(/\\r?\\n/g,' ').replace(/\\s+/g,' ').trim().replace(/[\\s$*%]+$/,'').replace(/\\s+\\d{1,2}$/,'').trim();
+ let m=clean.match(/(?:^|[\\s\\|\\[])([A-F])\\s+([A-F])\\s*$/i)||clean.match(/(?:^|[\\s\\|\\[])([A-F])([A-F])\\s*$/i)||clean.match(/\\bTECNICO\\s+['"]?\\s*([A-F])\\s+([A-F])(?:\\s+[A-Z]+)*\\s+ADMINISTRATIVO\\s*$/i);
+ if(m){
+  const from=m[1].toUpperCase(),to=m[2].toUpperCase();
+  if(from<to)return {from,to,transition:`${from} → ${to}`,status:to,label:`Nível ${to}`,reason:'ok'};
   return {from:'',to:'',transition:'',status:'NI',label:'Nível não identificado',reason:'anomalia_ordem_ou_igual'};
- }"""
-    assert old_parse_lvl in html
-    html = html.replace(old_parse_lvl, new_parse_lvl, 1)
+ }
+ return {from:'',to:'',transition:'',status:'NI',label:'Nível não identificado',reason:'ocr_ou_incompleto'};
+}
+function enrichVerticalLevels(rows){
+ for(const r of (rows||[])){
+  const p=parseVerticalLevel(r);
+  r.levelFrom=p.from;r.levelTo=p.to;r.levelTransition=p.transition;r.levelStatus=p.status;r.levelLabel=p.label;r.levelReason=p.reason;
+ }
+}
+function summarizeGroupLevels(rows,groupId){
+ const prog=(rows||[]).filter(r=>r.axis==='progressao'&&(!groupId||(groupId==='NAO_INFORMADO'?!r.group:r.group===groupId)));
+ const horiz=prog.filter(r=>r.modality==='Horizontal'),vert=prog.filter(r=>r.modality==='Vertical'),other=prog.filter(r=>r.modality!=='Horizontal'&&r.modality!=='Vertical');
+ const levels=LEVEL_ORDER.map(code=>{
+  const items=vert.filter(r=>r.levelStatus===code);
+  const transMap=new Map();
+  for(const it of items){if(it.levelTransition)transMap.set(it.levelTransition,(transMap.get(it.levelTransition)||0)+1);}
+  const transitions=[...transMap.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).map(([label,count])=>({label,count}));
+  return {code,label:code==='NI'?'Nível não identificado':`Nível ${code}`,items,total:items.length,deferidos:items.filter(r=>r.merit==='deferido').length,indeferidos:items.filter(r=>r.merit==='indeferido').length,transitions};
+ });
+ const niItems=vert.filter(r=>r.levelStatus==='NI');
+ const niReasons={indeferidos:niItems.filter(r=>r.levelReason==='indeferido_sem_classe').length,outros:niItems.filter(r=>r.levelReason!=='indeferido_sem_classe').length};
+ return {
+  groupId,total:prog.length,deferidos:prog.filter(r=>r.merit==='deferido').length,indeferidos:prog.filter(r=>r.merit==='indeferido').length,distinctProcesses:uniq(prog,'process'),
+  horizontal:{total:horiz.length,deferidos:horiz.filter(r=>r.merit==='deferido').length,indeferidos:horiz.filter(r=>r.merit==='indeferido').length},
+  vertical:{total:vert.length,deferidos:vert.filter(r=>r.merit==='deferido').length,indeferidos:vert.filter(r=>r.merit==='indeferido').length,distinctProcesses:uniq(vert,'process'),classified:vert.filter(r=>r.levelTo).length,unidentified:niItems.length},
+  other:{total:other.length},levels,niReasons
+ };
+}"""
+    new_levels_block = """const LEVEL_AF_ORDER=['A','B','C','D','E','F'];
+const LEVEL_NON_AF_ORDER=['INDEFERIDO','NAO_DETERMINADO','INCONSISTENTE','NAO_APLICA'];
+const LEVEL_ORDER=[...LEVEL_AF_ORDER,...LEVEL_NON_AF_ORDER];
+const LEVEL_COLORS={A:'#368cc2',B:'#1265ef',C:'#13b88a',D:'#7c5ce6',E:'#ff973c',F:'#d9538f',INDEFERIDO:'#e66a72',NAO_DETERMINADO:'#e0ad40',INCONSISTENTE:'#d58027',NAO_APLICA:'#7c5ce6'};
+const LEVEL_META={
+ A:{label:'Nível A',compact:'A',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino A efetivado.'},
+ B:{label:'Nível B',compact:'B',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino B efetivado.'},
+ C:{label:'Nível C',compact:'C',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino C efetivado.'},
+ D:{label:'Nível D',compact:'D',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino D efetivado.'},
+ E:{label:'Nível E',compact:'E',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino E efetivado.'},
+ F:{label:'Nível F',compact:'F',barClass:'good',dot:'#17a675',desc:'Progressão vertical deferida com nível de destino F efetivado.'},
+ INDEFERIDO:{label:'Indeferidas (sem nível)',compact:'Indef.',barClass:'lv-indef',dot:'#e66a72',desc:'Progressão vertical indeferida; não houve concessão nem efetivação de nível.'},
+ NAO_DETERMINADO:{label:'Deferidas sem nível',compact:'Sem nível',barClass:'lv-ndet',dot:'#e0ad40',desc:'Progressão vertical deferida cujo nível A–F não constava na publicação ou não pôde ser extraído.'},
+ INCONSISTENTE:{label:'Inconsistência A–F',compact:'Inconsist.',barClass:'lv-incon',dot:'#d58027',desc:'Sequência ou classe A–F inconsistente (ex.: regressão D → B, níveis iguais C → C ou letra fora de A–F).'},
+ NAO_APLICA:{label:'A–F não se aplica',compact:'Não aplica',barClass:'lv-napl',dot:'#7c5ce6',desc:'Carreira ou publicação vertical estruturada fora da escala A–F (ex.: níveis romanos II → III ou numéricos).'}
+};
+const levelChipLabel=code=>code==='NI'?'Sem nível A–F efetivado':(LEVEL_META[code]?.label||`Nível ${code}`);
+const levelMatchesFilter=(row,code)=>code==='NI'?LEVEL_NON_AF_ORDER.includes(row.levelStatus):row.levelStatus===code;
+const formatRowLevel=r=>{
+ if(!r||r.axis!=='progressao'||r.modality!=='Vertical')return '—';
+ if(r.levelTo)return `${r.levelLabel||('Nível '+r.levelTo)}${r.levelTransition?' ('+r.levelTransition+')':''}`;
+ if(r.levelLabel)return r.levelTransition?`${r.levelLabel} (${r.levelTransition})`:r.levelLabel;
+ return 'Deferidas sem nível';
+};
+function parseVerticalLevel(r){
+ if(!r||r.axis!=='progressao'||r.modality!=='Vertical')return {from:'',to:'',transition:'',status:'',label:'',reason:'',note:''};
+ if(r.merit==='indeferido')return {from:'',to:'',transition:'',status:'INDEFERIDO',label:LEVEL_META.INDEFERIDO.label,reason:'indeferido_sem_classe',note:'Pedido indeferido; não houve concessão nem efetivação de nível A–F.'};
+ const det=r.detalhe&&typeof r.detalhe==='object'?r.detalhe:{};
+ const df=String(det.classe_anterior||r.levelFrom||'').trim().toUpperCase(),dtTo=String(det.classe_posterior||r.levelTo||'').trim().toUpperCase();
+ if(/^[A-F]$/.test(df)&&/^[A-F]$/.test(dtTo)){
+  if(df<dtTo)return {from:df,to:dtTo,transition:`${df} → ${dtTo}`,status:dtTo,label:`Nível ${dtTo}`,reason:'ok',note:`Progressão vertical efetivada de ${df} para ${dtTo}.`};
+  return {from:'',to:'',transition:`${df} → ${dtTo}`,status:'INCONSISTENTE',label:LEVEL_META.INCONSISTENTE.label,reason:'anomalia_ordem_ou_igual',note:`Sequência sem avanço ou invertida (${df} → ${dtTo}); mantida para conferência.`};
+ }
+ const reTokNaoAf=/^(?:N[ÍI]VEL\\s*)?(?:I{1,3}|IV|V|VI{1,3}|IX|X|\\d{1,2})$/i;
+ if(df||dtTo){
+  if((!df||reTokNaoAf.test(df))&&(!dtTo||reTokNaoAf.test(dtTo))){
+   const tr=df&&dtTo?`${df} → ${dtTo}`:(df||dtTo);
+   return {from:'',to:'',transition:tr,status:'NAO_APLICA',label:LEVEL_META.NAO_APLICA.label,reason:'estrutura_nao_aplica',note:`Publicação estruturada fora da escala A–F (${tr}).`};
+  }
+  const tr=`${df||'?'} → ${dtTo||'?'}`;
+  return {from:'',to:'',transition:tr,status:'INCONSISTENTE',label:LEVEL_META.INCONSISTENTE.label,reason:'classe_fora_faixa_ou_incompleta',note:`Classe fora da faixa A–F ou par incompleto (${tr}).`};
+ }
+ const est=String(det.estrutura_nivel||'').trim().toUpperCase();
+ const evo=String(det.evolucao_lida||'').trim();
+ const na=String(det.nivel_anterior||'').trim(),nat=String(det.nivel_atual||'').trim();
+ const reEvoNaoAf=/(?:N[ÍI]VEL\\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\\d{1,2})|\\b(?:I{1,3}|IV|V|VI{1,3}|IX|X)\\s+(?:I{1,3}|IV|V|VI{1,3}|IX|X)\\b|PADR[ÃA]O|REFER[ÊE]NCIA)/i;
+ if(['NAO_AF','NIVEL_ROMANO','NIVEL_NUMERICO','PADRAO','REFERENCIA'].includes(est)||na||nat||(evo&&reEvoNaoAf.test(evo))){
+  const toks=evo?evo.split(/\\s+/):[];
+  const tr=na&&nat?`${na} → ${nat}`:(toks.length===2?`${toks[0]} → ${toks[1]}`:(evo||na||nat||''));
+  return {from:'',to:'',transition:tr,status:'NAO_APLICA',label:LEVEL_META.NAO_APLICA.label,reason:'estrutura_nao_aplica',note:tr?`Estrutura fora da escala A–F (${tr}).`:'Carreira/estrutura não utiliza níveis A–F.'};
+ }
+ const ev=String(r.evidence||'');
+ const idx=ev.toUpperCase().indexOf('LINHA');
+ const seg=(idx>=0?ev.slice(idx):ev).replace(/Di[aá]rio\\s+Ofi\\s*cial[\\s\\S]*$/i,'').replace(/PUBLIQUE-SE[\\s\\S]*$/i,'');
+ const cleanRaw=seg.replace(/\\r?\\n/g,' ').replace(/\\s+/g,' ').trim().replace(/[\\s$*%]+$/,'').trim();
+ const clean=cleanRaw.replace(/\\s+\\d{1,2}$/,'').trim();
+ let m=clean.match(/(?:^|[\\s\\|\\[])([A-F])\\s+([A-F])\\s*$/i)||clean.match(/(?:^|[\\s\\|\\[])([A-F])([A-F])\\s*$/i)||clean.match(/\\bTECNICO\\s+['"]?\\s*([A-F])\\s+([A-F])(?:\\s+[A-Z]+)*\\s+ADMINISTRATIVO\\s*$/i);
+ if(m){
+  const from=m[1].toUpperCase(),to=m[2].toUpperCase();
+  if(from<to)return {from,to,transition:`${from} → ${to}`,status:to,label:`Nível ${to}`,reason:'ok',note:`Progressão vertical efetivada de ${from} para ${to}.`};
+  return {from:'',to:'',transition:`${from} → ${to}`,status:'INCONSISTENTE',label:LEVEL_META.INCONSISTENTE.label,reason:'anomalia_ordem_ou_igual',note:`Sequência sem avanço ou invertida (${from} → ${to}); mantida para conferência.`};
+ }
+ const mNum=cleanRaw.match(/\\b(N[ÍI]VEL\\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\\d{1,2}))\\s+(?:PARA\\s+|->\\s*|→\\s*)?(N[ÍI]VEL\\s*(?:I{1,3}|IV|V|VI{1,3}|IX|X|\\d{1,2}))\\b/i);
+ const mRom=clean.match(/(?:^|[\\s\\|\\[])(I{1,3}|IV|V|VI{1,3}|IX|X)\\s+(I{1,3}|IV|V|VI{1,3}|IX|X)\\s*$/);
+ const mPad=cleanRaw.match(/\\b((?:PADR[ÃA]O|REFER[ÊE]NCIA)\\s+[A-Z0-9-]+)\\s+(?:PARA\\s+|->\\s*|→\\s*)?((?:(?:PADR[ÃA]O|REFER[ÊE]NCIA)\\s+)?[A-Z0-9-]+)\\b/i);
+ if(mNum||mRom||mPad){
+  const mg=mNum||mRom||mPad,tr=`${mg[1].toUpperCase()} → ${mg[2].toUpperCase()}`;
+  return {from:'',to:'',transition:tr,status:'NAO_APLICA',label:LEVEL_META.NAO_APLICA.label,reason:'estrutura_nao_aplica',note:`Publicação estruturada fora da escala A–F (${tr}).`};
+ }
+ const mFora=clean.match(/(?:^|[\\s\\|\\[])(?:CLASSE\\s+)?([A-F])\\s+(?:PARA\\s+|->\\s*|→\\s*)?([G-H])\\s*$|(?:^|[\\s\\|\\[])(?:CLASSE\\s+)?([G-H])\\s+(?:PARA\\s+|->\\s*|→\\s*)?([A-H])\\s*$/);
+ if(mFora){
+  const fa=(mFora[1]||mFora[3]||'').toUpperCase(),fp=(mFora[2]||mFora[4]||'').toUpperCase(),tr=`${fa} → ${fp}`;
+  return {from:'',to:'',transition:tr,status:'INCONSISTENTE',label:LEVEL_META.INCONSISTENTE.label,reason:'classe_fora_faixa_ou_incompleta',note:`Classe fora da faixa A–F (${tr}); mantida para conferência.`};
+ }
+ if(r.levelStatus&&LEVEL_NON_AF_ORDER.includes(r.levelStatus)){
+  const meta=LEVEL_META[r.levelStatus];
+  return {from:'',to:'',transition:r.levelTransition||'',status:r.levelStatus,label:r.levelLabel||meta.label,reason:r.levelReason||'backend',note:r.levelNote||meta.desc};
+ }
+ return {from:'',to:'',transition:'',status:'NAO_DETERMINADO',label:LEVEL_META.NAO_DETERMINADO.label,reason:'ocr_ou_incompleto',note:'Nível A–F ausente na publicação ou não extraído do texto.'};
+}
+function enrichVerticalLevels(rows){
+ for(const r of (rows||[])){
+  const p=parseVerticalLevel(r);
+  r.levelFrom=p.from;r.levelTo=p.to;r.levelTransition=p.transition;r.levelStatus=p.status;r.levelLabel=p.label;r.levelReason=p.reason;r.levelNote=p.note;
+ }
+}
+function summarizeGroupLevels(rows,groupId){
+ const prog=(rows||[]).filter(r=>r.axis==='progressao'&&(!groupId||(groupId==='NAO_INFORMADO'?!r.group:r.group===groupId)));
+ const horiz=prog.filter(r=>r.modality==='Horizontal'),vert=prog.filter(r=>r.modality==='Vertical'),other=prog.filter(r=>r.modality!=='Horizontal'&&r.modality!=='Vertical');
+ const levels=LEVEL_ORDER.map(code=>{
+  const items=vert.filter(r=>r.levelStatus===code),meta=LEVEL_META[code]||{label:`Nível ${code}`,desc:''};
+  const transMap=new Map();
+  for(const it of items){if(it.levelTransition)transMap.set(it.levelTransition,(transMap.get(it.levelTransition)||0)+1);}
+  const transitions=[...transMap.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).map(([label,count])=>({label,count}));
+  return {code,label:meta.label,desc:meta.desc,barClass:meta.barClass,dot:meta.dot,isAf:LEVEL_AF_ORDER.includes(code),items,total:items.length,deferidos:items.filter(r=>r.merit==='deferido').length,indeferidos:items.filter(r=>r.merit==='indeferido').length,transitions};
+ });
+ const reasons={
+  INDEFERIDO:vert.filter(r=>r.levelStatus==='INDEFERIDO').length,
+  NAO_DETERMINADO:vert.filter(r=>r.levelStatus==='NAO_DETERMINADO').length,
+  INCONSISTENTE:vert.filter(r=>r.levelStatus==='INCONSISTENTE').length,
+  NAO_APLICA:vert.filter(r=>r.levelStatus==='NAO_APLICA').length
+ };
+ const semNivelTotal=reasons.INDEFERIDO+reasons.NAO_DETERMINADO+reasons.INCONSISTENTE+reasons.NAO_APLICA;
+ const niReasons={indeferidos:reasons.INDEFERIDO,outros:reasons.NAO_DETERMINADO+reasons.INCONSISTENTE+reasons.NAO_APLICA};
+ return {
+  groupId,total:prog.length,deferidos:prog.filter(r=>r.merit==='deferido').length,indeferidos:prog.filter(r=>r.merit==='indeferido').length,distinctProcesses:uniq(prog,'process'),
+  horizontal:{total:horiz.length,deferidos:horiz.filter(r=>r.merit==='deferido').length,indeferidos:horiz.filter(r=>r.merit==='indeferido').length},
+  vertical:{total:vert.length,deferidos:vert.filter(r=>r.merit==='deferido').length,indeferidos:vert.filter(r=>r.merit==='indeferido').length,distinctProcesses:uniq(vert,'process'),classified:vert.filter(r=>r.levelTo).length,unidentified:semNivelTotal},
+  other:{total:other.length},levels,reasons,niReasons
+ };
+}"""
+    assert old_levels_block in html
+    html = html.replace(old_levels_block, new_levels_block, 1)
+
+    # Aceitar todas as 10 situações (e apelido legado NI) no hash e em model()
+    old_hash_lvl = " S.level=LEVEL_ORDER.includes(p.get('level'))?p.get('level'):'';"
+    new_hash_lvl = " S.level=(LEVEL_ORDER.includes(p.get('level'))||p.get('level')==='NI')?p.get('level'):'';"
+    assert old_hash_lvl in html
+    html = html.replace(old_hash_lvl, new_hash_lvl, 1)
+
+    old_model_fn = """function model(){
+ const base=window.GEDIV_MODEL.dashboardModel(data,{...S,groupNames});
+ if(!S.level)return base;
+ const rows=base.rows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical'&&r.levelStatus===S.level);
+ return {...base,rows,metrics:{...base.metrics,resenhas:uniq(rows,'resenha_id'),processes:uniq(rows,'process'),decisions:rows.length,deferidos:rows.filter(r=>r.merit==='deferido').length,indeferidos:rows.filter(r=>r.merit==='indeferido').length}};
+}"""
+    new_model_fn = """function model(){
+ const base=window.GEDIV_MODEL.dashboardModel(data,{...S,groupNames});
+ if(!S.level)return base;
+ const rows=base.rows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical'&&levelMatchesFilter(r,S.level));
+ const nm=v=>{const d=String(v??'').replace(/\\D/g,'');return d.length>=6&&d.length<=9&&new Set(d).size>1?d:'';};
+ const servAll=new Set(rows.map(r=>nm(r.registration)).filter(Boolean));
+ const servBen=new Set(rows.filter(r=>r.merit==='deferido').map(r=>nm(r.registration)).filter(Boolean));
+ const defN=rows.filter(r=>r.merit==='deferido').length,indN=rows.filter(r=>r.merit==='indeferido').length;
+ return {...base,rows,original:rows,metrics:{...base.metrics,resenhas:uniq(rows,'resenha_id'),processes:uniq(rows,'process'),decisions:rows.length,deferidos:defN,indeferidos:indN,naoInformado:rows.length-defN-indN,servers:servAll.size,benefitedServers:servBen.size}};
+}"""
+    assert old_model_fn in html
+    html = html.replace(old_model_fn, new_model_fn, 1)
+
+    # Atualizar openGroupLevelDialog para exibir separadamente A–F e os 4 motivos sem nível efetivado
+    old_group_lvl_dialog = """function openGroupLevelDialog(groupId){
+ const baseAll=window.GEDIV_MODEL.dashboardModel(data,{...S,modality:'',level:'',card:'',groupNames}).original;
+ const sum=summarizeGroupLevels(baseAll,groupId);
+ const isPct=metricMode.level==='pct';
+ const scopeTitle=groupId?labelGroup(groupId):'Todos os grupos';
+ const body=`<p>Reconciliação nos filtros ativos (data, resultado, busca e situação).${S.modality?` <i>Filtro atual na tela: ${esc(S.modality)}.</i>`:''}</p>
+ <div class="reconcile-box">
+  <div class="reconcile-item"><small>${groupId?'Total no grupo (Progressão)':'Total Progressão'}</small><b>${sum.total}</b><span>${sum.deferidos} D · ${sum.indeferidos} I · ${sum.distinctProcesses} proc. distintos</span></div>
+  <div class="reconcile-item"><small>Progressão Horizontal</small><b>${sum.horizontal.total}</b><span>${sum.horizontal.deferidos} D · ${sum.horizontal.indeferidos} I</span></div>
+  <div class="reconcile-item"><small>Progressão Vertical (A–F + NI)</small><b>${sum.vertical.total}</b><span>${sum.vertical.deferidos} D · ${sum.vertical.indeferidos} I (${sum.vertical.classified} classif. + ${sum.vertical.unidentified} NI)</span></div>
+ </div>
+ <div class="table-scroll"><table class="dialog-table is-cards-sm">
+  <thead><tr><th>Nível destino</th><th class="nowrap">${isPct?'% Vertical':'Total'}</th><th class="nowrap">${isPct?'Total':'% Vertical'}</th><th class="nowrap">Deferidos</th><th class="nowrap">Indeferidos</th><th>Transições comprovadas</th><th class="nowrap">Ação</th></tr></thead>
+  <tbody>
+   ${sum.levels.map(lv=>{
+    const pTxt=sum.vertical.total?pct(lv.total,sum.vertical.total):'0,0%';
+    const trTxt=lv.transitions.length?lv.transitions.map(t=>`${esc(t.label)} (${t.count})`).join(', '):'—';
+    const act=lv.total?`<button type="button" class="pdf-link" style="border:0;background:none;padding:0" data-filter-level="${esc(lv.code)}">Filtrar →</button>`:'—';
+    return `<tr><td class="nowrap" data-label="Nível destino"><b>${esc(lv.label)}</b></td><td class="nowrap" data-label="${isPct?'% Vertical':'Total'}">${isPct?pTxt:lv.total}</td><td class="nowrap" data-label="${isPct?'Total':'% Vertical'}">${isPct?lv.total:pTxt}</td><td class="nowrap" data-label="Deferidos">${lv.deferidos}</td><td class="nowrap" data-label="Indeferidos">${lv.indeferidos}</td><td data-label="Transições">${trTxt}</td><td class="nowrap" data-label="Ação">${act}</td></tr>`;
+   }).join('')}
+  </tbody>
+  <tfoot><tr><td data-label="Resumo"><b>Total Vertical</b></td><td class="nowrap" data-label="${isPct?'% Vertical':'Total'}"><b>${isPct?'100,0%':sum.vertical.total}</b></td><td class="nowrap" data-label="${isPct?'Total':'% Vertical'}"><b>${isPct?sum.vertical.total:'100,0%'}</b></td><td class="nowrap" data-label="Deferidos"><b>${sum.vertical.deferidos}</b></td><td class="nowrap" data-label="Indeferidos"><b>${sum.vertical.indeferidos}</b></td><td colspan="2" data-label="Reconciliação"><b>${sum.vertical.classified} classificadas + ${sum.vertical.unidentified} NI = ${sum.vertical.total}</b></td></tr></tfoot>
+ </table></div>
+ <div class="reconcile-note"><b>Critério documental:</b> ${sum.niReasons.indeferidos} indeferimento(s) sem colunas Classe/P/Classe no DOE e ${sum.niReasons.outros} registro(s) com OCR ambíguo, destino ausente ou fora de A–F permanecem em <i>Nível não identificado</i>.${sum.vertical.total>sum.vertical.distinctProcesses?` Há ${sum.vertical.total-sum.vertical.distinctProcesses} processo(s) com mais de um registro vertical nesta amostra.`:''}</div>`;
+ openDialog(`${scopeTitle} · Níveis A–F`,body,{wide:true});"""
+    new_group_lvl_dialog = """function openGroupLevelDialog(groupId){
+ const baseAll=window.GEDIV_MODEL.dashboardModel(data,{...S,modality:'',level:'',card:'',groupNames}).original;
+ const sum=summarizeGroupLevels(baseAll,groupId);
+ const isPct=metricMode.level==='pct';
+ const scopeTitle=groupId?labelGroup(groupId):'Todos os grupos';
+ const renderRow=lv=>{
+  const pTxt=sum.vertical.total?pct(lv.total,sum.vertical.total):'0,0%';
+  const trList=lv.transitions.length?lv.transitions.map(t=>`${esc(t.label)} (${t.count})`).join(', '):'';
+  const trCell=lv.isAf?(trList||'—'):`<span>${esc(lv.desc)}</span>${trList?`<span class="level-exp-sub"><b>Ocorrências lidas:</b> ${trList}</span>`:''}`;
+  const act=lv.total?`<button type="button" class="pdf-link" style="border:0;background:none;padding:0" data-filter-level="${esc(lv.code)}">Filtrar →</button>`:'—';
+  return `<tr><td class="nowrap" data-label="Situação / Nível"><span class="level-row-lbl"><i class="level-dot" style="background:${lv.dot}"></i><b>${esc(lv.label)}</b></span></td><td class="nowrap" data-label="${isPct?'% Vertical':'Total'}">${isPct?pTxt:lv.total}</td><td class="nowrap" data-label="${isPct?'Total':'% Vertical'}">${isPct?lv.total:pTxt}</td><td class="nowrap" data-label="Deferidos">${lv.deferidos}</td><td class="nowrap" data-label="Indeferidos">${lv.indeferidos}</td><td data-label="Transições / Explicação">${trCell}</td><td class="nowrap" data-label="Ação">${act}</td></tr>`;
+ };
+ const afRows=sum.levels.filter(lv=>lv.isAf),nonAfRows=sum.levels.filter(lv=>!lv.isAf);
+ const body=`<p>Reconciliação completa das Progressões Verticais nos filtros ativos (data, resultado, busca e situação), separando níveis A–F efetivados e motivos sem nível A–F.${S.modality?` <i>Filtro atual na tela: ${esc(S.modality)}.</i>`:''}</p>
+ <div class="reconcile-box">
+  <div class="reconcile-item"><small>${groupId?'Total no grupo (Progressão)':'Total Progressão'}</small><b>${sum.total}</b><span>${sum.deferidos} D · ${sum.indeferidos} I · ${sum.distinctProcesses} proc. distintos</span></div>
+  <div class="reconcile-item"><small>Progressão Horizontal</small><b>${sum.horizontal.total}</b><span>${sum.horizontal.deferidos} D · ${sum.horizontal.indeferidos} I</span></div>
+  <div class="reconcile-item"><small>Progressão Vertical (100%)</small><b>${sum.vertical.total}</b><span>${sum.vertical.classified} efetivadas A–F + ${sum.vertical.unidentified} sem nível A–F</span></div>
+ </div>
+ <div class="table-scroll"><table class="dialog-table is-cards-sm">
+  <thead><tr><th>Situação / Nível</th><th class="nowrap">${isPct?'% Vertical':'Total'}</th><th class="nowrap">${isPct?'Total':'% Vertical'}</th><th class="nowrap">Deferidos</th><th class="nowrap">Indeferidos</th><th>Transições / Explicação</th><th class="nowrap">Ação</th></tr></thead>
+  <tbody>
+   ${afRows.map(renderRow).join('')}
+   <tr class="level-sec-row"><td colspan="7">Sem nível A–F efetivado · separado por motivo (${sum.vertical.unidentified} decisões)</td></tr>
+   ${nonAfRows.map(renderRow).join('')}
+  </tbody>
+  <tfoot><tr><td data-label="Resumo"><b>Total Vertical</b></td><td class="nowrap" data-label="${isPct?'% Vertical':'Total'}"><b>${isPct?'100,0%':sum.vertical.total}</b></td><td class="nowrap" data-label="${isPct?'Total':'% Vertical'}"><b>${isPct?sum.vertical.total:'100,0%'}</b></td><td class="nowrap" data-label="Deferidos"><b>${sum.vertical.deferidos}</b></td><td class="nowrap" data-label="Indeferidos"><b>${sum.vertical.indeferidos}</b></td><td colspan="2" data-label="Reconciliação"><b>${sum.vertical.classified} A–F + ${sum.reasons.INDEFERIDO} indef. + ${sum.reasons.NAO_DETERMINADO} sem nível + ${sum.reasons.INCONSISTENTE} inconsist. + ${sum.reasons.NAO_APLICA} não aplica = ${sum.vertical.total}</b></td></tr></tfoot>
+ </table></div>
+ <div class="reconcile-note"><b>Leitura das categorias sem nível A–F:</b> nenhuma decisão some dos totais globais. <b>Indeferidas (${sum.reasons.INDEFERIDO})</b> não efetivam nível; <b>Deferidas sem nível (${sum.reasons.NAO_DETERMINADO})</b> não trouxeram a classe A–F na publicação/extração; <b>Inconsistência A–F (${sum.reasons.INCONSISTENTE})</b> aponta sequência invertida, igual ou fora de A–F; <b>A–F não se aplica (${sum.reasons.NAO_APLICA})</b> identifica publicações verticais em escala diversa (ex.: níveis romanos ou numéricos).${sum.vertical.total>sum.vertical.distinctProcesses?` Há ${sum.vertical.total-sum.vertical.distinctProcesses} registro(s) adicional(is) compartilhando processo coletivo nesta amostra.`:''}</div>`;
+ openDialog(`${scopeTitle} · Progressão Vertical A–F`,body,{wide:true});"""
+    assert old_group_lvl_dialog in html
+    html = html.replace(old_group_lvl_dialog, new_group_lvl_dialog, 1)
+
+    # Atualizar activeFilters, levelSummaryForSelection, filterText, decisionRows, openFullTableModal para usar rótulos claros
+    html = html.replace(
+        "if(S.level)chips.push(['level',S.level==='NI'?'Vertical: Nível não identificado':`Vertical: Nível ${S.level}`]);",
+        "if(S.level)chips.push(['level',`Vertical: ${levelChipLabel(S.level)}`]);",
+        1,
+    )
+    old_lvl_sel = """function levelSummaryForSelection(items){
+ const vItems=items.filter(x=>x.axis==='progressao'&&x.modality==='Vertical');
+ if(!vItems.length)return '';
+ if(vItems.length===1){const x=vItems[0];return x.levelTo?`${x.levelLabel} (${x.levelTransition})`:'Nível não identificado';}
+ const distinct=[...new Set(vItems.map(x=>x.levelStatus||'NI'))].sort();
+ return distinct.length===1?(distinct[0]==='NI'?'Nível não identificado':`Nível ${distinct[0]}`):`Níveis: ${distinct.map(c=>c==='NI'?'NI':c).join(', ')}`;
+}"""
+    new_lvl_sel = """function levelSummaryForSelection(items){
+ const vItems=items.filter(x=>x.axis==='progressao'&&x.modality==='Vertical');
+ if(!vItems.length)return '';
+ if(vItems.length===1)return formatRowLevel(vItems[0]);
+ const distinct=[...new Set(vItems.map(x=>x.levelStatus||'NAO_DETERMINADO'))];
+ return distinct.length===1?levelChipLabel(distinct[0]):`Situações A–F: ${distinct.map(c=>LEVEL_META[c]?.compact||c).join(', ')}`;
+}"""
+    assert old_lvl_sel in html
+    html = html.replace(old_lvl_sel, new_lvl_sel, 1)
+    html = html.replace(
+        "const lvlTxt=r=>r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—');",
+        "const lvlTxt=r=>formatRowLevel(r);",
+        1,
+    )
+    html = html.replace(
+        "S.level?(S.level==='NI'?'Nível não identificado':'Nível '+S.level):''",
+        "S.level?('Vertical: '+levelChipLabel(S.level)):''",
+        1,
+    )
+    html = html.replace(
+        "r.levelTo||(r.levelStatus==='NI'?'Nível não identificado':'')",
+        "r.levelTo||(r.levelLabel||'')",
+        1,
+    )
 
     # Em loadFromHash(), aceitar 'rejeitado' e resolver apelidos de grupos ('TEC-ADM' -> 'PENDENTE:TEC. ADM', etc.)
     old_hash_grp = """ S.validation=['pendente','conferido'].includes(p.get('validation'))?p.get('validation'):defVal;
@@ -1013,28 +1287,71 @@ function timeline(rows){
     assert old_card_chip in html
     html = html.replace(old_card_chip, new_card_chip, 1)
 
-    # 5c-bis. Adaptar levelChart() para exibir agregados públicos protegidos (limiar >= 5) quando não autenticado
-    old_level_start = """function levelChart(){
- const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;"""
-    new_level_start = """function levelChart(){
+    # 5c-bis. Atualizar levelChart() para separar claramente níveis A–F efetivados e os 4 motivos sem nível A–F (público e autenticado)
+    old_level_full = """function levelChart(){
+ const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;
+ const sum=summarizeGroupLevels(baseRows,S.group),totalV=sum.vertical.total,isPct=metricMode.level==='pct';
+ const recRows=(inducedByLevel&&!inducedByLevel.modality&&S.modality==='Vertical')?window.GEDIV_MODEL.dashboardModel(data,{...S,modality:'',level:'',card:'',groupNames}).original:baseRows;
+ const sumRec=recRows===baseRows?sum:summarizeGroupLevels(recRows,S.group),horizTotal=sumRec.horizontal.total;
+ const max=Math.max(1,...sum.levels.map(x=>x.total)),den=isPct?Math.max(1,totalV):max;
+ $('#levelCardTitle').textContent=S.group?`Verticais A–F · ${S.group==='NAO_INFORMADO'?'Sem grupo':S.group}`:'Progressões Verticais (A–F)';
+ $('#levelCardSub').textContent=S.modality==='Horizontal'?`Filtro Horizontal (${sum.horizontal.total}) · 0 Verticais`:S.group?(horizTotal>0?`${totalV} Verticais + ${horizTotal} Horizontais = ${sumRec.total}`:`${totalV} Verticais (${sum.vertical.deferidos} D · ${sum.vertical.indeferidos} I)`):'Distribuição por nível de destino · clique para filtrar';
+ $('#levelChart').innerHTML=sum.levels.map(lv=>{
+  const txt=lv.total?(isPct?`${pct(lv.total,totalV)} (${Math.round(100*lv.deferidos/lv.total)}% D)`:`${lv.deferidos} D · ${lv.indeferidos} I`):'—';
+  const lbl=lv.code==='NI'?'Não identificado':`Nível ${lv.code}`;
+  return `<button class="group-row ${S.level===lv.code?'selected-row':''}" data-level="${esc(lv.code)}" aria-label="${esc(lbl)}: ${lv.deferidos} deferidos e ${lv.indeferidos} indeferidos (${pct(lv.total,totalV)})" title="${lv.total} de ${totalV} (${pct(lv.total,totalV)}) · ${lv.deferidos} D · ${lv.indeferidos} I"><span>${esc(lbl)}</span><span class="result-track"><span class="part good" style="width:${lv.deferidos*100/den}%"></span><span class="part bad" style="width:${lv.indeferidos*100/den}%"></span></span><b>${txt}</b></button>`;
+ }).join('');
+ $('#levelReconcileNote').innerHTML=`${sum.vertical.classified} classif. + ${sum.vertical.unidentified} NI = ${totalV} Verticais · ${horizTotal} Horiz. <button type="button" class="pdf-link" style="border:0;background:none;padding:0;margin-left:4px" id="openAeMatrix">Ver transições ↗</button>`;
+}"""
+    new_level_full = """function levelChart(){
  if(isPublicAgg()){
-  const bs=data.backend.series||{},lvs=bs.por_nivel_vertical||[],res=bs.resumo_nivel_vertical||{},isPct=metricMode.level==='pct';
-  const totalV=Number(res.total_vertical||0),max=Math.max(1,...lvs.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalV):max;
+  const bs=data.backend.series||{},res=bs.resumo_nivel_vertical||{},isPct=metricMode.level==='pct';
+  const sits=Array.isArray(bs.por_situacao_nivel_vertical)&&bs.por_situacao_nivel_vertical.length
+   ?bs.por_situacao_nivel_vertical
+   :(bs.por_nivel_vertical||[]).map(x=>({codigo:x.nivel==='NAO_IDENTIFICADO'?'NAO_DETERMINADO':x.nivel,rotulo:x.rotulo,descricao:'',grupo_situacao:LEVEL_AF_ORDER.includes(x.nivel)?'nivel_af':'sem_nivel_af',total:x.total,deferido:x.deferido,indeferido:x.indeferido}));
+  const totalV=Number(res.total_vertical||0),max=Math.max(1,...sits.map(x=>Number(x.total||0))),den=isPct?Math.max(1,totalV):max;
+  const afItems=sits.filter(x=>x.grupo_situacao==='nivel_af'||LEVEL_AF_ORDER.includes(x.codigo));
+  const nonAfItems=sits.filter(x=>!(x.grupo_situacao==='nivel_af'||LEVEL_AF_ORDER.includes(x.codigo)));
+  const renderPubRow=lv=>{
+   const code=lv.codigo||lv.nivel,meta=LEVEL_META[code]||{label:lv.rotulo||code,barClass:'good',dot:'#1265ef',desc:lv.descricao||''};
+   const n=lv.total,d=lv.deferido,i=lv.indeferido,hasN=n!=null&&n>0;
+   const lbl=meta.label||lv.rotulo||code;
+   const txt=n==null?'suprimido (< 5)':n===0?'—':(isPct&&totalV?`${pct(n,totalV)}`:`${n} (≥ 5)`);
+   const barCls=LEVEL_AF_ORDER.includes(code)?'good':meta.barClass;
+   const bars=hasN?`<span class="part ${barCls}" style="width:${n*100/den}%"></span>`:'';
+   return `<button class="group-row" disabled aria-label="${esc(lbl)}: ${esc(txt)}" title="${esc(lbl)}: ${esc(txt)} · ${esc(meta.desc||lv.descricao||'')}"><span class="level-row-lbl">${!LEVEL_AF_ORDER.includes(code)?`<i class="level-dot" style="background:${meta.dot}"></i>`:''}${esc(lbl)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
+  };
   $('#levelCardTitle').textContent='Progressões Verticais (A–F)';
-  $('#levelCardSub').textContent='Distribuição pública por nível de destino (limiar ≥ 5)';
-  $('#levelChart').innerHTML=lvs.map(lv=>{
-   const n=lv.total,d=lv.deferido,i=lv.indeferido,hasN=n!=null&&n>0,hasDI=hasN&&d!=null&&i!=null;
-   const lbl=lv.nivel==='NAO_IDENTIFICADO'?'Não identificado':`Nível ${lv.nivel}`;
-   const txt=n==null?'suprimido (< 5)':n===0?'—':hasDI?(isPct?`${pct(n,totalV)} (${Math.round(100*d/n)}% D)`:`${d} D · ${i} I`):`${n} (≥ 5)`;
-   const bars=hasDI?`<span class="part good" style="width:${d*100/den}%"></span><span class="part bad" style="width:${i*100/den}%"></span>`:(hasN?`<span class="part" style="width:${n*100/den}%;background:#1265ef"></span>`:'');
-   return `<button class="group-row" disabled aria-label="${esc(lbl)}: ${esc(txt)}"><span>${esc(lbl)}</span><span class="result-track">${bars}</span><b>${txt}</b></button>`;
-  }).join('');
-  $('#levelReconcileNote').textContent=`${res.classificados??'—'} classif. + ${res.nao_identificados??'—'} NI · ${res.total_vertical??'—'} Verticais · ${res.total_horizontal??'—'} Horiz. (agregado público)`;
+  $('#levelCardSub').textContent='Nível efetivado e situações sem nível A–F (agregado público · limiar ≥ 5)';
+  $('#levelChart').innerHTML=afItems.map(renderPubRow).join('')
+   +(nonAfItems.length?'<div class="level-sep"><span>Sem nível A–F efetivado (por motivo)</span></div>'+nonAfItems.map(renderPubRow).join(''):'');
+  const fmtV=v=>v==null?'supr. (< 5)':String(v);
+  $('#levelReconcileNote').textContent=`${fmtV(res.classificados)} A–F + ${fmtV(res.nao_identificados)} sem nível (indef.: ${fmtV(res.indeferidos)}, sem nível: ${fmtV(res.nao_determinados)}, inconsist.: ${fmtV(res.inconsistentes)}, não aplica: ${fmtV(res.nao_aplica)}) · ${fmtV(res.total_vertical)} Verticais · ${fmtV(res.total_horizontal)} Horiz. (agregado público)`;
   return;
  }
- const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;"""
-    assert old_level_start in html
-    html = html.replace(old_level_start, new_level_start, 1)
+ const baseRows=window.GEDIV_MODEL.dashboardModel(data,{...S,level:'',groupNames}).rows;
+ const sum=summarizeGroupLevels(baseRows,S.group),totalV=sum.vertical.total,isPct=metricMode.level==='pct';
+ const recRows=(inducedByLevel&&!inducedByLevel.modality&&S.modality==='Vertical')?window.GEDIV_MODEL.dashboardModel(data,{...S,modality:'',level:'',card:'',groupNames}).original:baseRows;
+ const sumRec=recRows===baseRows?sum:summarizeGroupLevels(recRows,S.group),horizTotal=sumRec.horizontal.total;
+ const max=Math.max(1,...sum.levels.map(x=>x.total)),den=isPct?Math.max(1,totalV):max;
+ $('#levelCardTitle').textContent=S.group?`Verticais A–F · ${S.group==='NAO_INFORMADO'?'Sem grupo':S.group}`:'Progressões Verticais (A–F)';
+ $('#levelCardSub').textContent=S.modality==='Horizontal'?`Filtro Horizontal (${sum.horizontal.total}) · 0 Verticais`:S.group?(horizTotal>0?`${totalV} Verticais + ${horizTotal} Horizontais = ${sumRec.total}`:`${totalV} Verticais (${sum.vertical.classified} A–F · ${sum.vertical.unidentified} sem nível A–F)`):'Nível de destino efetivado e situações sem nível A–F · clique para filtrar';
+ const afLevels=sum.levels.filter(lv=>lv.isAf),nonAfLevels=sum.levels.filter(lv=>!lv.isAf);
+ const renderLvlRow=lv=>{
+  const pTxt=pct(lv.total,totalV);
+  const txt=lv.total?(isPct?pTxt:(lv.isAf?`${lv.total} def.`:(lv.code==='INDEFERIDO'?`${lv.total} ind.`:`${lv.total}`)) ):'—';
+  const trTip=lv.transitions.length?` · Ocorrências: ${lv.transitions.slice(0,4).map(t=>`${t.label} (${t.count})`).join(', ')}`:'';
+  const tip=`${lv.label}: ${lv.total} de ${totalV} verticais (${pTxt}) · ${lv.desc}${trTip}`;
+  const barHtml=lv.total?`<span class="part ${lv.barClass}" style="width:${lv.total*100/den}%"></span>`:'';
+  return `<button class="group-row ${S.level===lv.code?'selected-row':''}" data-level="${esc(lv.code)}" aria-pressed="${S.level===lv.code?'true':'false'}" aria-label="${esc(tip)}" title="${esc(tip)}"><span class="level-row-lbl">${lv.isAf?'':`<i class="level-dot" style="background:${lv.dot}"></i>`}${esc(lv.label)}</span><span class="result-track">${barHtml}</span><b>${txt}</b></button>`;
+ };
+ $('#levelChart').innerHTML=afLevels.map(renderLvlRow).join('')
+  +`<div class="level-sep"><span>Sem nível A–F efetivado (por motivo)</span><span>${sum.vertical.unidentified}</span></div>`
+  +nonAfLevels.map(renderLvlRow).join('');
+ $('#levelReconcileNote').innerHTML=`${sum.vertical.classified} A–F + ${sum.reasons.INDEFERIDO} indef. + ${sum.reasons.NAO_DETERMINADO} sem nível + ${sum.reasons.INCONSISTENTE} inconsist. + ${sum.reasons.NAO_APLICA} não aplica = ${totalV} Verticais · ${horizTotal} Horiz. <button type="button" class="pdf-link" style="border:0;background:none;padding:0;margin-left:4px" id="openAeMatrix">Ver transições e diagnóstico ↗</button>`;
+}"""
+    assert old_level_full in html
+    html = html.replace(old_level_full, new_level_full, 1)
 
     # 5d. Proteger exportXlsx() e exportCsv() no modo público para zero vazamento e explicitar escopo
     old_exports = """function exportXlsx(){let m=model(),summary=[['Visão',views[S.view][1]],['Filtros',filterText()],['Cobertura',data.meta.coverage],['Atualização',data.meta.automation],[],['Indicador','Valor'],...Object.entries(m.metrics)],list=[['Resenha / processo','Assunto','Resultado','Data','Quantidade'],...exportRows()];exp.download(exp.xlsx({'Resumo':summary,'Visão selecionada':list,'Decisões':decisionRows()}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-visao-selecionada.xlsx');toast('Planilha da visão selecionada gerada.');}
@@ -1048,6 +1365,7 @@ function exportCsv(){exp.download(exp.csv(decisionRows()),'text/csv;charset=utf-
  if(S.modality==='Vertical')q.set('modalidade','VERTICAL');
  else if(S.modality==='Horizontal')q.set('modalidade','HORIZONTAL');
  if(S.group&&!S.group.startsWith('PENDENTE:'))q.set('grupo',S.group);
+ if(S.level)q.set('nivel',S.level==='NI'?'NAO_IDENTIFICADO':S.level);
  const cats=(S.category||[]).filter(c=>/^TS-0[1-7]$/.test(c));
  if(cats.length)q.set('subcategoria',cats.join(','));
  if(S.merit==='deferido')q.set('resultado','DEFERIDO');
@@ -1130,7 +1448,7 @@ function exportCsv(){
    $('#printReport').innerHTML='<h3>Resumo público protegido (limiar ≥ 5)</h3><p>'+esc(data.meta.coverage||'')+'</p><table><thead><tr><th>Assunto</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>'+pa.map(x=>'<tr><td>'+esc(x.rotulo||x.chave)+'</td><td>'+esc(fmtP(x.total))+'</td><td>'+esc(fmtP(x.deferido))+'</td><td>'+esc(fmtP(x.indeferido))+'</td></tr>').join('')+'</tbody></table>';
    return;
   }
-  let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—'))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';
+  let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(formatRowLevel(r))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';
  }"""
     assert old_print_fn in html
     html = html.replace(old_print_fn, new_print_fn, 1)
@@ -1287,8 +1605,7 @@ function axisTitle(r){return r.axis==='progressao'?'Progressão Funcional':r.axi
 function modalityFull(r){
  if(r.axis==='progressao'){
   if(r.modality==='Vertical'){
-   if(r.levelTo)return `Progressão Vertical · Nível ${r.levelTo}${r.levelTransition?' ('+r.levelTransition+')':''}`;
-   return 'Progressão Vertical · Nível não identificado';
+   return `Progressão Vertical · ${formatRowLevel(r)}`;
   }
   return r.modality==='Horizontal'?'Progressão Horizontal':'Progressão Funcional';
  }
@@ -1296,7 +1613,11 @@ function modalityFull(r){
  return labelRow(r)||'Outros benefícios';
 }
 function modalityCompact(r){
- if(r.axis==='progressao'&&r.modality==='Vertical')return r.levelTo?`Vertical · ${r.levelTo}`:'Vertical · NI';
+ if(r.axis==='progressao'&&r.modality==='Vertical'){
+  if(r.levelTo)return `Vertical · ${r.levelTo}`;
+  const cmp=LEVEL_META[r.levelStatus]?.compact||'Sem nível';
+  return `Vertical · ${cmp}`;
+ }
  if(r.axis==='progressao'&&r.modality==='Horizontal')return 'Horizontal';
  if(r.axis==='tempo')return r.category?catName(r.category):'Tempo de Serviço';
  return labelRow(r)||'Outros';
@@ -1377,6 +1698,7 @@ function openDocModal(r,sel){
    ${field('Natureza da publicação',natTxt)}
    ${r.axis==='progressao'?field('Grupo ocupacional',labelGroup(r.group)):''}
    ${field('Resultado original',r.resultadoOriginal||(r.merit==='deferido'?'DEFERIDO':r.merit==='indeferido'?'INDEFERIDO':''))}
+   ${r.axis==='progressao'&&r.modality==='Vertical'?field('Situação nível A–F',r.levelNote?`${formatRowLevel(r)} · ${r.levelNote}`:formatRowLevel(r)):''}
    ${field('Classe / nível anterior',clsAnt)}
    ${field('Classe / nível atual',clsAtu)}
    ${field('Origem do tempo',r.origemTempo)}
@@ -1450,6 +1772,7 @@ function details(sel){
     <span class="sel-dt">Processo</span><span class="sel-dd ${!r.process?'is-muted':''}">${esc(r.process||NAO_EXTRAIDO)}</span>
     <span class="sel-dt">Eixo</span><span class="sel-dd">${esc(axisTitle(r))}</span>
     <span class="sel-dt">Modalidade</span><span class="sel-dd">${esc(modalityFull(r))}</span>
+    ${r.axis==='progressao'&&r.modality==='Vertical'&&r.levelNote&&!r.levelTo?`<span class="sel-dt">Motivo A–F</span><span class="sel-dd">${esc(r.levelNote)}</span>`:''}
     ${r.axis==='progressao'?`<span class="sel-dt">Grupo</span><span class="sel-dd">${esc(labelGroup(r.group))}</span>`:''}
     <span class="sel-dt">Resultado</span><span class="sel-dd">${resultPill(r)}</span>
     <span class="sel-dt">Data da publicação</span><span class="sel-dd">${esc(dt(r.date))}</span>
@@ -1512,7 +1835,7 @@ function details(sel){
     html = html.replace(old_details, new_details, 1)
 
     old_detail_dialog = """function detailDialog(sel){let r=sel.items[0],events=data.events.filter(e=>r.act&&e.act===r.act&&e.validation==='conferido'),hasVert=sel.items.some(x=>x.axis==='progressao'&&x.modality==='Vertical');let body=`<p>Resenha <b>${esc(r.resenha)}</b> · ${esc(labelRow(r))} · ${dt(r.date)}.</p><div class="table-scroll"><table class="dialog-table is-cards-sm"><thead><tr><th>Processo</th><th>Servidor</th>${hasVert?'<th>Nível (A–F)</th>':''}<th>Resultado</th></tr></thead><tbody>${sel.items.map(x=>`<tr><td data-label="Processo">${esc(x.process||'Não transcrito')}</td><td data-label="Servidor">${esc(x.server)}</td>${hasVert?`<td class="nowrap" data-label="Nível (A–F)">${esc(x.levelTo?`${x.levelLabel} (${x.levelTransition})`:(x.levelLabel||'—'))}</td>`:''}<td data-label="Resultado">${meritBadge(x)}</td></tr>`).join('')}</tbody></table></div>`;if(events.length)body+=`<p><b>Histórico documental</b></p>${events.map(e=>`<p>${esc(e.type)} em ${dt(e.date)}: ${esc(e.description)} ${official(e.url,e.page)?`<a target="_blank" rel="noopener noreferrer" href="${esc(official(e.url,e.page))}">Abrir publicação da alteração</a>`:''}</p>`).join('')}`;openDialog('Processos e histórico',body,{wide:hasVert});}"""
-    new_detail_dialog = """function detailDialog(sel){let r=sel.items[0],events=data.events.filter(e=>r.act&&e.act===r.act&&e.validation==='conferido'),hasVert=sel.items.some(x=>x.axis==='progressao'&&x.modality==='Vertical'),isAuth=!!data.backend?.autenticado;let body=`<p>Resenha <b>${esc(r.resenha)}</b> · ${esc(labelRow(r))} · ${dt(r.date)}.</p><div class="table-scroll"><table class="dialog-table is-cards-sm"><thead><tr><th>Processo</th><th>Servidor</th><th>Matrícula</th>${hasVert?'<th>Nível (A–F)</th>':''}<th>Resultado</th><th>Situação</th>${isAuth?'<th class="nowrap">Revisão</th>':''}</tr></thead><tbody>${sel.items.map(x=>`<tr><td data-label="Processo">${esc(x.process||'Não transcrito')}</td><td data-label="Servidor">${esc(x.server)}${x.preliminaryReview?`<div class="prelim-note">${esc(x.preliminaryReview)}</div>`:''}</td><td class="nowrap" data-label="Matrícula">${esc(maskMatricula(x.registration))}</td>${hasVert?`<td class="nowrap" data-label="Nível (A–F)">${esc(x.levelTo?`${x.levelLabel} (${x.levelTransition})`:(x.levelLabel||'—'))}</td>`:''}<td data-label="Resultado">${meritBadge(x)}</td><td class="nowrap" data-label="Situação">${esc(x.validation)}</td>${isAuth?`<td class="nowrap" data-label="Revisão">${x.axis!=='outros'?`<button type="button" class="pdf-link" style="border:0;background:none;padding:0" data-review-row="${esc(x.id)}">Revisar →</button>`:'—'}</td>`:''}</tr>`).join('')}</tbody></table></div>`;if(events.length)body+=`<p><b>Histórico documental</b></p>${events.map(e=>`<p>${esc(e.type)} em ${dt(e.date)}: ${esc(e.description)} ${official(e.url,e.page)?`<a target="_blank" rel="noopener noreferrer" href="${esc(official(e.url,e.page))}">Abrir publicação da alteração</a>`:''}</p>`).join('')}`;openDialog('Processos e histórico',body,{wide:true});$$('#dialogBody [data-review-row]').forEach(btn=>btn.addEventListener('click',()=>{const item=sel.items.find(i=>i.id===btn.dataset.reviewRow);if(item){$('#dialog').close();openReviewModal('decisao',[item]);}}));}"""
+    new_detail_dialog = """function detailDialog(sel){let r=sel.items[0],events=data.events.filter(e=>r.act&&e.act===r.act&&e.validation==='conferido'),hasVert=sel.items.some(x=>x.axis==='progressao'&&x.modality==='Vertical'),isAuth=!!data.backend?.autenticado;let body=`<p>Resenha <b>${esc(r.resenha)}</b> · ${esc(labelRow(r))} · ${dt(r.date)}.</p><div class="table-scroll"><table class="dialog-table is-cards-sm"><thead><tr><th>Processo</th><th>Servidor</th><th>Matrícula</th>${hasVert?'<th>Nível (A–F)</th>':''}<th>Resultado</th><th>Situação</th>${isAuth?'<th class="nowrap">Revisão</th>':''}</tr></thead><tbody>${sel.items.map(x=>`<tr><td data-label="Processo">${esc(x.process||'Não transcrito')}</td><td data-label="Servidor">${esc(x.server)}${x.preliminaryReview?`<div class="prelim-note">${esc(x.preliminaryReview)}</div>`:''}</td><td class="nowrap" data-label="Matrícula">${esc(maskMatricula(x.registration))}</td>${hasVert?`<td class="nowrap" data-label="Nível (A–F)">${esc(formatRowLevel(x))}</td>`:''}<td data-label="Resultado">${meritBadge(x)}</td><td class="nowrap" data-label="Situação">${esc(x.validation)}</td>${isAuth?`<td class="nowrap" data-label="Revisão">${x.axis!=='outros'?`<button type="button" class="pdf-link" style="border:0;background:none;padding:0" data-review-row="${esc(x.id)}">Revisar →</button>`:'—'}</td>`:''}</tr>`).join('')}</tbody></table></div>`;if(events.length)body+=`<p><b>Histórico documental</b></p>${events.map(e=>`<p>${esc(e.type)} em ${dt(e.date)}: ${esc(e.description)} ${official(e.url,e.page)?`<a target="_blank" rel="noopener noreferrer" href="${esc(official(e.url,e.page))}">Abrir publicação da alteração</a>`:''}</p>`).join('')}`;openDialog('Processos e histórico',body,{wide:true});$$('#dialogBody [data-review-row]').forEach(btn=>btn.addEventListener('click',()=>{const item=sel.items.find(i=>i.id===btn.dataset.reviewRow);if(item){$('#dialog').close();openReviewModal('decisao',[item]);}}));}"""
     assert old_detail_dialog in html
     html = html.replace(old_detail_dialog, new_detail_dialog, 1)
 

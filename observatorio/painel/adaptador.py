@@ -166,8 +166,9 @@ def backend_para_frontend_linha(linha: dict) -> dict:
 
     level_to = nv.get("classe_posterior") if nv.get("motivo") == "ok" else ""
     level_from = nv.get("classe_anterior") if nv.get("motivo") == "ok" else ""
-    level_status = "NI" if nv.get("nivel") == "NAO_IDENTIFICADO" else (nv.get("nivel") or "")
-    level_label = "Nível não identificado" if level_status == "NI" else (f"Nível {level_status}" if level_status else "")
+    level_status = nv.get("categoria") or ""
+    level_label = nv.get("rotulo") or (f"Nível {level_status}" if level_status in indicadores._CLASSES_VALIDAS else "")
+    level_note = nv.get("observacao") or nv.get("descricao") or ""
 
     return {
         "id": linha.get("id"),
@@ -214,6 +215,7 @@ def backend_para_frontend_linha(linha: dict) -> dict:
         "levelStatus": level_status,
         "levelLabel": level_label,
         "levelReason": nv.get("motivo") or "",
+        "levelNote": level_note,
         "detalhe": det,
         "refeito": bool(linha.get("refeito")),
         "semEfeito": bool(linha.get("sem_efeito")),
