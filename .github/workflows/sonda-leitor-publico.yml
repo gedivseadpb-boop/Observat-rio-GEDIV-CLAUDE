@@ -18,6 +18,7 @@ jobs:
 
           base = "https://r.jina.ai/https://auniao.pb.gov.br"
           alvos = {
+              "controle": "https://r.jina.ai/https://example.com",
               "listagem": base + "/doe",
               "pdf_publico": base + "/servicos/doe/2026/novembro/diario-oficial-20-11-2026-portal.pdf",
           }
@@ -38,7 +39,9 @@ jobs:
                   resultado["bytes_texto"] = len(dados)
                   resultado["sha256_texto"] = hashlib.sha256(dados).hexdigest()
                   resultado["continha_diario_oficial"] = "diario oficial" in normal
-                  if nome == "pdf_publico":
+                  if nome == "controle":
+                      resultado["ok"] = resposta.status == 200 and "example domain" in normal
+                  elif nome == "pdf_publico":
                       resultado["continha_numero_edicao"] = bool(re.search(r"18[.\\s,]*717", normal))
                       resultado["ok"] = resposta.status == 200 and len(dados) > 10000 and resultado["continha_diario_oficial"] and resultado["continha_numero_edicao"]
                   else:
@@ -48,7 +51,7 @@ jobs:
                   resultado["erro"] = type(exc).__name__
                   resultado["http"] = getattr(exc, "code", None)
               return resultado
-          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
               resultados = list(pool.map(testar, alvos.items()))
           for item in resultados:
               print(json.dumps(item, ensure_ascii=True))
