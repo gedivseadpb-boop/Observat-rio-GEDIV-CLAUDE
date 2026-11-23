@@ -299,6 +299,11 @@ body{background:#f3f7fb!important}
 .delicate-lg-dot{width:9px;height:9px;border-radius:2px;display:inline-block}
 .delicate-tl-tip{font-size:11px;color:#102b4d;font-weight:600;background:#f4f8fd;border:1px solid #dce8f1;border-radius:6px;padding:5px 10px;margin-top:6px;min-height:26px}
 .delicate-tl-note{font-size:11px;color:#27527c;margin-top:5px;line-height:1.35}
+.date-actions{display:flex;gap:4px;margin-top:6px}
+.date-act-btn{flex:1;height:28px;border:1px solid #cdddeb;background:#fff;color:#27527c;border-radius:5px;font-size:10.5px;font-weight:700;padding:0 6px}
+.date-act-btn:hover:not(:disabled){background:#edf5ff;border-color:#9bc2f7}
+.date-act-btn.is-primary{background:#1265ef;border-color:#1265ef;color:#fff}
+.date-act-btn.is-primary:hover:not(:disabled){background:#0a4d96;border-color:#0a4d96}
 @media(max-width:920px){.topbar{flex-wrap:wrap;gap:10px}.header-title{flex:1 1 220px;overflow:hidden}.header-title h1,.header-title p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 @media(max-width:760px){.tabs{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;padding-bottom:6px;scrollbar-width:thin}.tabs::-webkit-scrollbar{height:4px}.tabs::-webkit-scrollbar-thumb{background:#b8d5fa;border-radius:4px}.tabs button{scroll-snap-align:start;flex-shrink:0!important}.kpi[data-card="decisions"]{grid-column:1 / -1}.banner{align-items:flex-start!important;flex-wrap:wrap!important;gap:6px 10px!important}.banner div:nth-child(2){flex:1 1 220px;min-width:0}.banner #coverageOpen{display:inline-flex!important;align-self:flex-start;margin-left:30px!important;margin-top:0!important;padding:2px 0!important}.downloads{width:100%}.downloads .delicate-scope-inline{flex:1 1 180px}.downloads .download-main{flex:1 1 180px}}
 @media(max-width:700px){.review-grid,.doc-meta-box{grid-template-columns:1fr}.sel-grid{grid-template-columns:minmax(96px,112px) minmax(0,1fr)}}
@@ -405,7 +410,7 @@ document.getElementById('sendBatch').onclick=async()=>{
 <aside class="sidebar" id="sidebar" aria-label="Filtros da visão">
   <div class="side-head"><div><span class="filter-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><strong>Filtros</strong></div><button class="icon-btn" id="collapse" aria-label="Recolher filtros" title="Recolher filtros">‹‹</button></div>
   <button class="clear-link" id="clear">Limpar filtros</button>
-  <div class="side-section"><label>Período de publicação</label><div class="dates"><input type="date" id="from" aria-label="Data inicial"><input type="date" id="to" aria-label="Data final"></div><div class="date-presets" id="datePresets" role="group" aria-label="Atalhos de período"><button type="button" class="date-preset" data-preset="ultima">Última edição</button><button type="button" class="date-preset" data-preset="7d">7 dias</button><button type="button" class="date-preset" data-preset="30d">30 dias</button><button type="button" class="date-preset" data-preset="mes">Este mês</button><button type="button" class="date-preset" data-preset="mes_ant">Mês anterior</button></div><div class="date-warning" id="dateWarning" hidden></div><small class="field-hint" id="dateRangeHint"></small></div>
+  <div class="side-section"><label>Período de publicação</label><div class="dates"><input type="date" id="from" aria-label="Data inicial"><input type="date" id="to" aria-label="Data final"></div><div class="date-actions" id="dateActions"><button type="button" id="applyDates" class="date-act-btn is-primary" title="Aplicar período selecionado">Aplicar</button><button type="button" id="cancelDates" class="date-act-btn" title="Descartar alteração nas datas">Cancelar</button><button type="button" id="clearDates" class="date-act-btn" title="Limpar apenas o período">Limpar</button></div><div class="date-presets" id="datePresets" role="group" aria-label="Atalhos de período"><button type="button" class="date-preset" data-preset="ultima">Última edição</button><button type="button" class="date-preset" data-preset="7d">7 dias</button><button type="button" class="date-preset" data-preset="30d">30 dias</button><button type="button" class="date-preset" data-preset="mes">Este mês</button><button type="button" class="date-preset" data-preset="mes_ant">Mês anterior</button></div><div class="date-warning" id="dateWarning" hidden></div><small class="field-hint" id="dateRangeHint"></small></div>
   <div class="side-section"><label for="axis">Eixo</label><select id="axis"><option value="">Todos os eixos</option><option value="progressao">Progressão Funcional</option><option value="tempo">Tempo de Serviço</option><option value="outros">Outros benefícios</option></select></div>
   <div class="side-section" id="modalitySection"><label for="modality">Modalidade da Progressão</label><select id="modality"><option value="">Horizontal e Vertical</option><option>Horizontal</option><option>Vertical</option></select><label for="group" class="sub-label">Grupo ocupacional</label><select id="group"><option value="">Todos os grupos</option></select><small class="field-hint">Catálogo em complementação</small></div>
   <div class="side-section service-section" id="serviceSection"><label>Serviços · Tempo de Serviço</label><div class="service-filters" id="serviceFilters"></div></div>
@@ -519,13 +524,13 @@ const metricMode={results:'qty',service:'qty',group:'qty',level:'qty'};
 const pct=(part,total,dec=1)=>total?((100*part/total).toFixed(dec).replace('.',',')+'%'):'0%';
 const isStaticHost=()=>location.hostname.endsWith('github.io')||location.protocol==='file:';
 const isMobileViewport=()=>window.innerWidth<=1024;
-function dateBounds(){const ds=data.rows.map(r=>r.date).filter(Boolean).sort();minDate=ds[0]||'';maxDate=ds[ds.length-1]||'';}
+function dateBounds(){const ds=data.rows.map(r=>r.date).filter(Boolean).sort();if(ds.length){minDate=ds[0];maxDate=ds[ds.length-1];return;}const cw=data.meta?.collectionWindow||{};const pm=(data.backend?.series?.por_data||[]).map(m=>String(m.data||'')).filter(s=>/^\d{4}-\d{2}/.test(s)).sort();if(cw.from&&cw.to){minDate=cw.from;maxDate=cw.to;return;}if(pm.length){const a=pm[0].slice(0,7),b=pm[pm.length-1].slice(0,7),[by,bm]=b.split('-').map(Number);const lastD=new Date(Date.UTC(by,bm,0)).toISOString().slice(0,10);minDate=a+'-01';maxDate=lastD;return;}minDate='';maxDate='';}
 function shiftDays(iso,delta){if(!iso)return '';const [y,m,d]=iso.split('-').map(Number),u=new Date(Date.UTC(y,m-1,d+delta));return u.toISOString().slice(0,10);}
 function presetRange(key){if(!maxDate)return ['',''];if(key==='ultima')return [maxDate,maxDate];if(key==='7d')return [shiftDays(maxDate,-6),maxDate];if(key==='30d')return [shiftDays(maxDate,-29),maxDate];if(key==='mes')return [maxDate.slice(0,8)+'01',maxDate];if(key==='mes_ant'){const [y,m]=maxDate.split('-').map(Number),first=new Date(Date.UTC(y,m-2,1)),last=new Date(Date.UTC(y,m-1,0));return [first.toISOString().slice(0,10),last.toISOString().slice(0,10)];}return ['',''];}
 const cloneVal=v=>JSON.parse(JSON.stringify(v));
 function takeSnapshot(){return cloneVal({S,beforeToday,inducedByLevel,timelinePrev,resultPrev,cardPrevMode});}
 function stateSig(st){return JSON.stringify({v:st.validation,vw:st.view,ax:st.axis,md:st.modality,gr:st.group,lv:st.level,ct:[...(st.category||[])].sort(),mr:st.merit,q:st.query,fr:st.from,to:st.to,c:st.card,m:st.mode});}
-function applySnapshot(snap){if(!snap||!snap.S)return;Object.assign(S,cloneVal(snap.S));beforeToday=cloneVal(snap.beforeToday);inducedByLevel=cloneVal(snap.inducedByLevel);timelinePrev=cloneVal(snap.timelinePrev);resultPrev=cloneVal(snap.resultPrev);cardPrevMode=cloneVal(snap.cardPrevMode);const inp=$('#search');if(inp)inp.value=S.query||'';}
+function applySnapshot(snap){if(!snap||!snap.S)return;Object.assign(S,cloneVal(snap.S));beforeToday=cloneVal(snap.beforeToday);inducedByLevel=cloneVal(snap.inducedByLevel);timelinePrev=cloneVal(snap.timelinePrev);resultPrev=cloneVal(snap.resultPrev);cardPrevMode=cloneVal(snap.cardPrevMode);const inp=$('#search');if(inp)inp.value=S.query||'';if($('#from'))$('#from').value=S.from||'';if($('#to'))$('#to').value=S.to||'';}
 function buildHashUrl(){
  const p=new URLSearchParams(),defVal=data.dashboard?.defaultScope||'pendente';
  if(S.validation&&S.validation!==defVal)p.set('validation',S.validation);
@@ -660,10 +665,16 @@ function sync(){
  $('#serviceCard')?.classList.toggle('is-hidden',hideService);
  $('#chartBottom')?.classList.toggle('is-hidden',hideModality);
  $$('#datePresets button').forEach(b=>{const [pf,pt]=presetRange(b.dataset.preset);b.classList.toggle('active',!!S.from&&S.from===pf&&S.to===pt);});
+ const pubMode=isPublicAgg(),pubTip='Disponível após login gerencial';
+ ['#group','#merit','#search','#byResenha','#byProcess'].forEach(sel=>{const el=$(sel);if(el){el.disabled=pubMode;if(pubMode)el.title=pubTip;else el.removeAttribute('title');}});
+ $$('#serviceFilters button').forEach(b=>{b.disabled=pubMode;if(pubMode)b.title=pubTip;});
+ $$('#datePresets button').forEach(b=>{const dailyOnly=b.dataset.preset==='7d'||b.dataset.preset==='30d';b.disabled=pubMode&&dailyOnly;if(pubMode&&dailyOnly)b.title='Recorte diário disponível após login gerencial (agregado público é mensal)';else b.removeAttribute('title');});
  const badDates=!!(S.from&&S.to&&S.from>S.to);
+ const outOfRange=!badDates&&!!minDate&&!!maxDate&&((S.from&&S.from>maxDate)||(S.to&&S.to<minDate));
  const warn=$('#dateWarning');
- warn.hidden=!badDates;
+ warn.hidden=!badDates&&!outOfRange;
  if(badDates)warn.innerHTML='<span>Data inicial maior que a final.</span><button type="button" id="swapDates">Inverter</button>';
+ else if(outOfRange)warn.innerHTML=`<span>Período fora da cobertura (${dt(minDate)} a ${dt(maxDate)}).</span><button type="button" id="clampDates">Ajustar à base</button>`;
 }
 function kpis(m){
  if(isPublicAgg()){
@@ -745,13 +756,30 @@ function renderDelicateTimeline(rows){
  let wrap=card.querySelector('#delicateTlWrap');
  if(!wrap){wrap=document.createElement('div');wrap.id='delicateTlWrap';tl.parentElement.insertBefore(wrap,tl);}
  const pubAgg=isPublicAgg();
- const pubMonths=pubAgg?(data.backend?.series?.por_data||[]).filter(m=>/^\d{4}-\d{2}/.test(String(m.data||''))&&Number(m.total||0)>0):[];
+ const dailyBtn=bar.querySelector('[data-dl-tl="daily"]');
+ if(dailyBtn){
+  dailyBtn.disabled=pubAgg;
+  dailyBtn.title=pubAgg?'Recorte diário disponível após login gerencial (agregado público é mensal)':'Visualização diária';
+  if(pubAgg&&tlChartMode==='daily'){
+   tlChartMode='monthly';
+   bar.querySelectorAll('[data-dl-tl]').forEach(x=>x.classList.toggle('active',x.dataset.dlTl==='monthly'));
+  }
+ }
+ const pubFromYm=S.from?S.from.slice(0,7):'',pubToYm=S.to?S.to.slice(0,7):'';
+ const pubMonths=pubAgg?(data.backend?.series?.por_data||[]).filter(m=>{
+  const d=String(m.data||'');if(!/^\d{4}-\d{2}/.test(d)||!(Number(m.total||0)>0))return false;
+  const ym=d.slice(0,7);
+  if(pubFromYm&&ym<pubFromYm)return false;
+  if(pubToYm&&ym>pubToYm)return false;
+  return true;
+ }):[];
  if(!pubAgg&&(tlChartMode==='daily'||!lastTlRows.length)){
   wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
   return;
  }
  if(pubAgg&&!pubMonths.length){
   wrap.hidden=true;tl.style.display='';if(legOrig)legOrig.style.display='';
+  $('#timeline').innerHTML='<div class="empty-small">Nenhum mês acima do limiar público (≥ 5) no período selecionado.<br><button type="button" class="empty-action" data-clear-all>Limpar filtros</button></div>';
   return;
  }
  tl.style.display='none';if(legOrig)legOrig.style.display='none';wrap.hidden=false;
@@ -782,25 +810,32 @@ function renderDelicateTimeline(rows){
  }
  const active=TL_SERIES.filter(s=>!tlOffSeries.has(s.k));
  const subEl=$('#delicateTlSub');
- if(subEl)subEl.textContent=pubAgg?'Agregação mensal pública (limiar ≥ 5) · dados individuais protegidos':(tlChartMode==='lines'?'Tendência mensal por modalidade · clique na legenda para isolar séries':'Composição mensal por modalidade · sem rolagem horizontal');
+ if(subEl)subEl.textContent=pubAgg?(tlChartMode==='lines'?'Tendência mensal pública (limiar ≥ 5) · dados individuais protegidos':'Agregação mensal pública (limiar ≥ 5) · dados individuais protegidos'):(tlChartMode==='lines'?'Tendência mensal por modalidade · clique em um mês para filtrar':'Composição mensal por modalidade · clique em um mês para filtrar');
  const W=620,H=168,padL=38,padR=14,padT=14,padB=24,plotW=W-padL-padR,plotH=H-padT-padB;
  const step=plotW/Math.max(1,months.length),barW=Math.min(34,Math.max(14,step*0.58));
  let svg=`<line x1="${padL}" y1="${padT}" x2="${W-padR}" y2="${padT}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH/2}" x2="${W-padR}" y2="${padT+plotH/2}" stroke="#e5edf5"/>
   <line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="#d5e3f1"/>`;
- if(tlChartMode==='lines'&&!pubAgg){
-  const maxV=Math.max(1,...months.flatMap(m=>active.map(s=>m[s.k])));
+ if(tlChartMode==='lines'){
+  const maxV=pubAgg
+   ?Math.max(1,...months.flatMap(m=>[m.pubTotal||0,...active.map(s=>m[s.k]||0)]))
+   :Math.max(1,...months.flatMap(m=>active.map(s=>m[s.k])));
   svg+=`<text x="${padL-6}" y="${padT+4}" font-size="9.5" fill="#405d79" text-anchor="end">${maxV}</text>
         <text x="${padL-6}" y="${padT+plotH/2+4}" font-size="9.5" fill="#405d79" text-anchor="end">${Math.round(maxV/2)}</text>
         <text x="${padL-6}" y="${padT+plotH+3}" font-size="9.5" fill="#405d79" text-anchor="end">0</text>`;
+  if(pubAgg){
+   const ptsTot=months.map((m,i)=>`${(padL+step*i+step/2).toFixed(1)},${(padT+plotH-(plotH*(m.pubTotal||0)/maxV)).toFixed(1)}`).join(' ');
+   svg+=`<polyline fill="none" stroke="#94a3b8" stroke-dasharray="4 3" stroke-width="1.8" points="${ptsTot}"/>`;
+  }
   active.forEach(s=>{
    const pts=months.map((m,i)=>`${(padL+step*i+step/2).toFixed(1)},${(padT+plotH-(plotH*m[s.k]/maxV)).toFixed(1)}`).join(' ');
    svg+=`<polyline fill="none" stroke="${s.color}" stroke-width="2.3" points="${pts}"/>`;
    months.forEach((m,i)=>{
     const cx=(padL+step*i+step/2).toFixed(1),cy=(padT+plotH-(plotH*m[s.k]/maxV)).toFixed(1);
     const lbl=MONTH_SHORT[Number(m.ym.slice(5,7))-1]+'/'+m.ym.slice(2,4);
-    const tip=`${lbl} · ${s.name}: ${m[s.k]} | Total no recorte do mês: ${m.vertical+m.horizontal+m.tempo+m.outros}`;
-    svg+=`<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}"/>`;
+    const totM=pubAgg?(m.pubTotal||0):(m.vertical+m.horizontal+m.tempo+m.outros);
+    const tip=`${lbl} · ${s.name}: ${m[s.k]} | Total no mês: ${totM}`;
+    svg+=`<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}" data-ym="${m.ym}"/>`;
    });
   });
  }else{
@@ -829,7 +864,7 @@ function renderDelicateTimeline(rows){
      rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
     });
    }
-   svg+=`<g tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}">${rects}<rect x="${x.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${plotH}" fill="transparent"/></g>`;
+   svg+=`<g tabindex="0" role="button" aria-label="${esc(tip)}" data-dtip="${esc(tip)}" data-ym="${m.ym}">${rects}<rect x="${x.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${plotH}" fill="transparent"/></g>`;
   });
  }
  months.forEach((m,i)=>{
@@ -846,7 +881,7 @@ function renderDelicateTimeline(rows){
   :{vertical:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Vertical').length,horizontal:lastTlRows.filter(r=>r.axis==='progressao'&&r.modality==='Horizontal').length,tempo:lastTlRows.filter(r=>r.axis==='tempo').length,outros:lastTlRows.filter(r=>r.axis==='outros'||(r.axis==='progressao'&&r.modality!=='Vertical'&&r.modality!=='Horizontal')).length};
  wrap.innerHTML=`<svg class="delicate-tl-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução mensal das publicações">${svg}</svg>
   <div class="delicate-tl-leg">${TL_SERIES.map(s=>`<button type="button" class="delicate-lg-btn ${tlOffSeries.has(s.k)?'is-off':''}" data-tl-ser="${s.k}" aria-pressed="${!tlOffSeries.has(s.k)}"><i class="delicate-lg-dot" style="background:${s.color}"></i>${s.name} (${totals[s.k]})</button>`).join('')}</div>
-  <div class="delicate-tl-tip" id="delicateTlTip" role="status">${pubAgg?'Passe o mouse ou foque em um mês para ver o agregado público (limiar ≥ 5).':'Passe o mouse ou foque em um mês para ver a composição · clique na legenda para isolar séries.'}</div>
+  <div class="delicate-tl-tip" id="delicateTlTip" role="status">${pubAgg?'Passe o mouse ou foque em um mês para ver o agregado público (limiar ≥ 5).':'Clique em um mês para filtrar o período · clique na legenda para isolar séries.'}</div>
   <div class="delicate-tl-note">Lacunas ou ausência de barra refletem falta de coleta no intervalo ou filtro aplicado — nunca equivalem a zero publicações confirmadas.</div>`;
  wrap.querySelectorAll('[data-tl-ser]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.tlSer;
@@ -855,7 +890,17 @@ function renderDelicateTimeline(rows){
  }));
  wrap.querySelectorAll('[data-dtip]').forEach(el=>{
   const showTip=()=>{const t=$('#delicateTlTip');if(t)t.textContent=el.dataset.dtip;};
-  el.addEventListener('mouseenter',showTip);el.addEventListener('focus',showTip);el.addEventListener('click',showTip);
+  const toggleMonth=()=>{
+   showTip();
+   const ym=el.dataset.ym;if(!ym)return;
+   const [yy,mm]=ym.split('-').map(Number);
+   const mStart=`${ym}-01`,mEnd=new Date(Date.UTC(yy,mm,0)).toISOString().slice(0,10);
+   if(S.from===mStart&&S.to===mEnd){S.from='';S.to='';}else{S.from=mStart;S.to=mEnd;}
+   S.page=0;timelinePrev=null;beforeToday=null;commitHistory();render();
+  };
+  el.addEventListener('mouseenter',showTip);el.addEventListener('focus',showTip);
+  el.addEventListener('click',toggleMonth);
+  el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();toggleMonth();}});
  });
 }
 function timeline(rows){
@@ -1410,6 +1455,25 @@ function nav(view){if(S.view==='hoje'&&view!=='hoje'&&beforeToday){S.from=before
 
 function openDialog(title,body,opts={}){dialogTriggerEl=document.activeElement instanceof HTMLElement?document.activeElement:null;$('#dialog').classList.toggle('dialog-wide',!!opts.wide);$('#dialogTitle').textContent=title;$('#dialogBody').innerHTML=body;$('#dialog').showModal();}
 function openFullTableModal(){
+ if(isPublicAgg()){
+  const bs=data.backend.series||{},bi=data.backend.indicadores||{};
+  const fmtP=v=>v==null?'Suprimido (< 5)':String(v);
+  const tbAss=(bs.por_assunto||[]).map(x=>`<tr><td><b>${esc(x.rotulo||x.chave)}</b></td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.deferido))}</td><td>${esc(fmtP(x.indeferido))}</td></tr>`).join('');
+  const tbGrp=(bs.por_grupo||[]).map(x=>`<tr><td>${esc(labelGroup(x.grupo))}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.vertical))}</td><td>${esc(fmtP(x.horizontal))}</td></tr>`).join('');
+  const tbSub=(bs.por_subcategoria||[]).map(x=>`<tr><td>${esc(x.codigo)} · ${esc(x.nome)}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.deferido))}</td><td>${esc(fmtP(x.indeferido))}</td></tr>`).join('');
+  const tbMes=(bs.por_data||[]).map(x=>`<tr><td class="nowrap">${esc(x.data)}</td><td>${esc(fmtP(x.total))}</td><td>${esc(fmtP(x.vertical))}</td><td>${esc(fmtP(x.horizontal))}</td><td>${esc(fmtP(x.tempo))}</td></tr>`).join('');
+  const body=`<div class="reconcile-note" style="margin-top:0;margin-bottom:12px"><b>Consulta pública (agregados protegidos ≥ 5):</b> total de <b>${esc(fmtP(bi.decisoes))}</b> decisões conferidas em <b>${esc(fmtP(bi.resenhas))}</b> resenhas e <b>${esc(fmtP(bi.processos))}</b> processos. Registros nominais estão disponíveis apenas após login gerencial.</div>
+  <h3 style="margin:10px 0 6px;font-size:13px">Distribuição por assunto</h3>
+  <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Assunto</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbAss||'<tr><td colspan="4">Sem agregados públicos.</td></tr>'}</tbody></table></div>
+  <h3 style="margin:14px 0 6px;font-size:13px">Progressão por grupo (≥ 5)</h3>
+  <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Grupo</th><th>Total</th><th>Vertical</th><th>Horizontal</th></tr></thead><tbody>${tbGrp||'<tr><td colspan="4">Nenhum grupo acima do limiar público.</td></tr>'}</tbody></table></div>
+  <h3 style="margin:14px 0 6px;font-size:13px">Tempo de Serviço (TS-01 a TS-07)</h3>
+  <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Serviço</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>${tbSub||'<tr><td colspan="4">Sem dados.</td></tr>'}</tbody></table></div>
+  <h3 style="margin:14px 0 6px;font-size:13px">Série mensal</h3>
+  <div class="table-scroll"><table class="dialog-table"><thead><tr><th>Mês</th><th>Total</th><th>Vertical</th><th>Horizontal</th><th>Tempo</th></tr></thead><tbody>${tbMes||'<tr><td colspan="5">Sem série mensal.</td></tr>'}</tbody></table></div>`;
+  openDialog('Resumo tabular público (agregados protegidos)',body,{wide:true});
+  return;
+ }
  const allRows=model().rows;
  const st={q:'',sortKey:'date',sortDir:-1,page:0,perPage:25};
  openDialog('Publicações e processos',`<p id="modalTableSummary"></p><div class="table-toolbar"><input id="modalTableSearch" type="search" aria-label="Filtrar na tabela" placeholder="Buscar resenha, processo, servidor, grupo, nível..." autocomplete="off"><div class="table-pager"><button type="button" id="modalPrev">‹ Anterior</button><span id="modalPageInfo"></span><button type="button" id="modalNext">Próxima ›</button></div></div><div class="table-scroll"><table class="dialog-table is-cards"><thead><tr><th class="nowrap"><button type="button" data-sort="date">Data</button></th><th class="nowrap"><button type="button" data-sort="resenha">Resenha</button></th><th><button type="button" data-sort="process">Processo</button></th><th><button type="button" data-sort="server">Servidor</button></th><th class="nowrap"><button type="button" data-sort="group">Grupo</button></th><th><button type="button" data-sort="subject">Assunto</button></th><th class="nowrap"><button type="button" data-sort="level">Nível</button></th><th class="nowrap"><button type="button" data-sort="merit">Resultado</button></th><th class="nowrap no-sort">Fonte</th></tr></thead><tbody id="modalTableBody"></tbody></table></div>`,{wide:true});
@@ -1482,6 +1546,14 @@ async function serverAuditedExport(formato,fallbackFn){
 }
 function exportXlsx(){
  let isAuth=!!data.backend?.autenticado,m=model();
+ if(!isAuth&&isPublicAgg()){
+  const bi=data.backend.indicadores||{},bs=data.backend.series||{};
+  const pubSummary=[['Visão',views[S.view][1]],['Escopo','Público (somente agregados protegidos ≥ 5)'],['Filtros',filterText()],['Cobertura',data.meta.coverage],[],['Indicador','Valor (≥ 5)'],...Object.entries(bi).map(([k,v])=>[k,v==null?'Suprimido (< 5)':v])];
+  const pubAssunto=[['Assunto','Total','Deferidos','Indeferidos'],...(bs.por_assunto||[]).map(x=>[x.rotulo||x.chave,x.total??'Suprimido (< 5)',x.deferido??'Suprimido (< 5)',x.indeferido??'Suprimido (< 5)'])];
+  const pubMensal=[['Mês','Total','Vertical','Horizontal','Tempo de Serviço'],...(bs.por_data||[]).map(x=>[x.data,x.total??'Suprimido (< 5)',x.vertical??'Suprimido (< 5)',x.horizontal??'Suprimido (< 5)',x.tempo??'Suprimido (< 5)'])];
+  exp.download(exp.xlsx({'Resumo público':pubSummary,'Por assunto':pubAssunto,'Série mensal':pubMensal}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-resumo-publico.xlsx');
+  toast('Resumo agregado público gerado (dados individuais protegidos).');return;
+ }
  let summary=[['Visão',views[S.view][1]],['Escopo',isAuth?m.label:'Público (somente agregados)'],['Filtros',filterText()],['Cobertura',data.meta.coverage],[],['Indicador','Valor'],...Object.entries(m.metrics)];
  if(!isAuth){
   exp.download(exp.xlsx({'Resumo':summary}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','GEDIV-resumo-publico.xlsx');
@@ -1501,7 +1573,15 @@ function exportCsv(){
  if(!isStaticHost()){serverAuditedExport('csv',localFallback);return;}
  localFallback();
 }
-function exportPng(){let m=model();exp.png({title:views[S.view][1],filters:filterText(),metrics:m.metrics,records:exportRows(),coverage:data.meta.coverage});toast('Resumo da visão gerado.');}
+function exportPng(){
+ if(isPublicAgg()){
+  const bi=data.backend.indicadores||{};
+  const pubM={processes:bi.processos??null,resenhas:bi.resenhas??null,decisions:bi.decisoes??null,deferidos:bi.deferidos??null,indeferidos:bi.indeferidos??null,refeitos:bi.refeitos??null,semEfeito:bi.sem_efeito??null};
+  exp.png({title:views[S.view][1]+' · Público',filters:'Consulta pública · agregados protegidos (limiar ≥ 5)',metrics:pubM,records:[],coverage:data.meta.coverage});
+  toast('Resumo visual público gerado (dados individuais protegidos).');return;
+ }
+ let m=model();exp.png({title:views[S.view][1],filters:filterText(),metrics:m.metrics,records:exportRows(),coverage:data.meta.coverage});toast('Resumo da visão gerado.');
+}
 async function handleAuthExpiry(msg){
  window.GEDIV_AUTH.clear();
  ['#reviewDialog','#conflictsDialog','#auditDialog','#batchDialog','#docModal'].forEach(sel=>{const d=$(sel);if(d?.open)d.close();});
@@ -1705,8 +1785,8 @@ function bind(){
  }
  mountDelicateChrome();
  $('#authToggleBtn')?.addEventListener('click',openLoginModal);
- $('#closeLoginTop')?.addEventListener('click',()=>$('#loginDialog').close());
- $('#closeLoginBtn')?.addEventListener('click',()=>$('#loginDialog').close());
+ $('#closeLoginTop')?.addEventListener('click',()=>{$('#loginPass').value='';$('#loginStatus').textContent='';$('#loginDialog').close();});
+ $('#closeLoginBtn')?.addEventListener('click',()=>{$('#loginPass').value='';$('#loginStatus').textContent='';$('#loginDialog').close();});
  $('#closeConflictsTop')?.addEventListener('click',()=>$('#conflictsDialog').close());
  $('#closeConflictsBtn')?.addEventListener('click',()=>$('#conflictsDialog').close());
  $('#refreshConflictsBtn')?.addEventListener('click',()=>openConflictsDialog());
@@ -1745,7 +1825,10 @@ function bind(){
    }
    await refreshData();
    if(!data.backend?.autenticado){window.GEDIV_AUTH.clear();throw new Error('Credencial não autorizada pelo servidor.');}
-   S.validation=data.rows.some(r=>r.validation==='conferido')?'conferido':'pendente';S.page=0;S.selected='';initHistory();renderMeta();render();
+   Object.assign(S,{validation:data.rows.some(r=>r.validation==='conferido')?'conferido':'pendente',view:'geral',axis:'',modality:'',group:'',level:'',category:[],merit:'',query:'',from:'',to:'',card:'',page:0,selected:''});
+   $('#search').value='';
+   try{history.replaceState(null,'',location.pathname+location.search);}catch{}
+   initHistory();renderMeta();render();
    $('#loginPass').value='';$('#loginTokenInput').value='';
    $('#loginDialog').close();
    toast(data.backend?.ehAdmin?'Sessão administrativa autenticada.':'Sessão gerencial autenticada.');
@@ -1756,7 +1839,10 @@ function bind(){
   try{await fetch('/api/logout',{method:'POST',credentials:'same-origin',headers:window.GEDIV_AUTH.headers({'Content-Type':'application/json'}),body:'{}'});}catch{}
   window.GEDIV_AUTH.clear();
   await refreshData();
-  S.validation='conferido';S.page=0;S.selected='';initHistory();renderMeta();render();
+  Object.assign(S,{validation:'conferido',view:'geral',axis:'',modality:'',group:'',level:'',category:[],merit:'',query:'',from:'',to:'',card:'',page:0,selected:''});
+  $('#search').value='';
+  try{history.replaceState(null,'',location.pathname+location.search);}catch{}
+  initHistory();renderMeta();render();
   toast('Sessão encerrada.');
  });
  $('#closeReviewTop')?.addEventListener('click',()=>$('#reviewDialog').close());
@@ -1820,7 +1906,7 @@ function bind(){
  }
  $('#refreshData').addEventListener('click',refreshData);
  $('#validationScope').addEventListener('change',event=>{S.validation=event.target.value;S.card='';S.page=0;S.selected='';commitHistory();render();});
- $('#showPending').addEventListener('click',()=>{if(S.validation!=='pendente'){S.validation='pendente';S.card='';S.page=0;S.selected='';commitHistory();render();}openFullTableModal();});
+ $('#showPending').addEventListener('click',()=>{if(!data.backend?.autenticado){openLoginModal();return;}if(S.validation!=='pendente'){S.validation='pendente';S.card='';S.page=0;S.selected='';commitHistory();render();}openFullTableModal();});
  $('#showPendingEvents')?.addEventListener('click',openPendingEventsModal);
  $('#toggleZeroGroups').addEventListener('click',()=>{showZeroGroups=!showZeroGroups;groupChart(model().rows);});
  $$('.metric-switch').forEach(sw=>sw.addEventListener('click',e=>{
@@ -1847,20 +1933,36 @@ function bind(){
  });
  $('#levelReconcileNote').addEventListener('click',e=>{if(e.target.closest('#openAeMatrix'))openGroupLevelDialog(S.group);});
  $('#datePresets').addEventListener('click',e=>{const b=e.target.closest('[data-preset]');if(!b)return;const [pf,pt]=presetRange(b.dataset.preset);if(S.from===pf&&S.to===pt){S.from='';S.to='';}else{S.from=pf;S.to=pt;}S.page=0;timelinePrev=null;beforeToday=null;commitHistory();render();});
- $('#dateWarning').addEventListener('click',e=>{if(e.target.closest('#swapDates')){[S.from,S.to]=[S.to,S.from];S.page=0;timelinePrev=null;commitHistory();render();}});
+ $('#dateWarning').addEventListener('click',e=>{
+  if(e.target.closest('#swapDates')){[S.from,S.to]=[S.to,S.from];S.page=0;timelinePrev=null;commitHistory();render();}
+  else if(e.target.closest('#clampDates')&&minDate&&maxDate){S.from=minDate;S.to=maxDate;S.page=0;timelinePrev=null;commitHistory();render();}
+ });
+ function applyDraftDates(){
+  S.from=$('#from').value||'';S.to=$('#to').value||'';
+  S.card='';S.page=0;timelinePrev=null;beforeToday=null;
+  commitHistory();render();
+ }
+ $('#applyDates')?.addEventListener('click',applyDraftDates);
+ $('#cancelDates')?.addEventListener('click',()=>{$('#from').value=S.from||'';$('#to').value=S.to||'';toast('Alteração de período descartada.');});
+ $('#clearDates')?.addEventListener('click',()=>{S.from='';S.to='';$('#from').value='';$('#to').value='';S.page=0;timelinePrev=null;beforeToday=null;commitHistory();render();});
+ ['#from','#to'].forEach(sel=>$(sel)?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyDraftDates();}}));
  document.addEventListener('click',e=>{
   if(e.target.closest('[data-use-latest]')&&maxDate){S.from=maxDate;S.to=maxDate;S.page=0;timelinePrev=null;commitHistory();render();}
   else if(e.target.closest('[data-swap-dates]')){[S.from,S.to]=[S.to,S.from];S.page=0;timelinePrev=null;commitHistory();render();}
   else if(e.target.closest('[data-clear-all]')){reset();commitHistory();}
  });
- for(const id of ['axis','modality','group','merit','from','to'])$('#'+id).addEventListener('change',e=>{
+ for(const id of ['axis','modality','group','merit'])$('#'+id).addEventListener('change',e=>{
+  if(isPublicAgg()&&(id==='axis'||id==='modality')){
+   const v=e.target.value;
+   if(id==='axis'){nav(v==='tempo'?'tempo':v==='outros'?'outras':'geral');return;}
+   if(id==='modality'){nav(v==='Vertical'?'vertical':v==='Horizontal'?'horizontal':'geral');return;}
+  }
   S[id]=e.target.value;S.card='';S.page=0;
   if(id==='axis'||id==='modality'||id==='group'){S.level='';inducedByLevel=null;}
   if(id==='axis'){S.category=[];S.modality='';S.group='';timelinePrev=null;resultPrev=null;if(S.axis==='tempo'&&(S.view==='vertical'||S.view==='horizontal'||S.view==='outras'))S.view='geral';else if(S.axis==='progressao'&&(S.view==='tempo'||S.view==='outras'))S.view='geral';else if(S.axis==='outros'&&(S.view==='vertical'||S.view==='horizontal'||S.view==='tempo'))S.view='geral';}
   if(id==='modality'){timelinePrev=null;resultPrev=null;if(S.modality){S.axis='progressao';S.category=[];if(S.view==='tempo'||S.view==='outras')S.view='geral';else if(S.view==='vertical'&&S.modality==='Horizontal')S.view='horizontal';else if(S.view==='horizontal'&&S.modality==='Vertical')S.view='vertical';}}
   if(id==='group'&&S.group){S.axis='progressao';S.category=[];if(S.view==='tempo'||S.view==='outras')S.view='geral';}
   if(id==='merit')resultPrev=null;
-  if(id==='from'||id==='to'){timelinePrev=null;beforeToday=null;}
   commitHistory();render();
  });
  $('#search').addEventListener('input',e=>{
@@ -1878,7 +1980,11 @@ function bind(){
  $('#groupChart').addEventListener('click',e=>{let b=e.target.closest('[data-group]');if(!b)return;S.axis='progressao';if(S.view==='tempo'||S.view==='outras')S.view='geral';S.group=S.group===b.dataset.group?'':b.dataset.group;S.level='';S.category=[];S.card='';S.page=0;inducedByLevel=null;commitHistory();render();});
  function pieSelect(b){
   let kind=b.dataset.kind,key=b.dataset.key;
-  if(kind==='axis'){nav(key==='outros'?'outras':key);return;}
+  if(kind==='axis'){
+   if(key==='progressao'){S.axis='progressao';S.modality='';S.view='geral';S.card='';S.page=0;commitHistory();render();return;}
+   nav(key==='outros'?'outras':key);return;
+  }
+  if(isPublicAgg()){toast('Detalhamento por grupo ou serviço disponível após login gerencial.');return;}
   if(kind==='level'){
    if(S.level===key){S.level='';if(inducedByLevel){S.axis=inducedByLevel.axis;S.modality=inducedByLevel.modality;S.view=inducedByLevel.view;inducedByLevel=null;}}
    else{if(!S.level)inducedByLevel={axis:S.axis,modality:S.modality,view:S.view};S.level=key;S.axis='progressao';S.modality='Vertical';}
@@ -1927,8 +2033,11 @@ function bind(){
  });
  $('#backView').addEventListener('click',()=>{
   if(H.index<=0)return;
-  try{if(typeof history.state?.gedivIdx==='number'&&history.state.gedivIdx>0){history.back();return;}}catch{}
-  H.index--;applySnapshot(H.entries[H.index]);render();
+  H.index--;
+  const snap=H.entries[H.index];
+  applySnapshot(snap);
+  try{history.replaceState({gedivIdx:H.index,snap},'',buildHashUrl());}catch{}
+  render();
  });
  $('#activeFilters').addEventListener('click',e=>{
   let b=e.target.closest('[data-remove]');if(!b)return;
@@ -1966,7 +2075,14 @@ function bind(){
  $('#expand').addEventListener('click',()=>{if(isMobileViewport())$('#shell').classList.add('mobile-open');else $('#shell').classList.remove('is-collapsed');});
  window.addEventListener('resize',()=>{if(isMobileViewport())$('#shell').classList.remove('is-collapsed');else $('#shell').classList.remove('mobile-open');});
  $('#downloadToggle').addEventListener('click',()=>{let menu=$('#downloadMenu');menu.hidden=!menu.hidden;$('#downloadToggle').setAttribute('aria-expanded',String(!menu.hidden));});
- function buildPrintReport(){let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—'))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';}
+ function buildPrintReport(){
+  if(isPublicAgg()){
+   const pa=data.backend.series?.por_assunto||[],fmtP=v=>v==null?'Suprimido (< 5)':String(v);
+   $('#printReport').innerHTML='<h3>Resumo público protegido (limiar ≥ 5)</h3><p>'+esc(data.meta.coverage||'')+'</p><table><thead><tr><th>Assunto</th><th>Total</th><th>Deferidos</th><th>Indeferidos</th></tr></thead><tbody>'+pa.map(x=>'<tr><td>'+esc(x.rotulo||x.chave)+'</td><td>'+esc(fmtP(x.total))+'</td><td>'+esc(fmtP(x.deferido))+'</td><td>'+esc(fmtP(x.indeferido))+'</td></tr>').join('')+'</tbody></table>';
+   return;
+  }
+  let m=model();$('#printReport').innerHTML='<h3>Registros da visão selecionada</h3><p>'+esc(filterText())+'</p><table><thead><tr><th>Data</th><th>Resenha</th><th>Processo</th><th>Servidor</th><th>Grupo</th><th>Assunto</th><th>Nível (A–F)</th><th>Resultado</th></tr></thead><tbody>'+m.rows.map(r=>'<tr><td>'+esc(dt(r.date))+'</td><td>'+esc(r.resenha)+'</td><td>'+esc(r.process||'Não transcrito')+'</td><td>'+esc(r.server)+'</td><td>'+esc(r.axis==='progressao'?labelGroup(r.group):'—')+'</td><td>'+esc(labelRow(r))+'</td><td>'+esc(r.levelTo?`${r.levelLabel} (${r.levelTransition})`:(r.levelLabel||'—'))+'</td><td>'+esc(r.merit)+'</td></tr>').join('')+'</tbody></table>';
+ }
  window.addEventListener('beforeprint',buildPrintReport);
  $('#downloadXlsx').addEventListener('click',()=>{closeDownloadMenu();exportXlsx();});$('#downloadCsv').addEventListener('click',()=>{closeDownloadMenu();exportCsv();});$('#downloadPng').addEventListener('click',()=>{closeDownloadMenu();exportPng();});$('#downloadPdf').addEventListener('click',()=>{closeDownloadMenu();buildPrintReport();window.print();});
  $('#coverageOpen').addEventListener('click',()=>openDialog('Fontes e cobertura',`<p><b>Base:</b> ${esc(data.meta.coverage)}</p><p>${esc(data.meta.automation)}</p><p>Os totais usam apenas decisões com vínculo GEDIV conferido. As demais permanecem separadas. Um serviço sem registros nesta amostra está com <b>cobertura pendente</b>, não com inexistência comprovada.</p><p>${esc(data.meta.personal)}</p>`));
@@ -1975,12 +2091,17 @@ function bind(){
  $('#closeDialog').addEventListener('click',()=>$('#dialog').close());$('#closeDialog2').addEventListener('click',()=>$('#dialog').close());
  $('#dialog').addEventListener('close',()=>{ $('#dialog').classList.remove('dialog-wide');if(dialogTriggerEl&&dialogTriggerEl.isConnected)dialogTriggerEl.focus();dialogTriggerEl=null; });
  document.addEventListener('click',e=>{if(!e.target.closest('.downloads'))closeDownloadMenu(false);});
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#downloadMenu').hidden){e.preventDefault();closeDownloadMenu(true);}});
+ document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(!$('#downloadMenu').hidden){e.preventDefault();closeDownloadMenu(true);}
+  const am=$('#delicateAcctMenu');
+  if(am&&!am.hidden){e.preventDefault();am.hidden=true;$('#delicateAcctBtn')?.setAttribute('aria-expanded','false');$('#delicateAcctBtn')?.focus();}
+ });
 }
 function renderMeta(){
  dateBounds();
  $('#from').min=minDate;$('#from').max=maxDate;$('#to').min=minDate;$('#to').max=maxDate;
- $('#dateRangeHint').textContent=minDate&&maxDate?`Base disponível: ${dt(minDate)} a ${dt(maxDate)}`:'';
+ $('#dateRangeHint').textContent=minDate&&maxDate?(isPublicAgg()?`Base pública mensal: ${minDate.slice(5,7)}/${minDate.slice(0,4)} a ${maxDate.slice(5,7)}/${maxDate.slice(0,4)} (limiar ≥ 5)`:`Base disponível: ${dt(minDate)} a ${dt(maxDate)}`):'';
  const meta=data.meta||{}, isAuth=!!data.backend?.autenticado, isAdm=!!data.backend?.ehAdmin, pending=isAuth?data.rows.filter(r=>r.validation==='pendente').length:(meta.pendentes||0), confCnt=isAuth?data.rows.filter(r=>r.validation==='conferido').length:(meta.conferidos||0), rej=isAuth?data.rows.filter(r=>r.validation==='rejeitado').length:(meta.rejeitados||0);
  const batches=meta.connection?.batches||0, usr=window.GEDIV_AUTH.user();
  if(isStaticHost()){
