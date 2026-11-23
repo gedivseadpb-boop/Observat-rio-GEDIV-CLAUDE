@@ -610,6 +610,162 @@ def _suprimir_secundaria(itens: list[dict], positivos: int) -> None:
                 menor[campo] = None
 
 
+def _var_abs(anterior: int | None, atual: int | None) -> int | None:
+    if anterior is None or atual is None:
+        return None
+    return atual - anterior
+
+
+def _var_pct(anterior: int | None, atual: int | None) -> float | None:
+    if anterior is None or atual is None or anterior <= 0:
+        return None
+    return round(100.0 * (atual - anterior) / anterior, 1)
+
+
+def _comparativo_mensal(originais: list[dict], *, publico: bool = False) -> dict:
+    """Resumo comparativo mensal entre os dois últimos meses com dados, incluindo distribuição por eixo
+    e participação dos grupos do eixo Tempo de Serviço (com Abono de Permanência).
+
+    No modo público (`publico=True`), aplica o limiar k-anonymity (>= 5 decisões e >= 5 matrículas),
+    faixas de largura 5 e supressão complementar/secundária, omitindo variações e percentuais sempre
+    que qualquer termo envolvido estiver suprimido.
+    """
+    por_mes: dict[str, list[dict]] = {}
+    for l in originais:
+        ym = _mes_competencia(l.get("data"))
+        if ym != "SEM_DATA":
+            por_mes.setdefault(ym, []).append(l)
+
+    meses_ord = sorted(por_mes)
+
+    def _valor(lins: list[dict]) -> int | None:
+        return _proteger_inteiro(len(lins), _pessoas_distintas(lins)) if publico else len(lins)
+
+    # Série mensal de Abono de Permanência
+    abono_serie_raw: list[dict] = []
+    pos_ab_m = 0
+    for ym in meses_ord:
+        ab_l = [x for x in por_mes[ym] if x["eixo"] == C.TEMPO and x.get("subcategoria") == "ABONO_PERMANENCIA"]
+        if ab_l:
+            pos_ab_m += 1
+        abono_serie_raw.append({"mes": ym, "total": _valor(ab_l)})
+    if publico:
+        _suprimir_secundaria(abono_serie_raw, pos_ab_m)
+
+    # Seleciona meses elegíveis (no público, apenas meses com total visível >= 5 após supressão secundária)
+    totais_mes: list[dict] = []
+    for ym in meses_ord:
+        totais_mes.append({"mes": ym, "total": _valor(por_mes[ym])})
+    if publico:
+        _suprimir_secundaria(totais_mes, len(meses_ord))
+    elegiveis = [m for m in totais_mes if m["total"] is not None and m["total"] > 0]
+
+    if len(elegiveis) < 2:
+        return {
+            "disponivel": False,
+            "motivo": "menos_de_dois_meses",
+            "mes_anterior": None,
+            "mes_atual": None,
+            "resumo": None,
+            "por_eixo": [],
+            "por_grupo_tempo": [],
+            "abono_por_mes": abono_serie_raw,
+        }
+
+    m_ant, m_atu = elegiveis[-2]["mes"], elegiveis[-1]["mes"]
+    tot_ant, tot_atu = elegiveis[-2]["total"], elegiveis[-1]["total"]
+    lin_ant, lin_atu = por_mes[m_ant], por_mes[m_atu]
+
+    def _eixos_mes(lins: list[dict]) -> dict[str, int | None]:
+        partes = {
+            "VERTICAL": [x for x in lins if x["eixo"] == C.PROGRESSAO and x["modalidade"] == C.VERTICAL],
+            "HORIZONTAL": [x for x in lins if x["eixo"] == C.PROGRESSAO and x["modalidade"] == C.HORIZONTAL],
+            "SEM_MOD": [x for x in lins if x["eixo"] == C.PROGRESSAO and x["modalidade"] is None],
+            "TEMPO_SERVICO": [x for x in lins if x["eixo"] == C.TEMPO],
+        }
+        vals = {k: _valor(v) for k, v in partes.items()}
+        if publico and any(len(v) > 0 and vals[k] is None for k, v in partes.items()):
+            return {"VERTICAL": None, "HORIZONTAL": None, "TEMPO_SERVICO": None}
+        return {k: vals[k] for k in ("VERTICAL", "HORIZONTAL", "TEMPO_SERVICO")}
+
+    ex_ant, ex_atu = _eixos_mes(lin_ant), _eixos_mes(lin_atu)
+    por_eixo = []
+    for chave, rotulo in (
+        ("VERTICAL", "Progressão Vertical"),
+        ("HORIZONTAL", "Progressão Horizontal"),
+        ("TEMPO_SERVICO", "Tempo de Serviço"),
+    ):
+        va, vt = ex_ant[chave], ex_atu[chave]
+        por_eixo.append({
+            "chave": chave,
+            "rotulo": rotulo,
+            "anterior": va,
+            "atual": vt,
+            "variacao_absoluta": _var_abs(va, vt),
+            "variacao_percentual": _var_pct(va, vt),
+        })
+
+    # Participação dos grupos do eixo Tempo de Serviço (incluindo Abono de Permanência)
+    tempo_all = [x for x in originais if x["eixo"] == C.TEMPO]
+    tempo_tot_all = _valor(tempo_all)
+    tempo_ant_all = [x for x in lin_ant if x["eixo"] == C.TEMPO]
+    tempo_atu_all = [x for x in lin_atu if x["eixo"] == C.TEMPO]
+
+    def _grupos_tempo(lins_ref: list[dict]) -> dict[str, int | None]:
+        itens, pos = [], 0
+        for s in C.SUBCATEGORIAS:
+            xs = [x for x in lins_ref if x.get("subcategoria") == s.codigo]
+            if xs:
+                pos += 1
+            itens.append({"codigo": s.codigo, "total": _valor(xs)})
+        sem_xs = [x for x in lins_ref if x.get("subcategoria") is None]
+        if sem_xs:
+            pos += 1
+        itens.append({"codigo": "SEM_SUBCATEGORIA", "total": _valor(sem_xs)})
+        if publico:
+            _suprimir_secundaria(itens, pos)
+        return {it["codigo"]: it["total"] for it in itens}
+
+    gt_ant = _grupos_tempo(tempo_ant_all)
+    gt_atu = _grupos_tempo(tempo_atu_all)
+    gt_per = _grupos_tempo(tempo_all)
+
+    por_grupo_tempo = []
+    for s in C.SUBCATEGORIAS:
+        va, vt, vp = gt_ant[s.codigo], gt_atu[s.codigo], gt_per[s.codigo]
+        part_pct = (
+            round(100.0 * vp / tempo_tot_all, 1)
+            if (vp is not None and tempo_tot_all is not None and tempo_tot_all > 0)
+            else None
+        )
+        por_grupo_tempo.append({
+            "codigo": s.codigo,
+            "nome": s.nome,
+            "anterior": va,
+            "atual": vt,
+            "variacao_absoluta": _var_abs(va, vt),
+            "variacao_percentual": _var_pct(va, vt),
+            "total_periodo": vp,
+            "participacao_tempo_pct": part_pct,
+        })
+
+    return {
+        "disponivel": True,
+        "motivo": None,
+        "mes_anterior": m_ant,
+        "mes_atual": m_atu,
+        "resumo": {
+            "anterior": tot_ant,
+            "atual": tot_atu,
+            "variacao_absoluta": _var_abs(tot_ant, tot_atu),
+            "variacao_percentual": _var_pct(tot_ant, tot_atu),
+        },
+        "por_eixo": por_eixo,
+        "por_grupo_tempo": por_grupo_tempo,
+        "abono_por_mes": abono_serie_raw,
+    }
+
+
 def _aplicar_protecao_publica(
     originais: list[dict],
     logico: dict,
@@ -841,6 +997,7 @@ def _aplicar_protecao_publica(
             "por_subcategoria": por_sub,
             "tempo_sem_subcategoria": tempo_sem_sub_pub,
             "por_condicao": por_cond,
+            "comparativo_mensal": _comparativo_mensal(originais, publico=True),
         },
         "resenhas": [],
         "linhas": [],
@@ -1021,6 +1178,42 @@ def validar_snapshot_publico(snap: dict) -> dict:
         raise ValueError("snapshot público inválido: subcontagem de nível exposta com nao_identificados suprimido")
     if sub_sn_vals and sum(1 for v in sub_sn_vals if v is None) == 1 and sum(1 for v in sub_sn_vals if (v or 0) > 0) > 0:
         raise ValueError("snapshot público inválido: supressão secundária violada em resumo_nivel_vertical")
+
+    cmp_m = series.get("comparativo_mensal")
+    if isinstance(cmp_m, dict):
+        for campo_m in ("mes_anterior", "mes_atual"):
+            mv = cmp_m.get(campo_m)
+            if mv is not None and not re.fullmatch(r"\d{4}-\d{2}", str(mv)):
+                raise ValueError(f"snapshot público inválido: {campo_m} não mensal ({mv!r})")
+        res_cm = cmp_m.get("resumo")
+        if isinstance(res_cm, dict):
+            _validar_inteiro_publico(res_cm.get("anterior"), "comparativo_mensal.resumo.anterior")
+            _validar_inteiro_publico(res_cm.get("atual"), "comparativo_mensal.resumo.atual")
+            if (res_cm.get("anterior") is None or res_cm.get("atual") is None) and (
+                res_cm.get("variacao_absoluta") is not None or res_cm.get("variacao_percentual") is not None
+            ):
+                raise ValueError("snapshot público inválido: variação exposta com mês suprimido em comparativo_mensal")
+        for it_e in cmp_m.get("por_eixo") or []:
+            _validar_inteiro_publico(it_e.get("anterior"), "comparativo_mensal.por_eixo.anterior")
+            _validar_inteiro_publico(it_e.get("atual"), "comparativo_mensal.por_eixo.atual")
+            if (it_e.get("anterior") is None or it_e.get("atual") is None) and (
+                it_e.get("variacao_absoluta") is not None or it_e.get("variacao_percentual") is not None
+            ):
+                raise ValueError("snapshot público inválido: variação de eixo exposta com valor suprimido")
+        for it_g in cmp_m.get("por_grupo_tempo") or []:
+            _validar_inteiro_publico(it_g.get("anterior"), "comparativo_mensal.por_grupo_tempo.anterior")
+            _validar_inteiro_publico(it_g.get("atual"), "comparativo_mensal.por_grupo_tempo.atual")
+            _validar_inteiro_publico(it_g.get("total_periodo"), "comparativo_mensal.por_grupo_tempo.total_periodo")
+            if (it_g.get("anterior") is None or it_g.get("atual") is None) and (
+                it_g.get("variacao_absoluta") is not None or it_g.get("variacao_percentual") is not None
+            ):
+                raise ValueError("snapshot público inválido: variação de grupo Tempo exposta com valor suprimido")
+            if it_g.get("total_periodo") is None and it_g.get("participacao_tempo_pct") is not None:
+                raise ValueError("snapshot público inválido: participação exposta com total suprimido em por_grupo_tempo")
+        for it_a in cmp_m.get("abono_por_mes") or []:
+            if not re.fullmatch(r"\d{4}-\d{2}", str(it_a.get("mes") or "")):
+                raise ValueError("snapshot público inválido: mês inválido em comparativo_mensal.abono_por_mes")
+            _validar_inteiro_publico(it_a.get("total"), "comparativo_mensal.abono_por_mes.total")
 
     if d_pub.get("rows") != [] or d_pub.get("events") != [] or d_pub.get("otherPublications") not in (None, []):
         raise ValueError("snapshot público inválido: data.rows, data.events e data.otherPublications devem estar vazios")
@@ -1459,6 +1652,7 @@ def _painel(banco: Banco, bruto: dict | None, perfil: str, *, proteger_publico: 
         "tempo_sem_subcategoria": conta([l for l in tempo if l["subcategoria"] is None]),
         "por_condicao": [{"condicao": c, "nome": n, "total": sum((l["condicao"] or "NAO_INFORMADA") == c for l in prog)}
                          for c, n in C.CONDICOES.items()],
+        "comparativo_mensal": _comparativo_mensal(recorte, publico=False),
     }
 
     individual = perfil == GERENCIA_PERFIL

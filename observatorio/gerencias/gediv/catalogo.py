@@ -6,7 +6,8 @@ Fontes, em ordem de precedência (ver docs/06-regras-consolidadas.md):
 3. expressões observadas em resenhas reais registradas no histórico do projeto.
 
 Regras fixas: existem exatamente DOIS eixos. Horizontal e Vertical são modalidades da Progressão;
-grupo não é eixo; Tempo de Serviço tem exatamente SETE subcategorias. Denominação nova entra
+grupo não é eixo; Tempo de Serviço reúne as sete subcategorias TS-01 a TS-07 e o grupo Abono de
+Permanência (`ABONO_PERMANENCIA`, sem criação de `TS-08`). Denominação nova não homologada entra
 como candidata e nunca altera sozinha a classificação nem os totais.
 """
 from __future__ import annotations
@@ -169,8 +170,10 @@ class Subcategoria:
     padrao: str
 
 
-# As sete subcategorias de Tempo de Serviço, na ordem oficial. Não existe oitava categoria:
-# "abono de permanência", "averbação", "certidão" e afins ficam como conceitos candidatos.
+# Grupos/subcategorias oficiais do eixo Tempo de Serviço, na ordem padronizada:
+# TS-01 a TS-07 preservados + Abono de Permanência (`ABONO_PERMANENCIA`, sem criar `TS-08`).
+# Equivalência documentada: "ABONO DE PERMANÊNCIA" / "ABONO PERMANÊNCIA" (nunca "ABONO NATALINO",
+# "ABONO PECUNIÁRIO", "ABONO SALARIAL" ou "ABONO FAMÍLIA").
 SUBCATEGORIAS = (
     Subcategoria("TS-01", "Anotação de Tempo de Serviço/Contribuição", r"ANOTACAO\s+(?:DE\s+)?TEMPO"),
     Subcategoria("TS-02", "Desaverbação de Tempo de Serviço", r"DESAVERBACAO"),
@@ -185,16 +188,16 @@ SUBCATEGORIAS = (
                  r"CONVERSAO\s+D[AE]\s+LICENCA\s+ESPECIAL\s+(?:\S+\s+){0,4}?(?:EM|PARA)\s+(?:FINS\s+DE\s+)?(?:CONTAGEM\s+(?:DE\s+)?)?"
                  r"(?:DOBRO\s+(?:D[OE]\s+)?)?TEMPO\s+DE\s+(?:SERVICO|CONTRIBUICAO)"),
     Subcategoria("TS-07", "Conversão de Férias", r"CONVERSAO\s+D[AE]\s+FERIAS"),
+    Subcategoria("ABONO_PERMANENCIA", "Abono de Permanência", r"ABONO\s+(?:DE\s+)?PERMANENCIA"),
 )
 SUBCATEGORIA_POR_CODIGO = {s.codigo: s for s in SUBCATEGORIAS}
 # Casos específicos antes dos genéricos: "desistência de licença" antes de "licença para tratar",
 # "conversão de licença especial" antes de "licença especial".
-_ORDEM_SUB = ("TS-04", "TS-06", "TS-07", "TS-02", "TS-01", "TS-03", "TS-05")
-assert len(SUBCATEGORIAS) == 7
+_ORDEM_SUB = ("TS-04", "TS-06", "TS-07", "TS-02", "TS-01", "TS-03", "TS-05", "ABONO_PERMANENCIA")
+assert len(SUBCATEGORIAS) == 8
 
 # Conceitos candidatos: reconhecidos para triagem, nunca classificados nos dois eixos.
 CONCEITOS_CANDIDATOS = (
-    ("Abono de Permanência", r"ABONO\s+DE\s+PERMANENCIA"),
     ("Averbação de Tempo", r"(?<!DES)AVERBACAO\s+D[EO]\s+TEMPO"),
     ("Certidão de Tempo", r"CERTIDAO\s+DE\s+TEMPO"),
 )

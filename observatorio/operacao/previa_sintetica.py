@@ -334,6 +334,11 @@ def popular_banco_sintetico_canonico(banco: Banco) -> dict:
             (510, 116, "AGENTE DE INVESTIGACAO", "SEDS", "II III"),
             (511, 117, "ESCRIVAO DE POLICIA", "SEDS", "III IV"),
         ], com_classe=True),
+        _resenha_tempo("506/2026", "ABONO DE PERMANENCIA", "DEFERIU", [
+            (512, 118, "PROFESSOR DE EDUCACAO BASICA", "SEE"),
+            (513, 119, "TECNICO ADMINISTRATIVO", "SEAD"),
+            (514, 120, "ENFERMEIRO", "SES"),
+        ]),
         _bloco_outra(
             "INSTRUCAO NORMATIVA Nº 004/2026 - SEAD/GEDIV",
             "Estabelece orientacoes sinteticas de padronizacao documental para fluxos de progressao e tempo de servico.",
@@ -372,6 +377,11 @@ def popular_banco_sintetico_canonico(banco: Banco) -> dict:
             (615, 109, "FISCAL AGROPECUARIO", "SEDAP", ""),
             (616, 110, "FISCAL AGROPECUARIO", "SEDAP", ""),
         ]),
+        _resenha_tempo("608/2026", "ABONO DE PERMANENCIA", "DEFERIU", [
+            (617, 121, "ANALISTA DE APOIO JUDICIARIO", "PGE"),
+            (618, 122, "AUDITOR FISCAL TRIBUTARIO ESTADUAL", "SEFAZ"),
+            (619, 123, "AGENTE ADMINISTRATIVO", "SEAD"),
+        ]),
         (
             "Portaria nº 299/2026- DEREH Joao Pessoa, 17 de novembro de 2026\n"
             "O DIRETOR EXECUTIVO DE RECURSOS HUMANOS, tendo em vista os relatorios da "
@@ -393,7 +403,8 @@ def popular_banco_sintetico_canonico(banco: Banco) -> dict:
         "201/2026", "202/2026", "203/2026", "204/2026",
         "301/2026", "302/2026", "303/2026", "304/2026", "305/2026", "306/2026", "307/2026",
         "401/2026", "402/2026", "403/2026", "404/2026", "405/2026",
-        "501/2026", "502/2026", "503/2026", "504/2026", "505/2026", "601/2026", "602/2026", "603/2026",
+        "501/2026", "502/2026", "503/2026", "504/2026", "505/2026", "506/2026",
+        "601/2026", "602/2026", "603/2026", "608/2026",
     }
     ato_por_num: dict[str, str] = {}
     for a in banco.con.execute("SELECT id, numero, natureza, vinculo FROM ato"):
