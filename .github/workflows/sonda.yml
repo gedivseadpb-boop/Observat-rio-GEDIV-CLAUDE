@@ -32,10 +32,10 @@ jobs:
     env:
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Executar sonda
@@ -50,7 +50,7 @@ jobs:
           for alvo in r.get("alvos", []):
               print("ALVO", alvo.get("servidor"), "| camada da falha:", alvo.get("camada_da_falha"))
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: relatorio-sonda-${{ matrix.sistema }}
           path: sonda.json
