@@ -20,7 +20,7 @@ Para total transparência institucional, o projeto distingue estritamente três 
 | Componente / Funcionalidade | Implementado localmente | Homologado em teste | Ativado em produção | Observações e Pendências |
 | :--- | :---: | :---: | :---: | :--- |
 | Coleta DOE-PB por fonte (`auniao`, `cge`) e retomada | Sim | Sim (lotes locais) | **Não** | Requer execução prévia de `observatorio.sonda` na VM Linux definitiva |
-| Agendamento Seg–Sex (09:00 e 14:00 `America/Sao_Paulo`) com bloqueio Sáb/Dom e feriados | Sim | Sim (testes automatizados) | **Não** | Timer `systemd` preparado em `deploy_autonomo/`; não ativado em servidor definitivo |
+| Agendamento diário (09:00 e 14:00 `America/Sao_Paulo`), inclusive sábados, domingos e feriados | Sim | Sim (testes automatizados) | **Não** | Timer `systemd` preparado em `deploy_autonomo/`; não ativado em servidor definitivo |
 | Leitura por colunas, OCR (`tesseract-ocr-por`) e qualidade | Sim | Sim (acervo local) | **Não** | Preserva revisões humanas em releituras |
 | Classificação GEDIV (Vertical A–F, Horizontal, TS-01..TS-07, Abono de Permanência, Outros) | Sim | Sim | **Não** | `TEC. ADM` vs `AST` e `STF` vs `SFT` aguardam deliberação formal da GEDIV |
 | Painel Unificado (`/painel`) com 7 abas e build reproduzível sem dados embutidos | Sim | Sim (4 resoluções) | **Não** | Construído a partir de `observatorio/web/unificado/modelo-base-sanitizado.html` |
@@ -156,7 +156,7 @@ node tests/test_acessibilidade_navegador.cjs --url http://127.0.0.1:8000/painel/
 1. **Importação definitiva de lotes (`POST /api/admin/lote` — PENDÊNCIA OPERACIONAL):**
    - A rota `POST /api/admin/lote` e o modal administrativo correspondente (`Validar lote oficial (sem importação no banco)`) executam **exclusivamente a validação preliminar** de estrutura e verificação de IDs já existentes, registrando a tentativa na trilha de auditoria (`modo: SOMENTE_VALIDACAO`, `importado: false`), **sem gravar registros no banco principal**. A incorporação de novos documentos continua ocorrendo exclusivamente pelo pipeline oficial de coleta e leitura de PDFs.
 2. **Deliberações normativas da GEDIV:** ver [docs/homologacao/questoes-pendentes-gediv.md](docs/homologacao/questoes-pendentes-gediv.md) (`Q1` a `Q10`, incluindo vínculo normativo de `TEC. ADM` com `AST` e de `STF` com `SFT`).
-3. **Implantação, agendamento Seg–Sex e backup/restauração:** ver [deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md](deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md).
+3. **Implantação, agendamento diário e backup/restauração:** ver [deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md](deploy_autonomo/GUIA_IMPLANTACAO_AUTONOMA.md).
 
 ---
 

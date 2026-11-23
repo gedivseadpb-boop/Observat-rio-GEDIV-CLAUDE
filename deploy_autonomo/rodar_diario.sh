@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rotina automática do Observatório DOE · GEDIV (SOMENTE DIAS ÚTEIS: Segunda a Sexta).
+# Rotina automática do Observatório DOE · GEDIV (TODOS OS DIAS, inclusive fins de semana e feriados).
 # Fluxo canônico:
-#   trava flock -> guarda de dia útil/feriado -> coleta DOE-PB (A União + complementar)
+#   trava flock -> aviso informativo de feriado -> coleta DOE-PB (A União + complementar)
 #   -> extração/OCR/classificação -> backup SQLite íntegro -> projeção pública sanitizada.
 #
 # Repositório canônico único: gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE.
@@ -29,34 +29,27 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# 1. Guarda de calendário no fuso America/Sao_Paulo (impede execução em sábado/domingo mesmo com Persistent=true)
+# 1. Calendário no fuso America/Sao_Paulo: a coleta roda todos os dias, sem bloqueio de
+#    fim de semana ou feriado (o DOE pode ter edição regular, suplementar ou extraordinária).
 DATA_HOJE="$(date +%F)"
-DIA_SEMANA="$(date +%u)" # 1=Segunda .. 5=Sexta, 6=Sábado, 7=Domingo
-
-if [ "$DIA_SEMANA" -ge 6 ]; then
-  echo "[IGNORADO] $DATA_HOJE é fim de semana (dia ISO=$DIA_SEMANA, fuso=$TZ). Coleta automática permitida apenas de segunda a sexta-feira."
-  exit 0
-fi
+DATA_HOJE_BR="$(date +%d/%m/%Y)"
+DIA_SEMANA="$(date +%u)" # 1=Segunda .. 7=Domingo (apenas informativo)
 
 if [ -n "$FERIADOS_ARQ" ] && [ -f "$FERIADOS_ARQ" ]; then
-  if grep -Eq "^${DATA_HOJE}([[:space:]]|#|$)" "$FERIADOS_ARQ"; then
-    echo "[IGNORADO] $DATA_HOJE consta como feriado administrativo oficial em $FERIADOS_ARQ. Nenhuma coleta automática executada."
-    exit 0
+  if grep -Eq "^(${DATA_HOJE}|${DATA_HOJE_BR})([[:space:]]|#|$)" "$FERIADOS_ARQ"; then
+    echo "[INFO] $DATA_HOJE_BR consta como feriado em $FERIADOS_ARQ. A coleta do DOE será executada normalmente; ausência de edição só é registrada após consulta à fonte oficial."
   fi
 fi
 
-# 2. Janela de recuperação de lacunas: na segunda-feira recua 4 dias (cobre quinta/sexta); ter-sex recua 3 dias
-if [ "$DIA_SEMANA" -eq 1 ]; then
-  DIAS_RECUO=4
-else
-  DIAS_RECUO=3
-fi
+# 2. Janela de recuperação de lacunas: recua 3 dias para cobrir falhas de execuções anteriores
+DIAS_RECUO=3
 INICIO_JANELA="$(date -d "$DIAS_RECUO days ago" +%F)"
+INICIO_JANELA_BR="$(date -d "$DIAS_RECUO days ago" +%d/%m/%Y)"
 
 cd "$APP_DIR"
 export PYTHONPATH="${APP_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
-echo "[1/6] Coletando edições oficiais de $INICIO_JANELA até $DATA_HOJE (fuso=$TZ, dia ISO=$DIA_SEMANA)..."
+echo "[1/6] Coletando edições oficiais de $INICIO_JANELA_BR até $DATA_HOJE_BR (fuso=$TZ, dia ISO=$DIA_SEMANA)..."
 set +e
 "$PYTHON_BIN" -m observatorio.operacao coletar-intervalo --inicio "$INICIO_JANELA" --fim "$DATA_HOJE" --dados "$DADOS_DIR"
 RC_COLETA=$?

@@ -1,12 +1,12 @@
 [Unit]
-Description=Agendamento em dias úteis do Observatório GEDIV (Seg-Sex, 09:00 e 14:00 America/Sao_Paulo)
+Description=Agendamento diário do Observatório GEDIV (todos os dias, 09:00 e 14:00 America/Sao_Paulo)
 
 [Timer]
-# Execução estritamente de segunda a sexta-feira (nunca sábados ou domingos)
-OnCalendar=Mon..Fri *-*-* 09:00:00 America/Sao_Paulo
-OnCalendar=Mon..Fri *-*-* 14:00:00 America/Sao_Paulo
-# Recupera disparos perdidos após indisponibilidade do host; o próprio script
-# rodar_diario.sh bloqueia execução se o dia local atual for sábado ou domingo.
+# Execução TODOS OS DIAS, inclusive sábados, domingos e feriados: o DOE pode ter
+# edição regular, suplementar ou extraordinária em qualquer dia.
+OnCalendar=*-*-* 09:00:00 America/Sao_Paulo
+OnCalendar=*-*-* 14:00:00 America/Sao_Paulo
+# Recupera disparos perdidos após indisponibilidade do host.
 Persistent=true
 RandomizedDelaySec=120
 

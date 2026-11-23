@@ -1,5 +1,5 @@
 [Unit]
-Description=Observatório GEDIV - Coleta em dias úteis, OCR, classificação, reconciliação e backup
+Description=Observatório GEDIV - Coleta diária (inclusive fins de semana e feriados), OCR, classificação, reconciliação e backup
 After=network-online.target
 Wants=network-online.target
 

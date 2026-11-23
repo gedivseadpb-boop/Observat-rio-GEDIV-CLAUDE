@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Comando MANUAL EXCEPCIONAL para recuperação retroativa de edições do DOE-PB.
 # Separado do agendamento automático (gediv-diario.timer), compartilha a mesma trava
-# flock para impedir concorrência com a rotina de dias úteis.
+# flock para impedir concorrência com a rotina diária.
 #
 # Uso:
 #   ./deploy_autonomo/recuperar_edicoes_manual.sh 2026-09-10 2026-09-15
