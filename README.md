@@ -20,7 +20,7 @@ Para total transparência institucional, o projeto distingue estritamente três 
 | Componente / Funcionalidade | Implementado localmente | Homologado em teste | Ativado em produção | Observações e Pendências |
 | :--- | :---: | :---: | :---: | :--- |
 | Coleta DOE-PB por fonte (`auniao`, `cge`) e retomada | Sim | Sim (lotes locais) | **Não** | Requer execução prévia de `observatorio.sonda` na VM Linux definitiva |
-| Agendamento diário (09:00 e 14:00 `America/Sao_Paulo`), inclusive sábados, domingos e feriados | Sim | Sim (testes automatizados) | **Não** | Timer `systemd` preparado em `deploy_autonomo/`; não ativado em servidor definitivo |
+| Agendamento diário (12:00 `America/Sao_Paulo`), inclusive sábados, domingos e feriados | Sim | Sim (testes automatizados) | **Não** | Timer `systemd` preparado em `deploy_autonomo/`; não ativado em servidor definitivo |
 | Leitura por colunas, OCR (`tesseract-ocr-por`) e qualidade | Sim | Sim (acervo local) | **Não** | Preserva revisões humanas em releituras |
 | Classificação GEDIV (Vertical A–F, Horizontal, TS-01..TS-07, Abono de Permanência, Outros) | Sim | Sim | **Não** | `TEC. ADM` vs `AST` e `STF` vs `SFT` aguardam deliberação formal da GEDIV |
 | Painel Unificado (`/painel`) com 7 abas e build reproduzível sem dados embutidos | Sim | Sim (4 resoluções) | **Não** | Construído a partir de `observatorio/web/unificado/modelo-base-sanitizado.html` |

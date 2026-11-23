@@ -25,7 +25,7 @@ class TestAgendamentoDiario(unittest.TestCase):
     def test_todos_os_dias_do_ano_executam(self) -> None:
         d = date(2026, 1, 1)
         while d.year == 2026:
-            for hora in (9, 14):
+            for hora in (12,):
                 dec = agendamento.avaliar_execucao(datetime(d.year, d.month, d.day, hora, 0, tzinfo=TZ))
                 self.assertTrue(dec.executar, f"{d} às {hora}h deveria executar a coleta")
                 self.assertEqual(dec.categoria, "DIARIA")
@@ -85,8 +85,10 @@ class TestAgendamentoDiario(unittest.TestCase):
         calendarios = re.findall(r"^OnCalendar=(.+)$", timer, re.MULTILINE)
         self.assertEqual(
             calendarios,
-            ["*-*-* 09:00:00 America/Sao_Paulo", "*-*-* 14:00:00 America/Sao_Paulo"],
+            ["*-*-* 12:00:00 America/Sao_Paulo"],
         )
+        self.assertEqual(agendamento.JANELAS_HORARIO, ("12:00",))
+        self.assertRegex(timer, r"(?m)^Persistent=false$")
 
 
 if __name__ == "__main__":

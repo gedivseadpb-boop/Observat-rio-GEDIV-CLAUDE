@@ -1,8 +1,8 @@
 """Regras de calendário para a coleta automática do Observatório DOE · GEDIV.
 
 Política operacional:
-- Coleta automática TODOS OS DIAS (inclusive sábados, domingos e feriados), nas janelas
-  de 09:00 e 14:00 (fuso America/Sao_Paulo): o DOE pode ter edição regular, suplementar
+- Coleta automática TODOS OS DIAS (inclusive sábados, domingos e feriados), na janela
+  de 12:00 (fuso America/Sao_Paulo): o DOE pode ter edição regular, suplementar
   ou extraordinária em qualquer dia. A ausência de edição só é registrada após consultar
   a fonte oficial, nunca presumida por calendário.
 - Feriados listados em `feriados_oficiais.txt` aparecem apenas como metadado informativo.
@@ -18,7 +18,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 FUSO_PADRAO = "America/Sao_Paulo"
-JANELAS_HORARIO = ("09:00", "14:00")
+JANELAS_HORARIO = ("12:00",)
 DIAS_RECUO = 3
 NOMES_DIA = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 

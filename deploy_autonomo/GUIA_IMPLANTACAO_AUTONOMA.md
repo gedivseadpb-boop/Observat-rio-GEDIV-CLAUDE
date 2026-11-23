@@ -79,7 +79,8 @@ sudo -u gediv /opt/observatorio-gediv/.venv/bin/python -m observatorio.web.usuar
 
 O agendamento automático é controlado por `deploy_autonomo/gediv-diario.timer`, `deploy_autonomo/gediv-diario.service`, `deploy_autonomo/rodar_diario.sh` e pelo módulo `observatorio.operacao.agendamento`:
 
-- **Horários programados:** todos os dias (`OnCalendar=*-*-*`), às **09:00** e **14:00** no fuso horário `America/Sao_Paulo`.
+- **Horário programado:** todos os dias (`OnCalendar=*-*-*`), às **12:00** no fuso horário `America/Sao_Paulo`. O timer pode acrescentar até dois minutos de atraso aleatório.
+- **Sem disparo extra ao reiniciar:** se o servidor estiver desligado em um horário programado, a coleta será tentada na próxima janela. A rotina busca também os três dias anteriores; interrupções maiores podem exigir recuperação manual.
 - **Sem bloqueio de calendário:** sábados, domingos e feriados executam a coleta normalmente, pois o DOE pode ter edição regular, suplementar ou extraordinária em qualquer dia.
 - **Feriados são apenas informativos:** datas listadas em `/etc/gediv/feriados_oficiais.txt` (modelo em `deploy_autonomo/feriados_oficiais.example.txt`, formato `DD/MM/YYYY`) aparecem apenas como aviso informativo no log e no campo `feriado` de `agendamento.avaliar_execucao()`. A ausência de edição só é registrada no manifesto de cobertura após consulta à fonte oficial, nunca presumida por calendário.
 - **Datas ao operador:** mensagens de agendamento e do `rodar_diario.sh` exibem datas em `DD/MM/YYYY`; os parâmetros da CLI continuam em `AAAA-MM-DD`.
