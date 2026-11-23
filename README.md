@@ -7,6 +7,8 @@ Abrange dois eixos principais — **Progressão Funcional** (modalidades Horizon
 
 Este é o repositório canônico oficial (`gedivseadpb-boop/Observat-rio-GEDIV-CLAUDE`).
 
+> **Demonstração Pública Gratuita (GitHub Pages):** a prévia estática interativa do Painel Unificado (**Delicadeza Visual**, dados 100% sintéticos, sem backend e sem custos de hospedagem) está publicada em https://gedivseadpb-boop.github.io/gediv-painel-unificado-previa/ (repositório dedicado `gedivseadpb-boop/gediv-painel-unificado-previa`, preservando o GitHub Pages legado). Veja detalhes em [docs/30-previa-publica-github-pages.md](docs/30-previa-publica-github-pages.md). Os guias em `deploy_autonomo/` permanecem preservados apenas como documentação histórica/opcional para backend em servidor Linux, não sendo requisito atual.
+
 ---
 
 ## 1. Situação e Estágios de Maturidade
@@ -25,7 +27,8 @@ Para total transparência institucional, o projeto distingue estritamente três 
 | Controle de acesso RBAC em 3 perfis (`Público`, `Gerência`, `Administração`) | Sim | Sim | **Não** | Contas nominais `scrypt` em `contas.sqlite3` |
 | Revisão documental humana com trilha de auditoria imutável (`POST /api/revisao`) | Sim | Sim (banco descartável) | **Não** | Exige conta autenticada, justificativa e confirmação de fonte/vínculo |
 | Recebimento administrativo de lotes (`POST /api/admin/lote`) | **Somente validação** | **Somente validação** | **Não** | **PENDÊNCIA OPERACIONAL:** valida formato/duplicidades e audita, mas **não importa** no banco principal |
-| Implantação em servidor Linux institucional e consolidação definitiva dos bancos | Preparado | Em banco de teste | **Não** | Bancos oficiais permanecem preservados fora do Git |
+| Implantação em servidor Linux institucional (documentação histórica/opcional) | Preparado | Em banco de teste | **Não** | Não obrigatório; prévia pública gratuita prioriza GitHub Pages com dados sintéticos |
+| Prévia pública estática gratuita no GitHub Pages (repositório separado, dados 100% sintéticos) | Sim | Sim (desktop e mobile) | **Prévia sintética ativa** | Publicada via GitHub Actions em `gediv-painel-unificado-previa` (sem backend e sem dados reais) |
 
 ---
 
