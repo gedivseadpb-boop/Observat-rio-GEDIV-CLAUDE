@@ -188,11 +188,15 @@ class TesteClassificador(unittest.TestCase):
         d = um(texto).decisoes[0]
         self.assertEqual((d.matricula, d.servidor), (None, None))
 
-    def test_ato_normativo_e_alteracao_de_lei_entram_na_triagem_de_outras_publicacoes(self):
+    def test_ato_normativo_e_alteracao_de_lei_sao_excluidos_e_ficam_registrados(self):
+        # Regra obrigatória (23/11/2026): antes iam para "Outras publicações"; agora são excluídos, com registro privado.
         texto = ("ATO NORMATIVO Nº 12/2026\nSECRETARIA DE ESTADO DA ADMINISTRAÇÃO\nDispõe sobre procedimentos da DEREH.\n"
                  "LEI Nº 14.999, DE 5 DE OUTUBRO DE 2026\nAltera o Plano de Cargos, Carreira e Remuneração dos servidores públicos.\n"
                  "LEI Nº 15.000, DE 5 DE OUTUBRO DE 2026\nDenomina rodovia estadual.")
-        self.assertEqual(sorted(o.tipo for o in um(texto).outras), ["ALTERACAO_LEI", "ATO_NORMATIVO"])
+        r = um(texto)
+        self.assertEqual(r.outras, [])
+        self.assertEqual(sorted((f.tipo, f.motivo) for f in r.fora_escopo),
+                         [("ATO_NORMATIVO", "ATO_NORMATIVO"), ("LEI", "ATO_NORMATIVO")])
 
 
 class TesteFormatosVistosEmTextoReal(unittest.TestCase):

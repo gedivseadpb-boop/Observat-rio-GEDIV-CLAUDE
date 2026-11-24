@@ -19,11 +19,17 @@ import re
 LICENCA_SAUDE = "LICENCA_SAUDE"
 VACANCIA = "VACANCIA"
 OUTRA_GERENCIA = "OUTRA_GERENCIA"
+# Regra obrigatória do Observatório (decisão humana de 23/11/2026): atos normativos (lei, decreto, medida provisória,
+# ato/instrução/resolução/portaria normativa) não entram em resultados, "Outras publicações" nem indicadores. A
+# identificação é pelo TIPO DO ATO NO CABEÇALHO, nunca por palavra no corpo: uma resenha que cita "Lei nº ..." continua
+# sendo um ato individual. Ver classificador._atos_normativos.
+ATO_NORMATIVO = "ATO_NORMATIVO"
 
 MOTIVOS = {
     LICENCA_SAUDE: "Licença-saúde: fora do painel GEDIV",
     VACANCIA: "Vacância: competência da DEREH, fora dos indicadores GEDIV",
     OUTRA_GERENCIA: "Ato de outra gerência",
+    ATO_NORMATIVO: "Ato normativo (lei, decreto, medida provisória, ato/instrução/resolução/portaria normativa): excluído",
 }
 
 # Aplicados ao texto NORMALIZADO (maiúsculas, sem acentos) do ato.
