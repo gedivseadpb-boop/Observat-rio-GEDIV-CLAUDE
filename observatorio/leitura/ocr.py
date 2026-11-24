@@ -7,6 +7,7 @@ por chamada terminaram em 44 s. Sem limite de tempo, uma chamada travada parava 
 from __future__ import annotations
 
 import os
+import re
 
 # O processo do Tesseract herda o ambiente. Quem já definiu a variável (operador, executor) prevalece.
 os.environ.setdefault("OMP_THREAD_LIMIT", "1")
@@ -94,11 +95,29 @@ def _executar(funcao, imagem, folga, **k):
         raise
 
 
+# Achado de 24/11/2026 (Tesseract 5.4, idioma por): em fonte pequena, a série "OFI" do número de processo da Polícia
+# Civil (SDS-OFI-AAAA-NNNNN) sai como "OF1"/"OFl"/"OF|", e o processo deixa de ser reconhecido. A correção é restrita
+# à posição da série (entre o prefixo do órgão e o ano de 4 dígitos) e às trocas letra↔dígito conhecidas; nenhum
+# outro texto é tocado.
+_SERIE_PROCESSO_OCR = re.compile(r"\b([A-Z]{2,6}-)(0F[1lI|!]|OF[1l|!]|0FI|PS3|P5E|P53)(-\d{4}[/-])")
+_SERIE_CORRIGIDA = {"PS3": "PSE", "P5E": "PSE", "P53": "PSE"}
+
+
+def corrigir_serie_processo(texto_ocr: str) -> str:
+    """Corrige a série lida errada pelo OCR num número de processo (ex.: SDS-OF1-2026-90826 → SDS-OFI-2026-90826)."""
+    if not texto_ocr:
+        return texto_ocr
+    return _SERIE_PROCESSO_OCR.sub(lambda m: m.group(1) + _SERIE_CORRIGIDA.get(m.group(2), "OFI") + m.group(3), texto_ocr)
+
+
 def dados(imagem, config: str = ""):
     import pytesseract
-    return _chamar(pytesseract.image_to_data, imagem, lang="por", config=config, output_type=pytesseract.Output.DICT)
+    resultado = _chamar(pytesseract.image_to_data, imagem, lang="por", config=config, output_type=pytesseract.Output.DICT)
+    if isinstance(resultado, dict) and "text" in resultado:
+        resultado["text"] = [corrigir_serie_processo(t) if isinstance(t, str) else t for t in resultado["text"]]
+    return resultado
 
 
 def texto(imagem, config: str = "") -> str:
     import pytesseract
-    return _chamar(pytesseract.image_to_string, imagem, lang="por", config=config)
+    return corrigir_serie_processo(_chamar(pytesseract.image_to_string, imagem, lang="por", config=config))
