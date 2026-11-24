@@ -659,9 +659,11 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
     linhas = _linhas(paginas)
     resultado = Resultado()
     inicios = _inicios(linhas)
+    cobertas: set[int] = set()            # linhas dentro de resenhas/portarias: "Lei nº ..." ali é citação, não ato normativo
     for n, (inicio, tipo, marco) in enumerate(inicios):
         proximo = inicios[n + 1][0] if n + 1 < len(inicios) else len(linhas)
         fim, pendencia = _fim(linhas, inicio, marco, proximo, tipo)
+        cobertas.update(range(inicio, fim))
         corpo = linhas[inicio:fim]
         norm = " ".join(l.norm for l in corpo)
         cabecalho = _resenha_no_cabecalho(linhas[marco].norm) if tipo == "RESENHA" else _portaria_no_cabecalho(linhas[marco].norm)
@@ -718,6 +720,10 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
             # como indício, para a gerência.
             assunto = (f" — assunto: {C.EIXOS[tema['eixo']]} (indício; não convertida em decisão)" if tema["eixo"]
                        else f" — {tema['candidato']} (conceito candidato)" if tema["candidato"] else "")
+            if PAT_PORTARIA_DE_NATUREZA_NORMATIVA.search(preambulo) and not primeiro:
+                # Portaria sem processo e com redação de norma geral: pode ser ato normativo. Não é excluída
+                # automaticamente nem vira resultado; fica marcada para a revisão humana decidir.
+                assunto += " — possível ato normativo; exige revisão humana"
             resultado.outras.append(Outra(_id(chave_arquivo, "PORTARIA", numero, pagina), "PORTARIA", pagina,
                                           titulo + (f" {sufixo}" if sufixo else "") + assunto, vinculo, trecho[:600]))
             continue
@@ -785,28 +791,53 @@ def classificar(paginas, chave_arquivo: str = "") -> Resultado:
         elif natureza != C.ORIGINAL:
             resultado.atos.append(ato)
 
-    _outras_normativas(linhas, chave_arquivo, resultado)
+    _atos_normativos(linhas, cobertas, chave_arquivo, resultado)
     return resultado
 
 
-def _outras_normativas(linhas: list[Linha], chave_arquivo: str, resultado: Resultado) -> None:
-    """Triagem para a página "Outras publicações": atos normativos e alterações de lei relacionados à SEAD/DEREH/GEDIV.
-    São indícios; a relação com a GEDIV precisa de confirmação humana."""
+# Tipo do ato no CABEÇALHO (início da linha, texto normalizado). A ordem importa: "LEI COMPLEMENTAR" antes de "LEI".
+PAT_CABECALHO_NORMATIVO = re.compile(
+    r"^(?P<tipo>LEI\s+COMPLEMENTAR|LEI|DECRETO(?:-LEI)?|MEDIDA\s+PROVISORIA|ATO\s+NORMATIVO|INSTRUCAO\s+NORMATIVA"
+    r"|RESOLUCAO\s+NORMATIVA|PORTARIA\s+NORMATIVA)\b\s*(?:N[O°.]*\s*(?P<numero>\d[\d.]*(?:\s*/\s*\d{2,4})?))?")
+_TIPOS_COM_NUMERO_OBRIGATORIO = {"LEI", "LEI COMPLEMENTAR", "DECRETO", "DECRETO-LEI", "MEDIDA PROVISORIA"}
+PAT_RELACIONADO_A_PESSOAL = re.compile(
+    r"SERVIDOR(?:ES)?\s+PUBLIC|PLANO\s+DE\s+CARGOS|PCCR|PROGRESSAO\s+FUNCIONAL|TEMPO\s+DE\s+(?:SERVICO|CONTRIBUICAO)"
+    r"|LICENCA\s+ESPECIAL|ABONO\s+DE\s+PERMANENCIA|ADICIONAL\s+POR\s+TEMPO|QUINQUENIO|ANUENIO")
+# Redação de norma geral numa portaria (sem processo individual): só marca para revisão, nunca exclui sozinha.
+PAT_PORTARIA_DE_NATUREZA_NORMATIVA = re.compile(
+    r"\bESTABELECE\s+(?:AS\s+)?(?:NORMAS|DIRETRIZES|PROCEDIMENTOS|CRITERIOS)|\bREGULAMENTA\b|\bREGIMENTO\s+INTERNO\b"
+    r"|DISPOE\s+SOBRE\s+(?:AS\s+|OS\s+)?(?:NORMAS|DIRETRIZES|PROCEDIMENTOS|CRITERIOS)")
+
+
+def _atos_normativos(linhas: list[Linha], cobertas: set[int], chave_arquivo: str, resultado: Resultado) -> None:
+    """Exclusão obrigatória de atos normativos (exclusoes.ATO_NORMATIVO).
+
+    Antes desta regra, leis e atos normativos relacionados a pessoal iam para "Outras publicações" (tipos ATO_NORMATIVO
+    e ALTERACAO_LEI). Agora nunca entram em resultados, "Outras publicações" nem indicadores. Os relacionados à
+    SEAD/DEREH/GEDIV ou a pessoal ficam registrados na tabela privada `fora_escopo`, com o cabeçalho que comprova o tipo,
+    para rastreabilidade. Cabeçalho dentro do texto de uma resenha/portaria é citação e é ignorado: o ato individual
+    que cita uma lei é preservado.
+    """
+    vistos = set()
     for i, linha in enumerate(linhas):
-        tipo = None
-        if re.match(r"^ATO\s+NORMATIVO\b", linha.norm):
-            tipo = "ATO_NORMATIVO"
-        elif re.match(r"^LEI(?:\s+COMPLEMENTAR)?\s+N[O°.]*\s*[\d.]+", linha.norm):
-            tipo = "ALTERACAO_LEI"
-        if not tipo:
+        if i in cobertas:
             continue
+        cabecalho = PAT_CABECALHO_NORMATIVO.match(linha.norm)
+        if not cabecalho:
+            continue
+        tipo = re.sub(r"\s+", " ", cabecalho.group("tipo"))
+        numero = re.sub(r"\s+", "", cabecalho.group("numero")) if cabecalho.group("numero") else None
+        if tipo in _TIPOS_COM_NUMERO_OBRIGATORIO and not numero:
+            continue                                  # "Lei" solta no início da linha não é cabeçalho de ato
         janela = " ".join(l.norm for l in linhas[i:i + 10])
         gediv = PAT_GEDIV.search(janela)
-        relacionado = gediv or PAT_DEREH.search(janela) or re.search(
-            r"SERVIDOR(?:ES)?\s+PUBLIC|PLANO\s+DE\s+CARGOS|PCCR|PROGRESSAO\s+FUNCIONAL|TEMPO\s+DE\s+(?:SERVICO|CONTRIBUICAO)|LICENCA\s+ESPECIAL",
-            janela)
-        if tipo == "ALTERACAO_LEI" and not re.search(r"\bALTERA|\bMODIFICA|NOVA\s+REDACAO|\bREVOGA", janela):
+        if not (gediv or PAT_DEREH.search(janela) or PAT_RELACIONADO_A_PESSOAL.search(janela)):
             continue
-        if relacionado:
-            resultado.outras.append(Outra(_id(chave_arquivo, tipo, linha.pagina, linha.norm[:60]), tipo, linha.pagina, linha.texto[:160],
-                                          EXPRESSO if gediv else NAO_EXPRESSO, " ".join(l.texto for l in linhas[i:i + 10])[:600]))
+        chave = (tipo, numero, linha.pagina)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        resultado.fora_escopo.append(ForaEscopo(
+            _id(chave_arquivo, "FORA_ESCOPO", "NORMATIVO", tipo, numero, linha.pagina, linha.norm[:60]),
+            tipo.replace(" ", "_"), numero, linha.pagina, linha.texto[:160], EX.ATO_NORMATIVO, linha.texto[:120],
+            EXPRESSO if gediv else NAO_EXPRESSO))
